@@ -27,9 +27,9 @@ export const adminNav: AdminNavItem[] = [
   { name: "Inventory", href: "/admin/inventory", icon: "inventory" },
   { name: "Customers", href: "/admin/customers", icon: "customers" },
   { name: "Orders", href: "/admin/orders", icon: "orders" },
-  { name: "Discounts", href: "/admin/discounts", icon: "discounts", disabled: true },
-  { name: "Reports", href: "/admin/reports", icon: "reports", disabled: true },
-  { name: "Settings", href: "/admin/settings", icon: "settings", disabled: true },
+  { name: "Discounts", href: "/admin/discounts", icon: "discounts" },
+  { name: "Reports", href: "/admin/reports", icon: "reports" },
+  { name: "Settings", href: "/admin/settings", icon: "settings" },
 ];
 
 /** Returns whether a nav item should render as active for a given pathname. */
