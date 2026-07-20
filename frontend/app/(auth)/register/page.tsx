@@ -4,7 +4,6 @@ import { Field } from "@/components/ui/field";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 
 export default function RegisterPage() {
   return (
@@ -26,15 +25,18 @@ export default function RegisterPage() {
           />
           <PasswordField label="Password" id="password" placeholder="Create a password" />
 
-          <div className="flex items-start gap-3 pt-1">
-            <Checkbox id="terms" className="mt-0.5" />
-            <Label htmlFor="terms" className="text-sm font-normal leading-relaxed text-muted-foreground">
+          <div className="flex items-center gap-2 pt-1">
+            <Checkbox id="terms" />
+            <label
+              htmlFor="terms"
+              className="text-[11px] font-normal whitespace-nowrap text-muted-foreground"
+            >
               I acknowledge the{" "}
               <Link href="#" className="font-semibold text-primary hover:underline">
                 Privacy Policy
               </Link>{" "}
               and accept the membership terms.
-            </Label>
+            </label>
           </div>
 
           <Button asChild size="xl" className="w-full uppercase tracking-wider">

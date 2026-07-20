@@ -19,7 +19,7 @@ export function AuthShell({
       <div className={cn("w-full max-w-md", className)}>
         {showLogo && (
           <div className="mb-8 flex justify-center">
-            <Logo className="h-10 w-auto" />
+            <Logo className="h-14 w-auto" />
           </div>
         )}
         {children}
