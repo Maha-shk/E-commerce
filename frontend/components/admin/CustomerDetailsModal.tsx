@@ -1,6 +1,6 @@
 "use client";
 
-import { UserRound, MapPin, ShoppingBag, Receipt, Inbox } from "lucide-react";
+import { UserRound, MapPin, ShoppingBag, Receipt, Inbox, Ban, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ type BadgeVariant = "success" | "warning" | "info" | "navy" | "secondary" | "des
 const customerStatusVariant: Record<CustomerStatus, BadgeVariant> = {
   Active: "success",
   Inactive: "secondary",
+  Suspended: "destructive",
 };
 
 const orderStatusVariant: Record<CustomerOrderStatus, BadgeVariant> = {
@@ -33,13 +34,16 @@ const orderStatusVariant: Record<CustomerOrderStatus, BadgeVariant> = {
   Cancelled: "destructive",
 };
 
-/** Read-only customer profile. Presentation only — nothing is editable. */
+/** Customer profile. Presentation only, apart from the suspend/reinstate action. */
 export function CustomerDetailsModal({
   customer,
   onClose,
+  onToggleSuspend,
 }: {
   customer: Customer | null;
   onClose: () => void;
+  /** Toggles the customer between suspended and active. */
+  onToggleSuspend: (id: string) => void;
 }) {
   return (
     <Dialog
@@ -49,7 +53,13 @@ export function CustomerDetailsModal({
       }}
     >
       <DialogContent className="max-w-3xl gap-0">
-        {customer && <CustomerDetails customer={customer} onClose={onClose} />}
+        {customer && (
+          <CustomerDetails
+            customer={customer}
+            onClose={onClose}
+            onToggleSuspend={onToggleSuspend}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -88,8 +98,17 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CustomerDetails({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function CustomerDetails({
+  customer,
+  onClose,
+  onToggleSuspend,
+}: {
+  customer: Customer;
+  onClose: () => void;
+  onToggleSuspend: (id: string) => void;
+}) {
   const avgOrder = averageOrderValue(customer);
+  const isSuspended = customer.status === "Suspended";
 
   return (
     <div className="space-y-5">
@@ -201,7 +220,16 @@ function CustomerDetails({ customer, onClose }: { customer: Customer; onClose: (
         )}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button
+          type="button"
+          variant={isSuspended ? "outline" : "destructive"}
+          size="xl"
+          onClick={() => onToggleSuspend(customer.id)}
+        >
+          {isSuspended ? <UserCheck /> : <Ban />}
+          {isSuspended ? "Reinstate Customer" : "Suspend Customer"}
+        </Button>
         <Button type="button" variant="outline" size="xl" onClick={onClose}>
           Close
         </Button>

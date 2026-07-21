@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { NotificationCard } from "@/components/admin/NotificationCard";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { notificationTabs, notificationGroups, unreadCount } from "@/lib/admin/notifications";
@@ -22,10 +23,16 @@ export default function NotificationsPage() {
               <CheckCheck />
               Mark All as Read
             </Button>
-            <Button variant="outline" size="xl">
+            <DeleteConfirmButton
+              variant="outline"
+              size="xl"
+              title="Clear all notifications?"
+              description="Every notification in your inbox will be permanently removed. This action cannot be undone."
+              confirmLabel="Clear all"
+            >
               <Trash2 />
               Clear All
-            </Button>
+            </DeleteConfirmButton>
           </div>
         }
       />

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScheduleReportButton } from "@/components/admin/ScheduleReportModal";
+import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import {
   dashboardStats,
   monthlyPerformance,
@@ -166,14 +167,22 @@ function ProductInventoryCard() {
                         <Pencil />
                       </Link>
                     </Button>
-                    <Button
+                    <DeleteConfirmButton
                       variant="ghost"
                       size="icon-sm"
                       aria-label={`Delete ${product.name}`}
                       className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      title="Delete product?"
+                      description={
+                        <>
+                          <strong className="font-semibold text-foreground">{product.name}</strong>{" "}
+                          will be permanently removed. This action cannot be undone.
+                        </>
+                      }
+                      confirmLabel="Delete product"
                     >
                       <Trash2 />
-                    </Button>
+                    </DeleteConfirmButton>
                   </div>
                 </td>
               </tr>

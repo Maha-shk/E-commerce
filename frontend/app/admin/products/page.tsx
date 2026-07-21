@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SortButton } from "@/components/admin/SortButton";
 import {
   products as initialProducts,
@@ -70,6 +71,7 @@ export default function ProductsPage() {
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState<"All" | ProductStatus>("All");
   const [page, setPage] = useState(1);
+  const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -114,9 +116,10 @@ export default function ProductsPage() {
     setPage(1);
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+  function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    setProducts((prev) => prev.filter((p) => p.id !== pendingDelete.id));
+    setPendingDelete(null);
   }
 
   function handleExport() {
@@ -258,7 +261,7 @@ export default function ProductsPage() {
                 <th className="px-2 py-3 text-left">SKU</th>
                 <th className="px-2 py-3 text-left">Category</th>
                 <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-2 py-3 text-left">Price</th>
+                <th className="px-2 py-3 text-right">Price</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -282,7 +285,7 @@ export default function ProductsPage() {
                       {product.status}
                     </Badge>
                   </td>
-                  <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
+                  <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
                     {formatCurrency(product.price)}
                   </td>
                   <td className="px-4 py-3">
@@ -297,7 +300,7 @@ export default function ProductsPage() {
                         size="icon-sm"
                         aria-label={`Delete ${product.name}`}
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleDelete(product.id, product.name)}
+                        onClick={() => setPendingDelete(product)}
                       >
                         <Trash2 />
                       </Button>
@@ -354,6 +357,22 @@ export default function ProductsPage() {
           </div>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Delete product?"
+        description={
+          <>
+            <strong className="font-semibold text-foreground">{pendingDelete?.name}</strong> will be
+            permanently removed. This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete product"
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

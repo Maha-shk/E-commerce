@@ -12,9 +12,9 @@ import {
   Percent,
   FileText,
   Settings,
+  UserRound,
   LogOut,
   MoreVertical,
-  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { adminNav, isAdminNavActive, type AdminNavIconKey } from "@/lib/admin/nav";
@@ -26,7 +26,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -50,11 +49,10 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-sidebar">
       {/* Brand */}
-      <div className="flex flex-col justify-center gap-0.5 px-6 py-4">
+      <div className="flex items-center px-6 py-5">
         <Link href="/admin" onClick={onNavigate} aria-label="CENTO Servizi home">
-          <Logo />
+          <Logo className="h-11 w-auto" />
         </Link>
-        <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Admin Console</p>
       </div>
 
       {/* Nav */}
@@ -128,15 +126,11 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="min-w-52">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <UserRound />
-                View Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings />
-                Settings
+              <DropdownMenuItem asChild>
+                <Link href="/admin/profile" onClick={onNavigate}>
+                  <UserRound />
+                  My Profile
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onNavigate}>

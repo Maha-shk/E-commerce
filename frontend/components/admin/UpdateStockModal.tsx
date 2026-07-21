@@ -20,7 +20,7 @@ type AdjustmentType = "increase" | "decrease" | "set";
 const adjustmentTypes: { key: AdjustmentType; label: string }[] = [
   { key: "increase", label: "Increase Stock" },
   { key: "decrease", label: "Decrease Stock" },
-  { key: "set", label: "Set Exact Quantity" },
+  { key: "set", label: "Set Exact Qty" },
 ];
 
 /** UI-only stock adjustment modal. Fields are placeholders — no persistence. */
@@ -105,7 +105,7 @@ function UpdateStockForm({ item, onClose }: { item: InventoryItem; onClose: () =
               type="button"
               onClick={() => setType(t.key)}
               className={cn(
-                "rounded-lg border px-3 py-2.5 text-center text-sm font-medium transition-colors",
+                "h-10 truncate rounded-lg border px-2 text-center text-sm font-medium transition-colors",
                 type === t.key
                   ? "border-primary bg-primary text-primary-foreground shadow-sm"
                   : "border-input bg-card text-muted-foreground hover:bg-muted",

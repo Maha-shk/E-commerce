@@ -10,6 +10,7 @@ const orderStatusVariant: Record<OrderStatus, BadgeVariant> = {
   Shipped: "navy",
   Delivered: "success",
   Cancelled: "destructive",
+  Returned: "warning",
 };
 
 const paymentStatusVariant: Record<PaymentStatus, BadgeVariant> = {

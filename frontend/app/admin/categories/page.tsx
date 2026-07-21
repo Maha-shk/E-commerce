@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Search,
   Download,
@@ -10,8 +9,6 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown,
-  SlidersHorizontal,
   FolderTree,
   Layers,
   Boxes,
@@ -33,14 +30,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select-native";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SortButton } from "@/components/admin/SortButton";
+import { CategoryModal } from "@/components/admin/CategoryModal";
 import {
   categories as initialCategories,
   type Category,
   type CategoryIconKey,
+  type CategoryStatus,
 } from "@/lib/admin/categories";
-import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 5;
 
 const categoryIcons: Record<CategoryIconKey, LucideIcon> = {
   fashion: Shirt,
@@ -55,14 +56,25 @@ const categoryIcons: Record<CategoryIconKey, LucideIcon> = {
   pets: PawPrint,
 };
 
-type TabKey = "all" | "active" | "archived";
+const statusLabel: Record<CategoryStatus, string> = {
+  active: "Active",
+  archived: "Archived",
+};
+
+const statusVariant: Record<CategoryStatus, "success" | "secondary"> = {
+  active: "success",
+  archived: "secondary",
+};
+
+const statusOptions: CategoryStatus[] = ["active", "archived"];
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<TabKey>("all");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [status, setStatus] = useState<"All" | CategoryStatus>("All");
   const [page, setPage] = useState(1);
+  const [modalTarget, setModalTarget] = useState<Category | "new" | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
 
   const stats = useMemo(() => {
     const totalSubcategories = categories.reduce((sum, c) => sum + c.subcategories, 0);
@@ -72,39 +84,45 @@ export default function CategoriesPage() {
     return { totalSubcategories, activeProducts, empty, avgPerRoot };
   }, [categories]);
 
-  const tabCounts = useMemo(
-    () => ({
-      all: categories.length,
-      active: categories.filter((c) => c.status === "active").length,
-      archived: categories.filter((c) => c.status === "archived").length,
-    }),
-    [categories],
-  );
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = categories.filter((c) => {
+    return categories.filter((c) => {
       const matchesSearch =
         !q ||
         c.name.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q);
-      const matchesTab = tab === "all" || c.status === tab;
-      return matchesSearch && matchesTab;
+      const matchesStatus = status === "All" || c.status === status;
+      return matchesSearch && matchesStatus;
     });
-    return [...list].sort((a, b) =>
-      sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name),
-    );
-  }, [categories, search, tab, sortAsc]);
+  }, [categories, search, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const paged = filtered.slice(start, start + PAGE_SIZE);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  function handleDelete(id: string, name: string) {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    setCategories((prev) => prev.filter((c) => c.id !== id));
+  function handleSearchChange(value: string) {
+    setSearch(value);
+    setPage(1);
+  }
+
+  function handleStatusChange(value: string) {
+    setStatus(value as "All" | CategoryStatus);
+    setPage(1);
+  }
+
+  function handleToggleArchive(id: string) {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, status: c.status === "archived" ? "active" : "archived" } : c,
+      ),
+    );
+  }
+
+  function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    setCategories((prev) => prev.filter((c) => c.id !== pendingDelete.id));
+    setPendingDelete(null);
   }
 
   function handleExport() {
@@ -129,12 +147,6 @@ export default function CategoriesPage() {
     URL.revokeObjectURL(url);
   }
 
-  const tabs: { key: TabKey; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "active", label: "Active" },
-    { key: "archived", label: "Archived" },
-  ];
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -146,11 +158,9 @@ export default function CategoriesPage() {
               <Download />
               Export Data
             </Button>
-            <Button asChild size="xl">
-              <Link href="/admin/categories/new">
-                <Plus />
-                Add Category
-              </Link>
+            <Button size="xl" onClick={() => setModalTarget("new")}>
+              <Plus />
+              Add Category
             </Button>
           </div>
         }
@@ -216,72 +226,55 @@ export default function CategoriesPage() {
         </Card>
       </div>
 
-      {/* Table card */}
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Categories</h2>
+
+      {/* Table */}
       <Card className="gap-0 overflow-hidden py-0">
-        {/* Card toolbar */}
+        {/* Toolbar: filters + search + sort */}
         <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="font-display text-lg font-semibold text-foreground">Root Categories</h2>
-            <div className="inline-flex items-center gap-1 rounded-full bg-muted p-1">
-              {tabs.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => {
-                    setTab(t.key);
-                    setPage(1);
-                  }}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    tab === t.key
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-subtle hover:text-foreground",
-                  )}
-                >
-                  {t.label} ({tabCounts[t.key]})
-                </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect
+              aria-label="Filter by status"
+              className="w-auto min-w-36"
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+            >
+              <option value="All">All statuses</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel[s]}
+                </option>
               ))}
-            </div>
+            </NativeSelect>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-56 sm:flex-none">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
               <Input
                 type="search"
-                placeholder="Search categories…"
+                placeholder="Search by name, ID or description…"
                 className="h-10 rounded-lg bg-card pl-9"
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
             </div>
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={sortAsc ? "Sort Z to A" : "Sort A to Z"}
-              onClick={() => setSortAsc((v) => !v)}
-            >
-              <ArrowUpDown className="size-4" />
-            </Button>
-            <Button variant="outline" size="icon-lg" aria-label="Filter" className="hidden sm:inline-flex">
-              <SlidersHorizontal className="size-4" />
-            </Button>
+            <SortButton />
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-205 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="px-5 py-3 text-left">Category Name</th>
-                <th className="px-2 py-3 text-left">Description</th>
+                <th className="px-5 py-3 text-left">Image</th>
+                <th className="px-2 py-3 text-left">Category Name</th>
+                <th className="px-2 py-3 text-left">Slug</th>
                 <th className="px-2 py-3 text-left">Subcategories</th>
-                <th className="px-2 py-3 text-left">Total Products</th>
-                <th className="px-5 py-3 text-right">Actions</th>
+                <th className="px-2 py-3 text-left">Status</th>
+                <th className="px-2 py-3 text-left">Products</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -289,44 +282,46 @@ export default function CategoriesPage() {
                 const Icon = categoryIcons[category.icon];
                 return (
                   <tr key={category.id} className="hover:bg-muted/30">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                          <Icon className="size-5" />
-                        </span>
-                        <div>
-                          <p className="font-semibold text-foreground">{category.name}</p>
-                          <p className="text-xs text-subtle">ID: {category.id}</p>
-                        </div>
-                      </div>
+                    <td className="px-5 py-3">
+                      <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
+                        <Icon className="size-5" />
+                      </span>
                     </td>
-                    <td className="max-w-xs px-2 py-4">
-                      <p className="truncate text-muted-foreground">{category.description}</p>
+                    <td className="px-2 py-3">
+                      <p className="font-semibold text-foreground">{category.name}</p>
+                      <p className="line-clamp-1 text-xs text-subtle">{category.description}</p>
                     </td>
-                    <td className="px-2 py-4 font-medium text-foreground">{category.subcategories}</td>
-                    <td className="px-2 py-4">
-                      <Badge variant="secondary" className="rounded-full font-medium">
-                        {category.products.toLocaleString()} items
+                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                      {category.slug}
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                      {category.subcategories}
+                    </td>
+                    <td className="px-2 py-3">
+                      <Badge variant={statusVariant[category.status]}>
+                        <span className="size-1.5 rounded-full bg-current" />
+                        {statusLabel[category.status]}
                       </Badge>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
+                      {category.products.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Button
-                          asChild
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Edit ${category.name}`}
+                          onClick={() => setModalTarget(category)}
                         >
-                          <Link href={`/admin/categories/${category.id}/edit`}>
-                            <Pencil />
-                          </Link>
+                          <Pencil />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Delete ${category.name}`}
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => handleDelete(category.id, category.name)}
+                          onClick={() => setPendingDelete(category)}
                         >
                           <Trash2 />
                         </Button>
@@ -338,7 +333,7 @@ export default function CategoriesPage() {
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-14 text-center text-sm text-subtle">
+                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <FolderTree className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No categories match your filters.
                   </td>
@@ -349,11 +344,9 @@ export default function CategoriesPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            {filtered.length === 0
-              ? "No categories to show"
-              : `Showing ${start + 1} to ${start + paged.length} of ${filtered.length} categories`}
+            Showing {paged.length} of {filtered.length} categories
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -387,6 +380,28 @@ export default function CategoriesPage() {
           </div>
         </div>
       </Card>
+
+      <CategoryModal
+        target={modalTarget}
+        onClose={() => setModalTarget(null)}
+        onToggleArchive={handleToggleArchive}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Delete category?"
+        description={
+          <>
+            <strong className="font-semibold text-foreground">{pendingDelete?.name}</strong> will be
+            permanently removed. This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete category"
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

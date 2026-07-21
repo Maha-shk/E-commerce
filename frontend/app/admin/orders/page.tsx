@@ -1,41 +1,79 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Download, Eye, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
+import {
+  Search,
+  Download,
+  Eye,
+  Pencil,
+  ChevronLeft,
+  ChevronRight,
+  Inbox,
+  Clock,
+  CheckCircle2,
+  Wallet,
+} from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NativeSelect } from "@/components/ui/select-native";
-import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/OrderBadges";
+import { OrderStatusBadge } from "@/components/admin/OrderBadges";
 import { ChangeOrderStatusModal } from "@/components/admin/ChangeOrderStatusModal";
 import { OrderDetailsModal } from "@/components/admin/OrderDetailsModal";
 import { SortButton } from "@/components/admin/SortButton";
 import {
   orders,
   orderStatuses,
-  paymentStatuses,
   orderTotals,
   formatEuro,
   type Order,
   type OrderStatus,
-  type PaymentStatus,
 } from "@/lib/admin/orders";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 5;
 
-const statusTabs: ("All" | OrderStatus)[] = ["All", ...orderStatuses];
+function StatCard({
+  label,
+  value,
+  corner,
+}: {
+  label: string;
+  value: string;
+  corner: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-subtle">{label}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-foreground">{value}</p>
+        </div>
+        {corner}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
-  const [statusTab, setStatusTab] = useState<"All" | OrderStatus>("All");
-  const [payment, setPayment] = useState<"All" | PaymentStatus>("All");
+  const [statusFilter, setStatusFilter] = useState<"All" | OrderStatus>("All");
   const [page, setPage] = useState(1);
 
   const [statusTarget, setStatusTarget] = useState<Order | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Order | null>(null);
+
+  const stats = useMemo(() => {
+    const pending = orders.filter((o) => o.status === "Pending").length;
+    const delivered = orders.filter((o) => o.status === "Delivered").length;
+    // Revenue counts only orders that were actually paid for.
+    const revenue = orders
+      .filter((o) => o.paymentStatus === "Paid")
+      .reduce((sum, o) => sum + orderTotals(o).total, 0);
+    return { total: orders.length, pending, delivered, revenue };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -45,11 +83,10 @@ export default function OrdersPage() {
         o.id.toLowerCase().includes(q) ||
         o.customer.name.toLowerCase().includes(q) ||
         o.customer.email.toLowerCase().includes(q);
-      const matchesStatus = statusTab === "All" || o.status === statusTab;
-      const matchesPayment = payment === "All" || o.paymentStatus === payment;
-      return matchesSearch && matchesStatus && matchesPayment;
+      const matchesStatus = statusFilter === "All" || o.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-  }, [search, statusTab, payment]);
+  }, [search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -91,32 +128,70 @@ export default function OrdersPage() {
         }
       />
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-1">
-            {statusTabs.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => {
-                  setStatusTab(tab);
-                  setPage(1);
-                }}
-                className={cn(
-                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                  statusTab === tab
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {tab}
-              </button>
-            ))}
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard
+          label="Total Orders"
+          value={stats.total.toLocaleString()}
+          corner={<Badge variant="success">+8%</Badge>}
+        />
+        <StatCard
+          label="Pending"
+          value={stats.pending.toLocaleString()}
+          corner={
+            <span className="flex size-9 items-center justify-center rounded-full bg-warning-muted text-warning">
+              <Clock className="size-4" />
+            </span>
+          }
+        />
+        <StatCard
+          label="Delivered"
+          value={stats.delivered.toLocaleString()}
+          corner={
+            <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
+              <CheckCircle2 className="size-4" />
+            </span>
+          }
+        />
+        <StatCard
+          label="Revenue"
+          value={formatEuro(stats.revenue)}
+          corner={
+            <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
+              <Wallet className="size-4" />
+            </span>
+          }
+        />
+      </div>
+
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Orders</h2>
+
+      {/* Orders table */}
+      <Card className="gap-0 overflow-hidden py-0">
+        {/* Toolbar: filters left, search + sort right */}
+        <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect
+              aria-label="Filter by order status"
+              className="w-auto min-w-36"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as "All" | OrderStatus);
+                setPage(1);
+              }}
+            >
+              <option value="All">All statuses</option>
+              {orderStatuses.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </NativeSelect>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative sm:w-60">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
               <Input
                 type="search"
@@ -129,71 +204,41 @@ export default function OrdersPage() {
                 }}
               />
             </div>
-            <NativeSelect
-              aria-label="Filter by payment status"
-              className="h-10 sm:w-44"
-              value={payment}
-              onChange={(e) => {
-                setPayment(e.target.value as "All" | PaymentStatus);
-                setPage(1);
-              }}
-            >
-              <option value="All">All payments</option>
-              {paymentStatuses.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </NativeSelect>
+            <SortButton />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Orders table */}
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="flex items-center justify-between gap-3 border-b p-5">
-          <h2 className="font-display text-lg font-semibold text-foreground">All Orders</h2>
-          <SortButton />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-230 text-sm">
+          <table className="w-full min-w-205 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="px-5 py-3 text-left">Order ID</th>
-                <th className="px-2 py-3 text-left">Date</th>
+                <th className="px-5 py-3 text-left">Image</th>
                 <th className="px-2 py-3 text-left">Customer</th>
-                <th className="px-2 py-3 text-right">Total Amount</th>
-                <th className="px-2 py-3 text-left">Payment</th>
+                <th className="px-2 py-3 text-left">Order ID</th>
+                <th className="px-2 py-3 text-left">Date</th>
                 <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-5 py-3 text-right">Actions</th>
+                <th className="px-2 py-3 text-right">Total Amount</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {paged.map((order) => (
                 <tr key={order.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-4 font-semibold whitespace-nowrap text-foreground">
+                  <td className="px-5 py-3">
+                    <Avatar aria-hidden className="size-11">
+                      <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
+                        {order.customer.initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </td>
+                  <td className="px-2 py-3">
+                    <p className="font-semibold text-foreground">{order.customer.name}</p>
+                    <p className="line-clamp-1 text-xs text-subtle">{order.customer.email}</p>
+                  </td>
+                  <td className="px-2 py-3 font-medium whitespace-nowrap text-muted-foreground">
                     {order.id}
                   </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">{order.date}</td>
-                  <td className="px-2 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="size-8">
-                        <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
-                          {order.customer.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="whitespace-nowrap font-medium text-foreground">
-                        {order.customer.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-4 text-right font-semibold whitespace-nowrap text-foreground">
-                    {formatEuro(orderTotals(order).total)}
-                  </td>
-                  <td className="px-2 py-4">
-                    <PaymentStatusBadge status={order.paymentStatus} />
-                  </td>
-                  <td className="px-2 py-4">
+                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{order.date}</td>
+                  <td className="px-2 py-3">
                     <button
                       type="button"
                       onClick={() => setStatusTarget(order)}
@@ -204,16 +249,26 @@ export default function OrdersPage() {
                       <OrderStatusBadge status={order.status} className="cursor-pointer" />
                     </button>
                   </td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end">
+                  <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
+                    {formatEuro(orderTotals(order).total)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
                       <Button
-                        variant="outline"
-                        size="sm"
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => setDetailsTarget(order)}
                         aria-label={`View details for order ${order.id}`}
                       >
                         <Eye />
-                        View Details
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setStatusTarget(order)}
+                        aria-label={`Change status for order ${order.id}`}
+                      >
+                        <Pencil />
                       </Button>
                     </div>
                   </td>
@@ -222,7 +277,7 @@ export default function OrdersPage() {
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-14 text-center text-sm text-subtle">
+                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <Inbox className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No orders match your filters.
                   </td>
@@ -233,11 +288,9 @@ export default function OrdersPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            {filtered.length === 0
-              ? "No orders to show"
-              : `Showing ${start + 1} to ${start + paged.length} of ${filtered.length} orders`}
+            Showing {paged.length} of {filtered.length} orders
           </p>
           <div className="flex items-center gap-1">
             <Button

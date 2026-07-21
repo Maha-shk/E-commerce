@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { DateField } from "@/components/admin/DateField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -157,30 +158,13 @@ function DiscountForm({ discount, onClose }: { discount?: Discount; onClose: () 
 
       {/* Dates */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label htmlFor="discount-start" className={labelClass}>
-            Start Date
-          </label>
-          <Input
-            id="discount-start"
-            className={fieldClass}
-            placeholder="MM/DD/YYYY"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="discount-end" className={labelClass}>
-            End Date
-          </label>
-          <Input
-            id="discount-end"
-            className={fieldClass}
-            placeholder="MM/DD/YYYY"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-        </div>
+        <DateField
+          id="discount-start"
+          label="Start Date"
+          value={startDate}
+          onChange={setStartDate}
+        />
+        <DateField id="discount-end" label="End Date" value={endDate} onChange={setEndDate} />
       </div>
 
       {/* Active status */}

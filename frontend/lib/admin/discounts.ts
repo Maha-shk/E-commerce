@@ -40,12 +40,26 @@ export type Discount = {
 
 export const discountTypes: DiscountType[] = ["Percentage", "Fixed Amount"];
 
-/** Static tab summary — mirrors the totals reported by the (future) backend. */
-export const discountTabs: { key: DiscountCategory; count: number }[] = [
-  { key: "Active", count: 12 },
-  { key: "Scheduled", count: 5 },
-  { key: "Archived", count: 128 },
-];
+/** Options for the campaign table's status filter. */
+export const discountStatuses: DiscountStatus[] = ["Active", "Scheduled", "Expired"];
+
+/** Parses the stored MM/DD/YYYY form. Returns undefined for blank or malformed input. */
+export function parseDate(value: string): Date | undefined {
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return undefined;
+  const [, month, day, year] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  // Rejects overflow like 02/31/2026, which Date would silently roll forward.
+  if (date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day)) return undefined;
+  return date;
+}
+
+/** Formats a Date into the MM/DD/YYYY form used across discount records. */
+export function formatDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}/${date.getFullYear()}`;
+}
 
 /* ---- Demo data (placeholder) ---- */
 export const discounts: Discount[] = [

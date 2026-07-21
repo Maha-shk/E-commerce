@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CalendarClock } from "lucide-react";
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { DateField } from "@/components/admin/DateField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
@@ -31,14 +33,23 @@ const formats = ["PDF", "CSV", "Excel"];
  * "Schedule Report" trigger + modal. UI only — the form is a static template
  * and nothing is persisted; both actions simply close the dialog.
  */
-export function ScheduleReportButton() {
+export function ScheduleReportButton({ iconOnly = false }: { iconOnly?: boolean }) {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="xl">
-          <CalendarClock />
-          Schedule Report
-        </Button>
+        {iconOnly ? (
+          <Button variant="outline" size="icon-lg" aria-label="Schedule report">
+            <CalendarClock className="size-4" />
+          </Button>
+        ) : (
+          <Button variant="outline" size="xl">
+            <CalendarClock />
+            Schedule Report
+          </Button>
+        )}
       </DialogTrigger>
 
       <DialogContent className="gap-0 sm:max-w-xl sm:p-6">
@@ -92,12 +103,10 @@ export function ScheduleReportButton() {
             </div>
           </div>
 
-          {/* Start date */}
-          <div className="space-y-2">
-            <label htmlFor="report-start" className={labelClass}>
-              Start Date
-            </label>
-            <Input id="report-start" type="date" className={fieldClass} />
+          {/* Date range */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <DateField id="report-start" label="From" value={startDate} onChange={setStartDate} />
+            <DateField id="report-end" label="To" value={endDate} onChange={setEndDate} />
           </div>
 
           {/* Recipient */}

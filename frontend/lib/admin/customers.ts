@@ -1,4 +1,4 @@
-export type CustomerStatus = "Active" | "Inactive";
+export type CustomerStatus = "Active" | "Inactive" | "Suspended";
 export type CustomerOrderStatus =
   | "Delivered"
   | "Processing"
@@ -31,7 +31,7 @@ export type Customer = {
   recentOrders: CustomerOrder[];
 };
 
-export const customerStatuses: CustomerStatus[] = ["Active", "Inactive"];
+export const customerStatuses: CustomerStatus[] = ["Active", "Inactive", "Suspended"];
 
 /* ---- Demo data (placeholder) ---- */
 export const customers: Customer[] = [
@@ -111,7 +111,7 @@ export const customers: Customer[] = [
     initials: "GR",
     email: "giulia.ricci@corp.it",
     phone: "+39 331 774 0126",
-    status: "Active",
+    status: "Suspended",
     joinDate: "Sep 29, 2022",
     joinedAt: "September 29, 2022",
     totalOrders: 8,

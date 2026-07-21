@@ -1,4 +1,10 @@
-export type OrderStatus = "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
+export type OrderStatus =
+  | "Pending"
+  | "Processing"
+  | "Shipped"
+  | "Delivered"
+  | "Cancelled"
+  | "Returned";
 export type PaymentStatus = "Paid" | "Pending" | "Refunded" | "Failed";
 
 export type OrderLineItem = {
@@ -40,6 +46,7 @@ export const orderStatuses: OrderStatus[] = [
   "Shipped",
   "Delivered",
   "Cancelled",
+  "Returned",
 ];
 
 export const paymentStatuses: PaymentStatus[] = ["Paid", "Pending", "Refunded", "Failed"];
@@ -303,7 +310,7 @@ export const orders: Order[] = [
     },
     paymentMethod: "Bank Transfer",
     paymentStatus: "Refunded",
-    status: "Cancelled",
+    status: "Returned",
     items: [{ name: "Brass Gear Assembly", sku: "CS-GEAR-441", quantity: 3, unitPrice: 95 }],
     shippingCost: 15,
     discount: 0,

@@ -29,7 +29,7 @@ import {
   type StockStatus,
 } from "@/lib/admin/inventory";
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 5;
 
 const statusVariant: Record<StockStatus, "success" | "warning" | "destructive"> = {
   "In Stock": "success",
@@ -181,25 +181,17 @@ export default function InventoryPage() {
         </Card>
       </div>
 
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Inventories</h2>
+
       {/* Inventory table */}
       <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar */}
+        {/* Toolbar: filters left, search + sort right */}
         <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="font-display text-lg font-semibold text-foreground">All Inventory</h2>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative sm:w-56">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-              <Input
-                type="search"
-                placeholder="Search products…"
-                className="h-10 rounded-lg bg-card pl-9"
-                value={search}
-                onChange={(e) => setSearchReset(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
               aria-label="Filter by category"
-              className="h-10 sm:w-44"
+              className="w-auto min-w-40"
               value={category}
               onChange={(e) => setCategoryReset(e.target.value)}
             >
@@ -210,9 +202,10 @@ export default function InventoryPage() {
                 </option>
               ))}
             </NativeSelect>
+
             <NativeSelect
               aria-label="Filter by stock status"
-              className="h-10 sm:w-40"
+              className="w-auto min-w-36"
               value={status}
               onChange={(e) => setStatusReset(e.target.value)}
             >
@@ -223,53 +216,66 @@ export default function InventoryPage() {
                 </option>
               ))}
             </NativeSelect>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                type="search"
+                placeholder="Search by name or SKU…"
+                className="h-10 rounded-lg bg-card pl-9"
+                value={search}
+                onChange={(e) => setSearchReset(e.target.value)}
+              />
+            </div>
             <SortButton />
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-205 text-sm">
+          <table className="w-full min-w-240 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="px-5 py-3 text-left">Product</th>
+                <th className="px-5 py-3 text-left">Image</th>
+                <th className="px-2 py-3 text-left">Product Name</th>
+                <th className="px-2 py-3 text-left">SKU</th>
                 <th className="px-2 py-3 text-left">Category</th>
-                <th className="px-2 py-3 text-left">Stock</th>
                 <th className="px-2 py-3 text-left">Status</th>
+                <th className="px-2 py-3 text-left">Stock</th>
                 <th className="px-2 py-3 text-left">Last Updated</th>
-                <th className="px-5 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {paged.map((item) => (
                 <tr key={item.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                        <Package className="size-5" />
-                      </span>
-                      <div>
-                        <p className="font-semibold text-foreground">{item.name}</p>
-                        <p className="text-xs text-subtle">SKU: {item.sku}</p>
-                      </div>
-                    </div>
+                  <td className="px-5 py-3">
+                    <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
+                      <Package className="size-5" />
+                    </span>
                   </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">
+                  <td className="px-2 py-3">
+                    <p className="font-semibold text-foreground">{item.name}</p>
+                  </td>
+                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{item.sku}</td>
+                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
                     {item.category}
                   </td>
-                  <td className="px-2 py-4 font-semibold text-foreground">
-                    {item.stock.toLocaleString()}
-                  </td>
-                  <td className="px-2 py-4">
+                  <td className="px-2 py-3">
                     <Badge variant={statusVariant[item.status]}>
                       <span className="size-1.5 rounded-full bg-current" />
                       {item.status}
                     </Badge>
                   </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">
+                  <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
+                    {item.stock.toLocaleString()}
+                  </td>
+                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
                     {item.lastUpdated}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex justify-end">
                       <Button
                         variant="outline"
@@ -287,7 +293,7 @@ export default function InventoryPage() {
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-14 text-center text-sm text-subtle">
+                  <td colSpan={8} className="px-4 py-14 text-center text-sm text-subtle">
                     <PackageSearch className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No products match your filters.
                   </td>
@@ -298,11 +304,9 @@ export default function InventoryPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            {filtered.length === 0
-              ? "No products to show"
-              : `Showing ${start + 1} to ${start + paged.length} of ${filtered.length} products`}
+            Showing {paged.length} of {filtered.length} products
           </p>
           <div className="flex items-center gap-1">
             <Button

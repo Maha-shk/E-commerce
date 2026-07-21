@@ -9,6 +9,8 @@ import {
   ChevronRight,
   UsersRound,
   Eye,
+  Ban,
+  UserCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +23,7 @@ import { CustomerDetailsModal } from "@/components/admin/CustomerDetailsModal";
 import { SortButton } from "@/components/admin/SortButton";
 import { formatEuro } from "@/lib/admin/format";
 import {
-  customers,
+  customers as initialCustomers,
   customerStatuses,
   type Customer,
   type CustomerStatus,
@@ -29,21 +31,26 @@ import {
 
 const PAGE_SIZE = 5;
 
-const statusVariant: Record<CustomerStatus, "success" | "secondary"> = {
+const statusVariant: Record<CustomerStatus, "success" | "secondary" | "destructive"> = {
   Active: "success",
   Inactive: "secondary",
+  Suspended: "destructive",
 };
 
 export default function CustomersPage() {
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | CustomerStatus>("All");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Customer | null>(null);
+  // Track by id so the open modal reflects status changes instead of a stale snapshot.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const selected = customers.find((c) => c.id === selectedId) ?? null;
 
   const avgSpend = useMemo(() => {
     const total = customers.reduce((sum, c) => sum + c.totalSpent, 0);
     return customers.length ? total / customers.length : 0;
-  }, []);
+  }, [customers]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -56,12 +63,20 @@ export default function CustomersPage() {
       const matchesStatus = status === "All" || c.status === status;
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [customers, search, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * PAGE_SIZE;
   const paged = filtered.slice(start, start + PAGE_SIZE);
+
+  function handleToggleSuspend(id: string) {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, status: c.status === "Suspended" ? "Active" : "Suspended" } : c,
+      ),
+    );
+  }
 
   function handleExport() {
     const header = ["Name", "Email", "Phone", "Orders", "Total Spent", "Status", "Joined"];
@@ -147,28 +162,17 @@ export default function CustomersPage() {
         </Card>
       </div>
 
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Customers</h2>
+
       {/* Customers table */}
       <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar */}
+        {/* Toolbar: filters left, search + sort right */}
         <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="font-display text-lg font-semibold text-foreground">All Customers</h2>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-              <Input
-                type="search"
-                placeholder="Search by name, email or phone…"
-                className="h-10 rounded-lg bg-card pl-9"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
               aria-label="Filter by account status"
-              className="h-10 sm:w-40"
+              className="w-auto min-w-36"
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value as "All" | CustomerStatus);
@@ -182,80 +186,112 @@ export default function CustomersPage() {
                 </option>
               ))}
             </NativeSelect>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                type="search"
+                placeholder="Search by name, email or phone…"
+                className="h-10 rounded-lg bg-card pl-9"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
             <SortButton />
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-230 text-sm">
+          <table className="w-full min-w-205 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="px-5 py-3 text-left">Customer Name</th>
+                <th className="px-5 py-3 text-left">Image</th>
+                <th className="px-2 py-3 text-left">Customer Name</th>
                 <th className="px-2 py-3 text-left">Email Address</th>
-                <th className="px-2 py-3 text-left">Phone</th>
+                <th className="px-2 py-3 text-left">Status</th>
                 <th className="px-2 py-3 text-right">Orders</th>
                 <th className="px-2 py-3 text-right">Total Spending</th>
-                <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-5 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {paged.map((customer) => (
-                <tr key={customer.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setSelected(customer)}
-                      className="flex items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <Avatar aria-hidden className="size-9">
+              {paged.map((customer) => {
+                const isSuspended = customer.status === "Suspended";
+                return (
+                  <tr key={customer.id} className="hover:bg-muted/30">
+                    <td className="px-5 py-3">
+                      <Avatar aria-hidden className="size-11">
                         <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
                           {customer.initials}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-semibold whitespace-nowrap text-foreground hover:underline">
-                        {customer.name}
-                      </span>
-                    </button>
-                  </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">
-                    {customer.email}
-                  </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">
-                    {customer.phone}
-                  </td>
-                  <td className="px-2 py-4 text-right font-medium text-foreground">
-                    {customer.totalOrders}
-                  </td>
-                  <td className="px-2 py-4 text-right font-semibold whitespace-nowrap text-foreground">
-                    {formatEuro(customer.totalSpent)}
-                  </td>
-                  <td className="px-2 py-4">
-                    <Badge variant={statusVariant[customer.status]} className="uppercase">
-                      <span className="size-1.5 rounded-full bg-current" />
-                      {customer.status}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelected(customer)}
-                        aria-label={`View details for ${customer.name}`}
+                    </td>
+                    <td className="px-2 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(customer.id)}
+                        className="rounded-lg text-left font-semibold whitespace-nowrap text-foreground outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
-                        <Eye />
-                        View Details
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {customer.name}
+                      </button>
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                      {customer.email}
+                    </td>
+                    <td className="px-2 py-3">
+                      <Badge variant={statusVariant[customer.status]} className="uppercase">
+                        <span className="size-1.5 rounded-full bg-current" />
+                        {customer.status}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-3 text-right font-medium text-foreground">
+                      {customer.totalOrders}
+                    </td>
+                    <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
+                      {formatEuro(customer.totalSpent)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setSelectedId(customer.id)}
+                          aria-label={`View details for ${customer.name}`}
+                        >
+                          <Eye />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleToggleSuspend(customer.id)}
+                          aria-label={
+                            isSuspended
+                              ? `Reinstate ${customer.name}`
+                              : `Suspend ${customer.name}`
+                          }
+                          className={
+                            isSuspended
+                              ? "text-success hover:bg-success/10 hover:text-success"
+                              : "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          }
+                        >
+                          {isSuspended ? <UserCheck /> : <Ban />}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-14 text-center text-sm text-subtle">
+                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <UsersRound className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No customers match your filters.
                   </td>
@@ -266,11 +302,9 @@ export default function CustomersPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            {filtered.length === 0
-              ? "No customers to show"
-              : `Showing ${start + 1} to ${start + paged.length} of ${filtered.length} customers`}
+            Showing {paged.length} of {filtered.length} customers
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -305,7 +339,11 @@ export default function CustomersPage() {
         </div>
       </Card>
 
-      <CustomerDetailsModal customer={selected} onClose={() => setSelected(null)} />
+      <CustomerDetailsModal
+        customer={selected}
+        onClose={() => setSelectedId(null)}
+        onToggleSuspend={handleToggleSuspend}
+      />
     </div>
   );
 }

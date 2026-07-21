@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import {
+  Search,
   Download,
   Plus,
   Tag,
   BarChart3,
   PiggyBank,
-  ListFilter,
   Pencil,
   Trash2,
   ChevronLeft,
@@ -18,18 +18,19 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select-native";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatCard } from "@/components/admin/StatCard";
 import { EditDiscountModal } from "@/components/admin/EditDiscountModal";
 import { SortButton } from "@/components/admin/SortButton";
 import {
   discounts,
-  discountTabs,
+  discountStatuses,
   formatDiscountValue,
   type Discount,
-  type DiscountCategory,
   type DiscountStatus,
 } from "@/lib/admin/discounts";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 5;
 
@@ -40,11 +41,28 @@ const statusVariant: Record<DiscountStatus, "success" | "info" | "secondary"> = 
 };
 
 export default function DiscountsPage() {
-  const [tab, setTab] = useState<DiscountCategory>("Active");
+  const [campaigns, setCampaigns] = useState<Discount[]>(discounts);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<"All" | DiscountStatus>("All");
   const [page, setPage] = useState(1);
   const [modalTarget, setModalTarget] = useState<Discount | "new" | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Discount | null>(null);
 
-  const filtered = useMemo(() => discounts.filter((d) => d.category === tab), [tab]);
+  function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    setCampaigns((prev) => prev.filter((d) => d.id !== pendingDelete.id));
+    setPendingDelete(null);
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return campaigns.filter((d) => {
+      const matchesSearch =
+        !q || d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q);
+      const matchesStatus = status === "All" || d.status === status;
+      return matchesSearch && matchesStatus;
+    });
+  }, [campaigns, search, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -53,7 +71,7 @@ export default function DiscountsPage() {
 
   function handleExport() {
     const header = ["Discount Name", "Code", "Type", "Value", "Status", "Usage Limit"];
-    const rows = discounts.map((d) => [
+    const rows = campaigns.map((d) => [
       d.name,
       d.code,
       d.type,
@@ -109,64 +127,62 @@ export default function DiscountsPage() {
         />
       </div>
 
-      {/* Status tabs */}
-      <div className="flex gap-6 overflow-x-auto border-b">
-        {discountTabs.map(({ key, count }) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => {
-                setTab(key);
-                setPage(1);
-              }}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "-mb-px whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors",
-                active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-subtle hover:text-foreground",
-              )}
-            >
-              {key} <span className="text-subtle">({count})</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Discounts</h2>
 
       {/* Campaign list */}
       <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3 border-b p-5">
-          <h2 className="font-display text-lg font-semibold text-foreground">Campaign List</h2>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" aria-label="Filter campaigns">
-              <ListFilter className="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Download campaign list"
-              onClick={handleExport}
+        {/* Toolbar: filters left, search + sort right */}
+        <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect
+              aria-label="Filter by discount status"
+              className="w-auto min-w-36"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value as "All" | DiscountStatus);
+                setPage(1);
+              }}
             >
-              <Download className="size-4" />
-            </Button>
-            <SortButton size="icon" />
+              <option value="All">All statuses</option>
+              {discountStatuses.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                type="search"
+                placeholder="Search by name or code…"
+                className="h-10 rounded-lg bg-card pl-9"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <SortButton />
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-200 text-sm">
+          <table className="w-full min-w-205 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="px-5 py-3 text-left">Discount Name</th>
+                <th className="px-5 py-3 text-left">Image</th>
+                <th className="px-2 py-3 text-left">Discount Name</th>
                 <th className="px-2 py-3 text-left">Code</th>
                 <th className="px-2 py-3 text-left">Type</th>
-                <th className="px-2 py-3 text-left">Value</th>
                 <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-5 py-3 text-right">Actions</th>
+                <th className="px-2 py-3 text-right">Value</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -174,34 +190,35 @@ export default function DiscountsPage() {
                 const Icon = discount.icon;
                 return (
                   <tr key={discount.id} className="hover:bg-muted/30">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
-                          <Icon className="size-4" />
-                        </span>
-                        <span className="font-semibold whitespace-nowrap text-foreground">
-                          {discount.name}
-                        </span>
-                      </div>
+                    <td className="px-5 py-3">
+                      <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
+                        <Icon className="size-5" />
+                      </span>
                     </td>
-                    <td className="px-2 py-4">
+                    <td className="px-2 py-3">
+                      <p className="font-semibold text-foreground">{discount.name}</p>
+                      <p className="line-clamp-1 text-xs text-subtle">
+                        {discount.startDate} – {discount.endDate}
+                      </p>
+                    </td>
+                    <td className="px-2 py-3">
                       <span className="font-mono text-xs font-medium tracking-wide text-muted-foreground">
                         {discount.code}
                       </span>
                     </td>
-                    <td className="px-2 py-4 whitespace-nowrap text-muted-foreground">
+                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
                       {discount.type}
                     </td>
-                    <td className="px-2 py-4 font-semibold whitespace-nowrap text-foreground">
-                      {formatDiscountValue(discount)}
-                    </td>
-                    <td className="px-2 py-4">
+                    <td className="px-2 py-3">
                       <Badge variant={statusVariant[discount.status]}>
                         <span className="size-1.5 rounded-full bg-current" />
                         {discount.status}
                       </Badge>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
+                      {formatDiscountValue(discount)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -216,6 +233,7 @@ export default function DiscountsPage() {
                           size="icon-sm"
                           aria-label={`Delete ${discount.name}`}
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setPendingDelete(discount)}
                         >
                           <Trash2 />
                         </Button>
@@ -227,9 +245,9 @@ export default function DiscountsPage() {
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-14 text-center text-sm text-subtle">
+                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <TicketX className="mx-auto mb-2 size-8 text-muted-foreground" />
-                    No discounts in this category.
+                    No discounts match your filters.
                   </td>
                 </tr>
               )}
@@ -238,11 +256,9 @@ export default function DiscountsPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            {filtered.length === 0
-              ? "No discounts to show"
-              : `Showing ${start + 1} to ${start + paged.length} of ${filtered.length} discounts`}
+            Showing {paged.length} of {filtered.length} discounts
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -278,6 +294,22 @@ export default function DiscountsPage() {
       </Card>
 
       <EditDiscountModal target={modalTarget} onClose={() => setModalTarget(null)} />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Delete discount?"
+        description={
+          <>
+            <strong className="font-semibold text-foreground">{pendingDelete?.name}</strong> will be
+            permanently removed. This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete discount"
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

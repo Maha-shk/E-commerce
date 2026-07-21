@@ -1,6 +1,7 @@
 import { MapPin, Phone, Pencil, Trash2, Plus } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -78,10 +79,23 @@ export default function AddressesPage() {
                 <Pencil />
                 Edit
               </Button>
-              <Button variant="ghost" size="sm" className="text-subtle hover:text-destructive">
+              <DeleteConfirmButton
+                variant="ghost"
+                size="sm"
+                className="text-subtle hover:text-destructive"
+                title="Delete address?"
+                description={
+                  <>
+                    Your{" "}
+                    <strong className="font-semibold text-foreground">{address.label}</strong>{" "}
+                    address will be permanently removed. This action cannot be undone.
+                  </>
+                }
+                confirmLabel="Delete address"
+              >
                 <Trash2 />
                 Delete
-              </Button>
+              </DeleteConfirmButton>
             </CardFooter>
           </Card>
         ))}
