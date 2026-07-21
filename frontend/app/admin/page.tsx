@@ -1,20 +1,10 @@
 import Link from "next/link";
-import {
-  Download,
-  CalendarClock,
-  SlidersHorizontal,
-  FileDown,
-  Pencil,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Package,
-} from "lucide-react";
+import { Download, Pencil, Trash2, ChevronLeft, ChevronRight, Package } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ScheduleReportButton } from "@/components/admin/ScheduleReportModal";
 import {
   dashboardStats,
   monthlyPerformance,
@@ -121,32 +111,18 @@ function RecentOrdersCard() {
 function ProductInventoryCard() {
   return (
     <Card className="gap-0 overflow-hidden py-0">
-      <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">Product Inventory</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Manage your product catalog and stock levels.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon-lg" aria-label="Filter inventory">
-            <SlidersHorizontal className="size-4" />
-          </Button>
-          <Button size="lg">
-            <FileDown />
-            Export CSV
-          </Button>
-        </div>
+      <div className="p-5">
+        <h2 className="font-display text-lg font-semibold text-foreground">Product Inventory</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Manage your product catalog and stock levels.
+        </p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-190 text-sm">
           <thead className="border-y bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
             <tr>
-              <th className="w-10 px-5 py-3">
-                <Checkbox aria-label="Select all products" />
-              </th>
-              <th className="px-2 py-3 text-left">Product Name</th>
+              <th className="px-5 py-3 text-left">Product Name</th>
               <th className="px-2 py-3 text-left">SKU</th>
               <th className="px-2 py-3 text-left">Category</th>
               <th className="px-2 py-3 text-left">Stock Status</th>
@@ -158,9 +134,6 @@ function ProductInventoryCard() {
             {inventoryPreview.map((product) => (
               <tr key={product.id} className="hover:bg-muted/30">
                 <td className="px-5 py-3.5">
-                  <Checkbox aria-label={`Select ${product.name}`} />
-                </td>
-                <td className="px-2 py-3.5">
                   <div className="flex items-center gap-3">
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
                       <Package className="size-4" />
@@ -234,10 +207,7 @@ export default function AdminDashboardPage() {
         subtitle="Monitor sales performance and inventory health."
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="xl">
-              <CalendarClock />
-              Schedule Report
-            </Button>
+            <ScheduleReportButton />
             <Button size="xl">
               <Download />
               Export Data

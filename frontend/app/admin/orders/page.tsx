@@ -11,6 +11,7 @@ import { NativeSelect } from "@/components/ui/select-native";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/OrderBadges";
 import { ChangeOrderStatusModal } from "@/components/admin/ChangeOrderStatusModal";
 import { OrderDetailsModal } from "@/components/admin/OrderDetailsModal";
+import { SortButton } from "@/components/admin/SortButton";
 import {
   orders,
   orderStatuses,
@@ -150,6 +151,10 @@ export default function OrdersPage() {
 
       {/* Orders table */}
       <Card className="gap-0 overflow-hidden py-0">
+        <div className="flex items-center justify-between gap-3 border-b p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">All Orders</h2>
+          <SortButton />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-230 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">

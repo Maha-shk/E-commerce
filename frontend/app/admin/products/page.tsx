@@ -21,8 +21,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/select-native";
+import { SortButton } from "@/components/admin/SortButton";
 import {
   products as initialProducts,
   productCategories,
@@ -70,7 +70,6 @@ export default function ProductsPage() {
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState<"All" | ProductStatus>("All");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -118,28 +117,6 @@ export default function ProductsPage() {
   function handleDelete(id: string, name: string) {
     if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAll() {
-    setSelected((prev) => {
-      const allSelected = paged.length > 0 && paged.every((p) => prev.has(p.id));
-      if (allSelected) return new Set();
-      return new Set(paged.map((p) => p.id));
-    });
-  }
-
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   function handleExport() {
@@ -163,8 +140,6 @@ export default function ProductsPage() {
     link.click();
     URL.revokeObjectURL(url);
   }
-
-  const allPagedSelected = paged.length > 0 && paged.every((p) => selected.has(p.id));
 
   return (
     <div className="space-y-6">
@@ -223,64 +198,62 @@ export default function ProductsPage() {
         />
       </div>
 
-      {/* Toolbar: search + filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <NativeSelect
-            aria-label="Filter by category"
-            className="w-auto min-w-40"
-            value={category}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-          >
-            <option value="All">All categories</option>
-            {productCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </NativeSelect>
-
-          <NativeSelect
-            aria-label="Filter by status"
-            className="w-auto min-w-36"
-            value={status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-          >
-            <option value="All">All statuses</option>
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-
-        <div className="relative sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-          <Input
-            type="search"
-            placeholder="Search by name, SKU or brand…"
-            className="h-10 rounded-lg bg-card pl-9"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-          />
-        </div>
-      </div>
+      {/* Section heading */}
+      <h2 className="font-display text-lg font-semibold text-foreground">All Products</h2>
 
       {/* Table */}
       <Card className="gap-0 overflow-hidden py-0">
+        {/* Toolbar: filters + search + sort */}
+        <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect
+              aria-label="Filter by category"
+              className="w-auto min-w-40"
+              value={category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+            >
+              <option value="All">All categories</option>
+              {productCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </NativeSelect>
+
+            <NativeSelect
+              aria-label="Filter by status"
+              className="w-auto min-w-36"
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+            >
+              <option value="All">All statuses</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                type="search"
+                placeholder="Search by name, SKU or brand…"
+                className="h-10 rounded-lg bg-card pl-9"
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+              />
+            </div>
+            <SortButton />
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-205 text-sm">
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
-                <th className="w-10 px-4 py-3">
-                  <Checkbox
-                    checked={allPagedSelected}
-                    onCheckedChange={toggleSelectAll}
-                    aria-label="Select all products on this page"
-                  />
-                </th>
-                <th className="px-2 py-3 text-left">Image</th>
+                <th className="px-5 py-3 text-left">Image</th>
                 <th className="px-2 py-3 text-left">Product Name</th>
                 <th className="px-2 py-3 text-left">SKU</th>
                 <th className="px-2 py-3 text-left">Category</th>
@@ -292,14 +265,7 @@ export default function ProductsPage() {
             <tbody className="divide-y">
               {paged.map((product) => (
                 <tr key={product.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3">
-                    <Checkbox
-                      checked={selected.has(product.id)}
-                      onCheckedChange={() => toggleSelect(product.id)}
-                      aria-label={`Select ${product.name}`}
-                    />
-                  </td>
-                  <td className="px-2 py-3">
+                  <td className="px-5 py-3">
                     <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
                       <Package className="size-5" />
                     </span>
@@ -342,7 +308,7 @@ export default function ProductsPage() {
 
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-14 text-center text-sm text-subtle">
+                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <Boxes className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No products match your filters.
                   </td>

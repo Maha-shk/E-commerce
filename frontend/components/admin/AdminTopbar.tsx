@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Menu, Search, Mail, Bell } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,13 +30,23 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <Button variant="outline" size="icon" aria-label="Messages" className="relative size-10">
-            <Mail className="size-5" />
-            <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            aria-label="Messages"
+            className="relative size-10"
+          >
+            <Link href="/admin/messages">
+              <Mail className="size-5" />
+              <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
+            </Link>
           </Button>
 
-          <Button variant="outline" size="icon" aria-label="Notifications" className="size-10">
-            <Bell className="size-5" />
+          <Button asChild variant="outline" size="icon" aria-label="Notifications" className="size-10">
+            <Link href="/admin/notifications">
+              <Bell className="size-5" />
+            </Link>
           </Button>
         </div>
       </div>

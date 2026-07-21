@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NativeSelect } from "@/components/ui/select-native";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { ReportStatusBadge } from "@/components/admin/ReportStatusBadge";
+import { SortButton } from "@/components/admin/SortButton";
 import {
   reportTabs,
   reportCategories,
@@ -138,6 +139,7 @@ export default function ReportsPage() {
               <Columns3 />
               Columns
             </Button>
+            <SortButton size="icon-sm" />
           </div>
         </div>
 

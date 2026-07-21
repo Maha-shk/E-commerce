@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/admin/StatCard";
 import { EditDiscountModal } from "@/components/admin/EditDiscountModal";
+import { SortButton } from "@/components/admin/SortButton";
 import {
   discounts,
   discountTabs,
@@ -151,6 +152,7 @@ export default function DiscountsPage() {
             >
               <Download className="size-4" />
             </Button>
+            <SortButton size="icon" />
           </div>
         </div>
 

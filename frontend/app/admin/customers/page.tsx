@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NativeSelect } from "@/components/ui/select-native";
 import { CustomerDetailsModal } from "@/components/admin/CustomerDetailsModal";
+import { SortButton } from "@/components/admin/SortButton";
 import { formatEuro } from "@/lib/admin/format";
 import {
   customers,
@@ -181,6 +182,7 @@ export default function CustomersPage() {
                 </option>
               ))}
             </NativeSelect>
+            <SortButton />
           </div>
         </div>
 
