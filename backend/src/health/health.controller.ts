@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('health')
 @Controller('health')
@@ -8,6 +9,7 @@ export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Liveness + DB connectivity probe used by Docker healthchecks. */
+  @Public()
   @Get()
   async check() {
     let database = 'up';

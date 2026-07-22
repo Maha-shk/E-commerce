@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Menu, Search, Mail, Bell } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useUnreadCount } from "@/lib/hooks/use-admin";
 
 /** Routes where the global search field is suppressed. */
 const HIDE_SEARCH_ON = ["/admin/profile"];
@@ -13,6 +14,8 @@ const HIDE_SEARCH_ON = ["/admin/profile"];
 export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
   const showSearch = !HIDE_SEARCH_ON.includes(pathname);
+  const { data: unread } = useUnreadCount();
+  const unreadCount = unread?.unread ?? 0;
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background">
@@ -52,9 +55,22 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
             </Link>
           </Button>
 
-          <Button asChild variant="outline" size="icon" aria-label="Notifications" className="size-10">
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            aria-label={
+              unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"
+            }
+            className="relative size-10"
+          >
             <Link href="/admin/notifications">
               <Bell className="size-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-white ring-2 ring-background">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </Link>
           </Button>
         </div>

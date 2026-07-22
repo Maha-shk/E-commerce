@@ -9,17 +9,18 @@ type DeleteConfirmButtonProps = Omit<ComponentProps<typeof Button>, "onClick" | 
   title: string;
   description: ReactNode;
   confirmLabel?: string;
+  /** Runs when the user confirms. The dialog closes either way. */
+  onConfirm?: () => void;
 };
 
 /**
  * Trigger button that gates a destructive action behind a confirmation dialog.
- * Used on screens that are still presentation-only, so confirming just closes
- * the dialog — wire an `onConfirm` through when real deletion lands.
  */
 export function DeleteConfirmButton({
   title,
   description,
   confirmLabel,
+  onConfirm,
   children,
   ...buttonProps
 }: DeleteConfirmButtonProps) {
@@ -36,7 +37,10 @@ export function DeleteConfirmButton({
         title={title}
         description={description}
         confirmLabel={confirmLabel}
-        onConfirm={() => setOpen(false)}
+        onConfirm={() => {
+          onConfirm?.();
+          setOpen(false);
+        }}
       />
     </>
   );

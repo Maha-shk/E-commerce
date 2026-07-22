@@ -25,7 +25,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/select-native";
-import { productCategories, type Product, type ProductVisibility } from "@/lib/admin/products";
+import { Loader2 } from "lucide-react";
+import { useCategories, useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-admin";
+import type { Product, ProductVisibility } from "@/lib/api/models";
 import { cn } from "@/lib/utils";
 
 type ProductFormProps = {
@@ -42,17 +44,24 @@ const visibilityOptions: {
   description: string;
   icon: LucideIcon;
 }[] = [
-  { value: "public", label: "Public", description: "Visible to all customers", icon: Globe },
-  { value: "private", label: "Private", description: "Only internal users", icon: Lock },
-  { value: "scheduled", label: "Scheduled", description: "Publish on date", icon: Clock },
+  { value: "PUBLIC", label: "Public", description: "Visible to all customers", icon: Globe },
+  { value: "PRIVATE", label: "Private", description: "Only internal users", icon: Lock },
+  { value: "SCHEDULED", label: "Scheduled", description: "Publish on date", icon: Clock },
 ];
 
 export function ProductForm({ mode, product }: ProductFormProps) {
   const router = useRouter();
 
+  const { data: categoriesData } = useCategories({ limit: 100 });
+  const categories = categoriesData?.data ?? [];
+
+  const createProduct = useCreateProduct();
+  const updateProduct = useUpdateProduct(product?.id ?? "");
+  const saving = createProduct.isPending || updateProduct.isPending;
+
   const [name, setName] = useState(product?.name ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
-  const [category, setCategory] = useState(product?.category ?? productCategories[0]);
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
 
   const [images, setImages] = useState<ImageItem[]>(() =>
@@ -70,8 +79,13 @@ export function ProductForm({ mode, product }: ProductFormProps) {
   const [basePrice, setBasePrice] = useState(product ? String(product.price) : "");
   const [discount, setDiscount] = useState(product ? String(product.discount) : "0");
 
-  const [visibility, setVisibility] = useState<ProductVisibility>(product?.visibility ?? "public");
-  const [scheduledDate, setScheduledDate] = useState(product?.scheduledDate ?? "");
+  const [visibility, setVisibility] = useState<ProductVisibility>(
+    product?.visibility ?? "PUBLIC",
+  );
+  // <input type="date"> needs a bare YYYY-MM-DD value.
+  const [scheduledDate, setScheduledDate] = useState(
+    product?.scheduledDate ? product.scheduledDate.slice(0, 10) : "",
+  );
 
   const [tags, setTags] = useState<string[]>(product?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
@@ -209,12 +223,13 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                   <NativeSelect
                     id="category"
                     className="h-11 rounded-lg bg-card"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
                   >
-                    {productCategories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
+                    <option value="">Uncategorised</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
                     ))}
                   </NativeSelect>

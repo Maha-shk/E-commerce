@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -23,41 +23,48 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { SortButton } from "@/components/admin/SortButton";
+import { ErrorState, Skeleton, TableSkeleton } from "@/components/admin/QueryState";
 import {
-  products as initialProducts,
-  productCategories,
-  formatCurrency,
-  formatCompactCurrency,
-  type Product,
-  type ProductStatus,
-} from "@/lib/admin/products";
+  useCategories,
+  useDeleteProduct,
+  useInventoryStats,
+  useProducts,
+} from "@/lib/hooks/use-admin";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { formatCompact, formatEuro } from "@/lib/admin/format";
+import { stockStatusLabel, type Product, type StockStatus } from "@/lib/api/models";
 
 const PAGE_SIZE = 5;
 
-const statusVariant: Record<ProductStatus, "success" | "warning" | "destructive"> = {
-  "In Stock": "success",
-  "Low Stock": "warning",
-  "Out of Stock": "destructive",
+const statusVariant: Record<StockStatus, "success" | "warning" | "destructive"> = {
+  IN_STOCK: "success",
+  LOW_STOCK: "warning",
+  OUT_OF_STOCK: "destructive",
 };
 
-const statusOptions: ProductStatus[] = ["In Stock", "Low Stock", "Out of Stock"];
+const statusOptions: StockStatus[] = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 
 function StatCard({
   label,
   value,
   corner,
+  loading,
 }: {
   label: string;
   value: string;
   corner: ReactNode;
+  loading?: boolean;
 }) {
   return (
     <Card>
       <CardContent className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-subtle">{label}</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-foreground">{value}</p>
+          {loading ? (
+            <Skeleton className="mt-2 h-8 w-20" />
+          ) : (
+            <p className="mt-2 font-display text-2xl font-semibold text-foreground">{value}</p>
+          )}
         </div>
         {corner}
       </CardContent>
@@ -66,69 +73,46 @@ function StatCard({
 }
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
-  const [status, setStatus] = useState<"All" | ProductStatus>("All");
+  const [categoryId, setCategoryId] = useState("All");
+  const [status, setStatus] = useState<"All" | StockStatus>("All");
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return products.filter((p) => {
-      const matchesSearch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q);
-      const matchesCategory = category === "All" || p.category === category;
-      const matchesStatus = status === "All" || p.status === status;
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
-  }, [products, search, category, status]);
+  const debouncedSearch = useDebounce(search);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Filtering and pagination happen server-side.
+  const { data, isLoading, isError, error, refetch } = useProducts({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    categoryId: categoryId === "All" ? undefined : categoryId,
+    status: status === "All" ? undefined : status,
+  });
 
-  const stats = useMemo(() => {
-    const totalInventory = products.reduce((sum, p) => sum + p.stock, 0);
-    const inStock = products
-      .filter((p) => p.status === "In Stock")
-      .reduce((sum, p) => sum + p.stock, 0);
-    const lowStock = products.filter((p) => p.status === "Low Stock").length;
-    const activeValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
-    return { totalInventory, inStock, lowStock, activeValue };
-  }, [products]);
+  const { data: categoriesData } = useCategories({ limit: 100 });
+  const { data: stats, isLoading: statsLoading } = useInventoryStats();
+  const deleteProduct = useDeleteProduct();
 
-  function handleSearchChange(value: string) {
-    setSearch(value);
-    setPage(1);
-  }
+  const products = data?.data ?? [];
+  const totalPages = data?.meta.totalPages ?? 1;
+  const categories = categoriesData?.data ?? [];
 
-  function handleCategoryChange(value: string) {
-    setCategory(value);
-    setPage(1);
-  }
-
-  function handleStatusChange(value: string) {
-    setStatus(value as "All" | ProductStatus);
-    setPage(1);
-  }
-
-  function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    setProducts((prev) => prev.filter((p) => p.id !== pendingDelete.id));
-    setPendingDelete(null);
+  /** Any filter change resets to the first page. */
+  function withPageReset<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setPage(1);
+    };
   }
 
   function handleExport() {
     const header = ["Name", "SKU", "Category", "Status", "Price", "Stock"];
-    const rows = filtered.map((p) => [
+    const rows = products.map((p) => [
       p.name,
       p.sku,
-      p.category,
-      p.status,
+      p.category?.name ?? "",
+      stockStatusLabel[p.status],
       p.price.toFixed(2),
       String(p.stock),
     ]);
@@ -165,16 +149,18 @@ export default function ProductsPage() {
         }
       />
 
-      {/* Stats */}
+      {/* Stats (whole-catalog figures, independent of the current filters) */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="Total Inventory"
-          value={stats.totalInventory.toLocaleString()}
-          corner={<Badge variant="success">+12%</Badge>}
+          value={(stats?.totalUnits ?? 0).toLocaleString()}
+          loading={statsLoading}
+          corner={<Badge variant="success">{stats?.totalProducts ?? 0} SKUs</Badge>}
         />
         <StatCard
           label="In Stock"
-          value={stats.inStock.toLocaleString()}
+          value={((stats?.totalProducts ?? 0) - (stats?.outOfStock ?? 0)).toLocaleString()}
+          loading={statsLoading}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
               <CheckCircle2 className="size-4" />
@@ -183,7 +169,8 @@ export default function ProductsPage() {
         />
         <StatCard
           label="Low Stock"
-          value={stats.lowStock.toLocaleString()}
+          value={(stats?.lowStock ?? 0).toLocaleString()}
+          loading={statsLoading}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-warning-muted text-warning">
               <AlertTriangle className="size-4" />
@@ -192,7 +179,8 @@ export default function ProductsPage() {
         />
         <StatCard
           label="Active Value"
-          value={`€${formatCompactCurrency(stats.activeValue)}`}
+          value={`€${formatCompact(stats?.totalValue ?? 0)}`}
+          loading={statsLoading}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
               <TrendingUp className="size-4" />
@@ -201,24 +189,21 @@ export default function ProductsPage() {
         />
       </div>
 
-      {/* Section heading */}
       <h2 className="font-display text-lg font-semibold text-foreground">All Products</h2>
 
-      {/* Table */}
       <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar: filters + search + sort */}
         <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
               aria-label="Filter by category"
               className="w-auto min-w-40"
-              value={category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
+              value={categoryId}
+              onChange={(e) => withPageReset(setCategoryId)(e.target.value)}
             >
               <option value="All">All categories</option>
-              {productCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </NativeSelect>
@@ -227,103 +212,118 @@ export default function ProductsPage() {
               aria-label="Filter by status"
               className="w-auto min-w-36"
               value={status}
-              onChange={(e) => handleStatusChange(e.target.value)}
+              onChange={(e) =>
+                withPageReset(setStatus)(e.target.value as "All" | StockStatus)
+              }
             >
               <option value="All">All statuses</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {stockStatusLabel[s]}
                 </option>
               ))}
             </NativeSelect>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-72 sm:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-              <Input
-                type="search"
-                placeholder="Search by name, SKU or brand…"
-                className="h-10 rounded-lg bg-card pl-9"
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-              />
-            </div>
-            <SortButton />
+          <div className="relative flex-1 sm:w-72 sm:flex-none">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+            <Input
+              type="search"
+              placeholder="Search by name, SKU or brand…"
+              className="h-10 rounded-lg bg-card pl-9"
+              value={search}
+              onChange={(e) => withPageReset(setSearch)(e.target.value)}
+            />
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-205 text-sm">
-            <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <tr>
-                <th className="px-5 py-3 text-left">Image</th>
-                <th className="px-2 py-3 text-left">Product Name</th>
-                <th className="px-2 py-3 text-left">SKU</th>
-                <th className="px-2 py-3 text-left">Category</th>
-                <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-2 py-3 text-right">Price</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {paged.map((product) => (
-                <tr key={product.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-3">
-                    <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                      <Package className="size-5" />
-                    </span>
-                  </td>
-                  <td className="px-2 py-3">
-                    <p className="font-semibold text-foreground">{product.name}</p>
-                    <p className="line-clamp-1 text-xs text-subtle">{product.description}</p>
-                  </td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{product.sku}</td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{product.category}</td>
-                  <td className="px-2 py-3">
-                    <Badge variant={statusVariant[product.status]}>
-                      <span className="size-1.5 rounded-full bg-current" />
-                      {product.status}
-                    </Badge>
-                  </td>
-                  <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
-                    {formatCurrency(product.price)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button asChild variant="ghost" size="icon-sm" aria-label={`Edit ${product.name}`}>
-                        <Link href={`/admin/products/${product.id}/edit`}>
-                          <Pencil />
-                        </Link>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Delete ${product.name}`}
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => setPendingDelete(product)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
 
-              {paged.length === 0 && (
+        {isError ? (
+          <ErrorState error={error} onRetry={() => refetch()} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-205 text-sm">
+              <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
-                    <Boxes className="mx-auto mb-2 size-8 text-muted-foreground" />
-                    No products match your filters.
-                  </td>
+                  <th className="px-5 py-3 text-left">Image</th>
+                  <th className="px-2 py-3 text-left">Product Name</th>
+                  <th className="px-2 py-3 text-left">SKU</th>
+                  <th className="px-2 py-3 text-left">Category</th>
+                  <th className="px-2 py-3 text-left">Status</th>
+                  <th className="px-2 py-3 text-right">Price</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {isLoading ? (
+                  <TableSkeleton rows={PAGE_SIZE} columns={7} />
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
+                      <Boxes className="mx-auto mb-2 size-8 text-muted-foreground" />
+                      No products match your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  products.map((product) => (
+                    <tr key={product.id} className="hover:bg-muted/30">
+                      <td className="px-5 py-3">
+                        <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
+                          <Package className="size-5" />
+                        </span>
+                      </td>
+                      <td className="px-2 py-3">
+                        <p className="font-semibold text-foreground">{product.name}</p>
+                        <p className="line-clamp-1 text-xs text-subtle">{product.description}</p>
+                      </td>
+                      <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                        {product.sku}
+                      </td>
+                      <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                        {product.category?.name ?? "—"}
+                      </td>
+                      <td className="px-2 py-3">
+                        <Badge variant={statusVariant[product.status]}>
+                          <span className="size-1.5 rounded-full bg-current" />
+                          {stockStatusLabel[product.status]}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
+                        {formatEuro(product.price)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${product.name}`}
+                          >
+                            <Link href={`/admin/products/${product.id}/edit`}>
+                              <Pencil />
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Delete ${product.name}`}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setPendingDelete(product)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            Showing {paged.length} of {filtered.length} products
+            Showing {products.length} of {data?.meta.total ?? 0} products
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -331,14 +331,14 @@ export default function ProductsPage() {
               size="icon-sm"
               aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={page === 1}
             >
               <ChevronLeft />
             </Button>
             {Array.from({ length: totalPages }).map((_, i) => (
               <Button
                 key={i}
-                variant={currentPage === i + 1 ? "default" : "outline"}
+                variant={page === i + 1 ? "default" : "outline"}
                 size="icon-sm"
                 onClick={() => setPage(i + 1)}
               >
@@ -350,7 +350,7 @@ export default function ProductsPage() {
               size="icon-sm"
               aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={page >= totalPages}
             >
               <ChevronRight />
             </Button>
@@ -371,7 +371,10 @@ export default function ProductsPage() {
           </>
         }
         confirmLabel="Delete product"
-        onConfirm={handleConfirmDelete}
+        onConfirm={() => {
+          if (pendingDelete) deleteProduct.mutate(pendingDelete.id);
+          setPendingDelete(null);
+        }}
       />
     </div>
   );

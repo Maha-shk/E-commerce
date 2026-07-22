@@ -1,4 +1,4 @@
-import { plainToInstance } from 'class-transformer';
+import { plainToInstance, Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
@@ -24,6 +24,8 @@ export class EnvironmentVariables {
   @IsOptional()
   NODE_ENV: NodeEnv = NodeEnv.Development;
 
+  // Env vars are always strings; @Type coerces before validation.
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @IsOptional()
@@ -60,6 +62,7 @@ export class EnvironmentVariables {
   @IsOptional()
   SMTP_HOST?: string;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   SMTP_PORT?: number;

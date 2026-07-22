@@ -1,0 +1,185 @@
+import { del, get, getPaginated, patch, post, put } from "@/lib/api/request";
+import type { PaginationQuery } from "@/lib/api/types";
+
+/**
+ * Typed wrappers over every /admin endpoint.
+ * Domain types live in `lib/api/models.ts`.
+ */
+import type {
+  AdminProfile,
+  Category,
+  Conversation,
+  ConversationDetail,
+  CustomerDetail,
+  CustomerListItem,
+  DashboardStats,
+  Discount,
+  InventoryItem,
+  InventoryStats,
+  MonthlyPoint,
+  Notification,
+  NotificationGroup,
+  Order,
+  OrderStats,
+  Product,
+  RecentOrder,
+  ReportView,
+  SessionInfo,
+  StaffMember,
+  TopProduct,
+} from "@/lib/api/models";
+
+/* ---- Dashboard ---- */
+export const dashboardApi = {
+  stats: () => get<DashboardStats>("/admin/dashboard/stats"),
+  monthly: (months = 6) =>
+    get<MonthlyPoint[]>("/admin/dashboard/monthly-performance", { months }),
+  recentOrders: (limit = 5) =>
+    get<RecentOrder[]>("/admin/dashboard/recent-orders", { limit }),
+  topProducts: (limit = 5) =>
+    get<TopProduct[]>("/admin/dashboard/top-products", { limit }),
+};
+
+/* ---- Products ---- */
+export type ProductQuery = PaginationQuery & {
+  categoryId?: string;
+  status?: string;
+  visibility?: string;
+  sortBy?: "name" | "price" | "stock" | "createdAt";
+  sortOrder?: "asc" | "desc";
+};
+
+export const productsApi = {
+  list: (params?: ProductQuery) => getPaginated<Product>("/admin/products", params),
+  detail: (id: string) => get<Product>(`/admin/products/${id}`),
+  create: (body: unknown) => post<Product>("/admin/products", body),
+  update: (id: string, body: unknown) => patch<Product>(`/admin/products/${id}`, body),
+  remove: (id: string) => del<{ message: string }>(`/admin/products/${id}`),
+};
+
+/* ---- Categories ---- */
+export type CategoryQuery = PaginationQuery & {
+  status?: string;
+  visibility?: string;
+};
+
+export const categoriesApi = {
+  list: (params?: CategoryQuery) => getPaginated<Category>("/admin/categories", params),
+  detail: (id: string) => get<Category>(`/admin/categories/${id}`),
+  create: (body: unknown) => post<Category>("/admin/categories", body),
+  update: (id: string, body: unknown) => patch<Category>(`/admin/categories/${id}`, body),
+  remove: (id: string) => del<{ message: string }>(`/admin/categories/${id}`),
+};
+
+/* ---- Inventory ---- */
+export type InventoryQuery = PaginationQuery & {
+  categoryId?: string;
+  status?: string;
+};
+
+export const inventoryApi = {
+  list: (params?: InventoryQuery) => getPaginated<InventoryItem>("/admin/inventory", params),
+  stats: () => get<InventoryStats>("/admin/inventory/stats"),
+  adjust: (productId: string, body: { delta?: number; setTo?: number; reason?: string }) =>
+    patch<InventoryItem>(`/admin/inventory/${productId}/adjust`, body),
+};
+
+/* ---- Orders ---- */
+export type OrderQuery = PaginationQuery & {
+  status?: string;
+  paymentStatus?: string;
+  customerId?: string;
+  from?: string;
+  to?: string;
+};
+
+export const ordersApi = {
+  list: (params?: OrderQuery) => getPaginated<Order>("/admin/orders", params),
+  detail: (id: string) => get<Order>(`/admin/orders/${id}`),
+  stats: () => get<OrderStats>("/admin/orders/stats"),
+  updateStatus: (
+    id: string,
+    body: { status?: string; paymentStatus?: string; shippingTracking?: string },
+  ) => patch<Order>(`/admin/orders/${id}/status`, body),
+  remove: (id: string) => del<{ message: string }>(`/admin/orders/${id}`),
+};
+
+/* ---- Customers ---- */
+export type CustomerQuery = PaginationQuery & { status?: string };
+
+export const customersApi = {
+  list: (params?: CustomerQuery) =>
+    getPaginated<CustomerListItem>("/admin/customers", params),
+  detail: (id: string) => get<CustomerDetail>(`/admin/customers/${id}`),
+  stats: () =>
+    get<{ total: number; active: number; inactive: number; suspended: number }>(
+      "/admin/customers/stats",
+    ),
+  update: (id: string, body: unknown) => patch<CustomerListItem>(`/admin/customers/${id}`, body),
+};
+
+/* ---- Discounts ---- */
+export type DiscountQuery = PaginationQuery & { category?: string; type?: string };
+
+export const discountsApi = {
+  list: (params?: DiscountQuery) => getPaginated<Discount>("/admin/discounts", params),
+  detail: (id: string) => get<Discount>(`/admin/discounts/${id}`),
+  create: (body: unknown) => post<Discount>("/admin/discounts", body),
+  update: (id: string, body: unknown) => patch<Discount>(`/admin/discounts/${id}`, body),
+  remove: (id: string) => del<{ message: string }>(`/admin/discounts/${id}`),
+};
+
+/* ---- Reports ---- */
+export const reportsApi = {
+  build: (params: { tab?: string; from?: string; to?: string; category?: string }) =>
+    get<ReportView>("/admin/reports", params),
+};
+
+/* ---- Notifications ---- */
+export type NotificationQuery = PaginationQuery & {
+  category?: string;
+  unreadOnly?: boolean;
+};
+
+export const notificationsApi = {
+  list: (params?: NotificationQuery) =>
+    getPaginated<Notification>("/admin/notifications", params),
+  grouped: (params?: NotificationQuery) =>
+    getPaginated<NotificationGroup>("/admin/notifications/grouped", params),
+  unreadCount: () => get<{ unread: number }>("/admin/notifications/unread-count"),
+  markRead: (id: string) => patch<{ message: string }>(`/admin/notifications/${id}/read`),
+  markAllRead: () => patch<{ message: string }>("/admin/notifications/read-all"),
+  remove: (id: string) => del<{ message: string }>(`/admin/notifications/${id}`),
+};
+
+/* ---- Messages ---- */
+export const messagesApi = {
+  list: (params?: PaginationQuery) => getPaginated<Conversation>("/admin/messages", params),
+  detail: (id: string) => get<ConversationDetail>(`/admin/messages/${id}`),
+  reply: (id: string, text: string) => post<unknown>(`/admin/messages/${id}/reply`, { text }),
+  markRead: (id: string) => patch<{ message: string }>(`/admin/messages/${id}/read`),
+  remove: (id: string) => del<{ message: string }>(`/admin/messages/${id}`),
+};
+
+/* ---- Settings ---- */
+export const settingsApi = {
+  all: () => get<Record<string, unknown>>("/admin/settings"),
+  updateMany: (body: Record<string, unknown>) =>
+    put<Record<string, unknown>>("/admin/settings", body),
+  reset: (key: string) => del<unknown>(`/admin/settings/${key}`),
+};
+
+/* ---- Profile & staff ---- */
+export const profileApi = {
+  me: () => get<AdminProfile>("/admin/profile"),
+  update: (body: unknown) => patch<AdminProfile>("/admin/profile", body),
+  sessions: () => get<SessionInfo[]>("/admin/profile/sessions"),
+  revokeSession: (id: string) => del<{ message: string }>(`/admin/profile/sessions/${id}`),
+};
+
+export const staffApi = {
+  list: (params?: PaginationQuery) => getPaginated<StaffMember>("/admin/staff", params),
+  create: (body: unknown) => post<StaffMember>("/admin/staff", body),
+  update: (id: string, body: unknown) => patch<StaffMember>(`/admin/staff/${id}`, body),
+  remove: (id: string) => del<{ message: string }>(`/admin/staff/${id}`),
+};

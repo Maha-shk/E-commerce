@@ -29,6 +29,17 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useLogout, useSession } from "@/lib/hooks/use-auth";
+import { initialsOf } from "@/lib/admin/format";
+
+/** Human-readable role names shown in the account footer. */
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: "Super Administrator",
+  ADMIN: "Administrator",
+  MANAGER: "Manager",
+  SUPPORT: "Support Agent",
+  CUSTOMER: "Customer",
+};
 
 const navIcons: Record<AdminNavIconKey, LucideIcon> = {
   dashboard: LayoutGrid,
@@ -45,6 +56,11 @@ const navIcons: Record<AdminNavIconKey, LucideIcon> = {
 /** Persistent left navigation for the admin console. */
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { user } = useSession();
+  const logout = useLogout();
+
+  const displayName = user?.fullName ?? "Admin User";
+  const roleLabel = user ? roleLabels[user.role] : "Administrator";
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -104,14 +120,14 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex items-center gap-2.5 rounded-lg p-2">
           <Avatar className="size-9">
             <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
-              AT
+              {initialsOf(displayName)}
             </AvatarFallback>
           </Avatar>
           <span className="min-w-0 flex-1 text-left">
             <span className="block truncate text-sm font-semibold leading-tight text-foreground">
-              Admin User
+              {displayName}
             </span>
-            <span className="block truncate text-xs leading-tight text-subtle">Administrator</span>
+            <span className="block truncate text-xs leading-tight text-subtle">{roleLabel}</span>
           </span>
 
           <DropdownMenu>
@@ -133,9 +149,16 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={onNavigate}>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={logout.isPending}
+                onClick={() => {
+                  onNavigate?.();
+                  logout.mutate();
+                }}
+              >
                 <LogOut />
-                Sign Out
+                {logout.isPending ? "Signing out…" : "Sign Out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
