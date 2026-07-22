@@ -1,0 +1,400 @@
+// Prisma schema for the CENTO e-commerce Admin backend.
+// Docs: https://www.prisma.io/docs
+//
+// The models below are the data foundation for the whole backend. Phase 2
+// (Admin Dashboard APIs) builds services/controllers on top of these models.
+// They mirror the domain the frontend already renders (see frontend/lib/admin/*).
+
+generator client {
+  provider = "prisma-client-js"
+  // "native" covers local dev (e.g. Windows); the debian target matches the
+  // node:22-bookworm-slim container the backend runs in.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Application roles. Drives RBAC. CUSTOMER is the storefront role; the rest
+/// are staff roles with access to the admin console (scoped per-permission).
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  SUPPORT
+  CUSTOMER
+}
+
+/// Lifecycle state of any user account.
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+/// One-time code purpose. Used for the register/verify-OTP and reset flows.
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum CategoryStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CategoryVisibility {
+  VISIBLE
+  HIDDEN
+}
+
+/// Product publication state. SCHEDULED goes live on `scheduledDate`.
+enum ProductVisibility {
+  PUBLIC
+  PRIVATE
+  SCHEDULED
+}
+
+/// Derived from stock level; persisted so the admin list can filter on it.
+enum StockStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  REFUNDED
+  FAILED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+/// Lifecycle bucket that drives the Active / Scheduled / Archived tabs.
+enum DiscountCategory {
+  ACTIVE
+  SCHEDULED
+  ARCHIVED
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum NotificationType {
+  SUCCESS
+  INFO
+  WARNING
+  ERROR
+}
+
+enum NotificationCategory {
+  ORDERS
+  CUSTOMERS
+  INVENTORY
+  DISCOUNTS
+  REPORTS
+  SYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// Auth & users
+// ---------------------------------------------------------------------------
+
+/// A single users table serves both staff (admin console) and customers.
+/// The admin "Customers" screen is simply `where role = CUSTOMER`.
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  fullName      String
+  phone         String?
+  role          Role       @default(CUSTOMER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  avatarUrl     String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  refreshTokens      RefreshToken[]
+  verificationTokens VerificationToken[]
+  addresses          Address[]
+  orders             Order[]
+  conversations      Conversation[]
+  notifications      Notification[]
+  inventoryLogs      InventoryAdjustment[]
+
+  @@index([role])
+  @@index([status])
+}
+
+/// Hashed refresh tokens (rotating). One row per active session/device.
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Hashed one-time codes for email verification and password reset.
+model VerificationToken {
+  id         String                @id @default(cuid())
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       VerificationTokenType
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime              @default(now())
+
+  @@index([userId, type])
+}
+
+/// Shipping/billing addresses. Rendered one line per array entry in the UI.
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String?
+  lines     String[]
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+model Category {
+  id            String             @id @default(cuid())
+  name          String
+  slug          String             @unique
+  description   String             @default("")
+  icon          String             @default("home")
+  status        CategoryStatus     @default(ACTIVE)
+  visibility    CategoryVisibility @default(VISIBLE)
+  thumbnailName String?
+  thumbnailSize String?
+  parentId      String?
+  parent        Category?          @relation("CategoryToSubcategory", fields: [parentId], references: [id])
+  subcategories Category[]         @relation("CategoryToSubcategory")
+  products      Product[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([parentId])
+  @@index([status])
+}
+
+model Product {
+  id            String            @id @default(cuid())
+  name          String
+  brand         String            @default("")
+  categoryId    String?
+  category      Category?         @relation(fields: [categoryId], references: [id])
+  description   String            @default("")
+  sku           String            @unique
+  stock         Int               @default(0)
+  status        StockStatus       @default(IN_STOCK)
+  price         Decimal           @db.Decimal(12, 2)
+  discount      Int               @default(0)
+  visibility    ProductVisibility @default(PUBLIC)
+  scheduledDate DateTime?
+  tags          String[]
+  unitValue     Decimal?          @db.Decimal(12, 2)
+  images        ProductImage[]
+  variants      ProductVariant[]
+  orderItems    OrderItem[]
+  inventoryLogs InventoryAdjustment[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([visibility])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  position  Int     @default(0)
+
+  @@index([productId])
+}
+
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+
+  @@index([productId])
+}
+
+/// Audit trail for stock changes, powering the Inventory screen's history.
+model InventoryAdjustment {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  delta     Int
+  reason    String?
+  byUserId  String?
+  byUser    User?    @relation(fields: [byUserId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id              String        @id @default(cuid())
+  /// Human-facing order number, e.g. "ORD-2024-8841".
+  orderNumber     String        @unique
+  customerId      String?
+  customer        User?         @relation(fields: [customerId], references: [id])
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?
+  shippingMethod  String?
+  shippingTracking String?
+  shippingAddress String[]
+  shippingCost    Decimal       @default(0) @db.Decimal(12, 2)
+  discount        Decimal       @default(0) @db.Decimal(12, 2)
+  placedAt        DateTime      @default(now())
+  items           OrderItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  sku       String
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2)
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------------------
+// Discounts
+// ---------------------------------------------------------------------------
+
+model Discount {
+  id         String           @id @default(cuid())
+  name       String
+  code       String           @unique
+  type       DiscountType
+  value      Decimal          @db.Decimal(12, 2)
+  category   DiscountCategory @default(ACTIVE)
+  icon       String?
+  usageLimit Int              @default(0)
+  usageCount Int              @default(0)
+  startDate  DateTime
+  endDate    DateTime
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([category])
+}
+
+// ---------------------------------------------------------------------------
+// Messages (customer support chat)
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id            String    @id @default(cuid())
+  customerId    String
+  customer      User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime  @default(now())
+  unreadCount   Int       @default(0)
+  messages      Message[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([customerId])
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      MessageDirection
+  text           String
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id          String               @id @default(cuid())
+  /// Target admin user. Null = broadcast to all admins.
+  userId      String?
+  user        User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  category    NotificationCategory
+  title       String
+  description String
+  read        Boolean              @default(false)
+  createdAt   DateTime             @default(now())
+
+  @@index([userId])
+  @@index([read])
+}
+
+// ---------------------------------------------------------------------------
+// Settings (flexible key/value store for the Settings screen)
+// ---------------------------------------------------------------------------
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
