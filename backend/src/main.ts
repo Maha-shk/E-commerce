@@ -17,15 +17,17 @@ async function bootstrap() {
   // All routes are served under /api (matches the frontend API base URL).
   app.setGlobalPrefix('api');
 
+  // Allow the Next.js frontend to call the API with credentials (cookies).
+  const allowedOrigins = config.get<string>('corsOrigin')?.split(',') ?? true;
+  console.log('[CORS] Allowed origins:', allowedOrigins);
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+  });
+
   // Security & parsing middleware.
   app.use(helmet());
   app.use(cookieParser());
-
-  // Allow the Next.js frontend to call the API with credentials (cookies).
-  app.enableCors({
-    origin: config.get<string>('corsOrigin')?.split(',') ?? true,
-    credentials: true,
-  });
 
   // Validate + transform every incoming DTO; strip unknown properties.
   app.useGlobalPipes(

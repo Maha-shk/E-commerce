@@ -162,6 +162,21 @@ async function main() {
   });
   console.log(`[seed] Super-admin: ${admin.email}`);
 
+  // --- Default admin user ---------------------------------------------------
+  const defaultAdmin = await prisma.user.upsert({
+    where: { email: 'admin@gmail.com' },
+    update: {},
+    create: {
+      email: 'admin@gmail.com',
+      passwordHash: await bcrypt.hash('Admin123', 12),
+      fullName: 'Admin',
+      role: Role.ADMIN,
+      status: UserStatus.ACTIVE,
+      emailVerified: true,
+    },
+  });
+  console.log(`[seed] Default admin: ${defaultAdmin.email}`);
+
   // --- Demo staff -----------------------------------------------------------
   const demoPassword = await bcrypt.hash('StaffPass123!', 12);
   for (const staff of [
