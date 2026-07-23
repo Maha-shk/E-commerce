@@ -13,16 +13,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/select-native";
 import { OrderStatusBadge } from "@/components/admin/OrderBadges";
-import { orderStatuses, type Order, type OrderStatus } from "@/lib/admin/orders";
+import { orderStatusLabel, type Order, type OrderStatus } from "@/lib/api/models";
 
-/** UI-only fulfilment status modal. Nothing is persisted. */
-export function ChangeOrderStatusModal({
-  order,
-  onClose,
-}: {
+type ChangeOrderStatusModalProps = {
   order: Order | null;
   onClose: () => void;
-}) {
+  onSave?: (updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string }) => void;
+};
+
+export function ChangeOrderStatusModal({ order, onClose, onSave }: ChangeOrderStatusModalProps) {
   return (
     <Dialog
       open={!!order}
@@ -31,31 +30,70 @@ export function ChangeOrderStatusModal({
       }}
     >
       <DialogContent className="gap-0">
-        {order && <ChangeOrderStatusForm key={order.id} order={order} onClose={onClose} />}
+        {order && <ChangeOrderStatusForm key={order.id} order={order} onClose={onClose} onSave={onSave} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ChangeOrderStatusForm({ order, onClose }: { order: Order; onClose: () => void }) {
+function ChangeOrderStatusForm({
+  order,
+  onClose,
+  onSave,
+}: {
+  order: Order;
+  onClose: () => void;
+  onSave?: (updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string }) => void;
+}) {
   const [status, setStatus] = useState<OrderStatus>(order.status);
+  const [paymentStatus, setPaymentStatus] = useState(order.paymentStatus);
+  const [shippingTracking, setShippingTracking] = useState(order.shippingTracking || "");
   const [notify, setNotify] = useState(false);
-  const [notes, setNotes] = useState("");
+
+  const statusOptions: OrderStatus[] = [
+    "PENDING",
+    "PROCESSING",
+    "SHIPPED",
+    "DELIVERED",
+    "CANCELLED",
+    "RETURNED",
+  ];
+
+  const paymentStatusOptions = ["PAID", "PENDING", "REFUNDED", "FAILED"];
+
+  function handleSave() {
+    const updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string } = {};
+
+    if (status !== order.status) {
+      updates.status = status;
+    }
+    if (paymentStatus !== order.paymentStatus) {
+      updates.paymentStatus = paymentStatus;
+    }
+    if (shippingTracking !== order.shippingTracking) {
+      updates.shippingTracking = shippingTracking || undefined;
+    }
+
+    if (Object.keys(updates).length > 0 && onSave) {
+      onSave(updates);
+    }
+    onClose();
+  }
 
   return (
     <div className="space-y-5">
       <DialogHeader className="text-left">
         <DialogTitle>Update Order Status</DialogTitle>
         <DialogDescription>
-          Modify the current fulfillment status for Order {order.id}
+          Modify the current fulfillment status for Order {order.orderNumber}
         </DialogDescription>
       </DialogHeader>
 
       {/* Order + customer summary (read-only) */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-input bg-muted/30 p-3.5">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{order.id}</p>
-          <p className="truncate text-xs text-subtle">Customer: {order.customer.name}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{order.orderNumber}</p>
+          <p className="truncate text-xs text-subtle">Customer: {order.customer?.fullName || "Unknown"}</p>
         </div>
         <div className="text-right">
           <OrderStatusBadge status={order.status} />
@@ -77,12 +115,49 @@ function ChangeOrderStatusForm({ order, onClose }: { order: Order; onClose: () =
           value={status}
           onChange={(e) => setStatus(e.target.value as OrderStatus)}
         >
-          {orderStatuses.map((s) => (
+          {statusOptions.map((s) => (
+            <option key={s} value={s}>
+              {orderStatusLabel[s]}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+
+      {/* Payment status */}
+      <div className="space-y-2">
+        <label
+          htmlFor="payment-status"
+          className="text-xs font-semibold uppercase tracking-wider text-subtle"
+        >
+          Payment Status
+        </label>
+        <NativeSelect
+          id="payment-status"
+          className="h-11 rounded-lg bg-card"
+          value={paymentStatus}
+          onChange={(e) => setPaymentStatus(e.target.value as typeof paymentStatus)}
+        >
+          {paymentStatusOptions.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </NativeSelect>
+      </div>
+
+      {/* Shipping tracking */}
+      <div className="space-y-2">
+        <label htmlFor="shipping-tracking" className="text-sm font-medium text-muted-foreground">
+          Shipping Tracking Number <span className="font-normal text-subtle">(optional)</span>
+        </label>
+        <input
+          id="shipping-tracking"
+          type="text"
+          className="w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          placeholder="Enter tracking number..."
+          value={shippingTracking}
+          onChange={(e) => setShippingTracking(e.target.value)}
+        />
       </div>
 
       {/* Notify customer */}
@@ -100,24 +175,9 @@ function ChangeOrderStatusForm({ order, onClose }: { order: Order; onClose: () =
         </span>
       </label>
 
-      {/* Notes */}
-      <div className="space-y-2">
-        <label htmlFor="status-notes" className="text-sm font-medium text-muted-foreground">
-          Notes <span className="font-normal text-subtle">(optional)</span>
-        </label>
-        <textarea
-          id="status-notes"
-          rows={3}
-          className="w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          placeholder="Add an internal note about this status change…"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-      </div>
-
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Button type="button" size="xl" className="flex-1" onClick={onClose}>
+        <Button type="button" size="xl" className="flex-1" onClick={handleSave}>
           Update Status
         </Button>
         <Button type="button" variant="outline" size="xl" onClick={onClose}>
@@ -127,7 +187,7 @@ function ChangeOrderStatusForm({ order, onClose }: { order: Order; onClose: () =
 
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-subtle">
         <History className="size-3.5" />
-        This action will be logged in the global audit trail for Cento Servizi.
+        This action will be logged in the global audit trail.
       </p>
     </div>
   );

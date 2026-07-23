@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,18 +11,19 @@ import {
 import { DateField } from "@/components/admin/DateField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { NativeSelect } from "@/components/ui/select-native";
-import { discountTypes, type Discount, type DiscountType } from "@/lib/admin/discounts";
+import { toast } from "sonner";
+import { discountTypeLabel, type Discount, type DiscountType, type DiscountCategory } from "@/lib/api/models";
 
 type EditDiscountModalProps = {
-  /** Truthy when the modal is open. Pass a Discount to edit, or `true` to add. */
+  /** Truthy when the modal is open. Pass a Discount to edit, or `"new"` to add. */
   target: Discount | "new" | null;
   onClose: () => void;
+  onCreate?: (body: unknown) => void;
+  onUpdate?: ({ id, body }: { id: string; body: unknown }) => void;
 };
 
-/** UI-only add/edit discount modal. Nothing is persisted yet. */
-export function EditDiscountModal({ target, onClose }: EditDiscountModalProps) {
+export function EditDiscountModal({ target, onClose, onCreate, onUpdate }: EditDiscountModalProps) {
   const isEdit = target && target !== "new";
 
   return (
@@ -38,6 +39,8 @@ export function EditDiscountModal({ target, onClose }: EditDiscountModalProps) {
             key={isEdit ? target.id : "new"}
             discount={isEdit ? target : undefined}
             onClose={onClose}
+            onCreate={onCreate}
+            onUpdate={onUpdate}
           />
         )}
       </DialogContent>
@@ -49,30 +52,65 @@ export function EditDiscountModal({ target, onClose }: EditDiscountModalProps) {
 const fieldClass = "h-11 rounded-lg bg-muted/40";
 const labelClass = "text-sm font-medium text-muted-foreground";
 
-function DiscountForm({ discount, onClose }: { discount?: Discount; onClose: () => void }) {
+const discountTypeOptions: { value: DiscountType; label: string }[] = [
+  { value: "PERCENTAGE", label: "Percentage" },
+  { value: "FIXED_AMOUNT", label: "Fixed Amount" },
+];
+
+function DiscountForm({
+  discount,
+  onClose,
+  onCreate,
+  onUpdate,
+}: {
+  discount?: Discount;
+  onClose: () => void;
+  onCreate?: (body: unknown) => void;
+  onUpdate?: ({ id, body }: { id: string; body: unknown }) => void;
+}) {
   const [name, setName] = useState(discount?.name ?? "");
   const [code, setCode] = useState(discount?.code ?? "");
-  const [type, setType] = useState<DiscountType>(discount?.type ?? "Percentage");
-  const [value, setValue] = useState(discount ? String(discount.value) : "");
-  const [usageLimit, setUsageLimit] = useState(discount ? String(discount.usageLimit) : "");
+  const [type, setType] = useState<DiscountType>(discount?.type ?? "PERCENTAGE");
+  const [value, setValue] = useState(String(discount?.value ?? ""));
+  const [usageLimit, setUsageLimit] = useState(String(discount?.usageLimit ?? 100));
   const [startDate, setStartDate] = useState(discount?.startDate ?? "");
   const [endDate, setEndDate] = useState(discount?.endDate ?? "");
-  const [active, setActive] = useState(discount ? discount.status === "Active" : true);
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
-    // Frontend-only for now — no backend to persist to yet.
+
+    const body = {
+      name,
+      code: code.toUpperCase(),
+      type,
+      value: parseFloat(value),
+      usageLimit: parseInt(usageLimit, 10),
+      startDate,
+      endDate,
+    };
+
+    if (discount && onUpdate) {
+      onUpdate({ id: discount.id, body });
+      toast.success("Discount updated successfully");
+    } else if (onCreate) {
+      onCreate(body);
+      toast.success("Discount created successfully");
+    }
     onClose();
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <DialogHeader className="text-left">
-        <DialogTitle>{discount ? "Edit Discount" : "Add Discount"}</DialogTitle>
-        <DialogDescription>Define rules for your new promotion.</DialogDescription>
+        <DialogTitle>{discount ? "Edit Discount" : "Create Discount"}</DialogTitle>
+        <DialogDescription>
+          {discount
+            ? "Update discount details and restrictions."
+            : "Configure a new promotional discount campaign."}
+        </DialogDescription>
       </DialogHeader>
 
-      {/* Discount name */}
+      {/* Name */}
       <div className="space-y-2">
         <label htmlFor="discount-name" className={labelClass}>
           Discount Name
@@ -80,29 +118,32 @@ function DiscountForm({ discount, onClose }: { discount?: Discount; onClose: () 
         <Input
           id="discount-name"
           className={fieldClass}
-          placeholder="e.g., Seasonal Sale"
+          placeholder="e.g., Summer Sale 2024"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
         />
       </div>
 
-      {/* Code + type */}
+      {/* Code + Type */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <label htmlFor="discount-code" className={labelClass}>
-            Discount Code
+            Promo Code
           </label>
           <Input
             id="discount-code"
-            className={`${fieldClass} font-medium tracking-wide`}
-            placeholder="WINTER20"
+            className={fieldClass}
+            placeholder="SUMMER2024"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
+            required
           />
         </div>
+
         <div className="space-y-2">
           <label htmlFor="discount-type" className={labelClass}>
-            Type
+            Discount Type
           </label>
           <NativeSelect
             id="discount-type"
@@ -110,82 +151,83 @@ function DiscountForm({ discount, onClose }: { discount?: Discount; onClose: () 
             value={type}
             onChange={(e) => setType(e.target.value as DiscountType)}
           >
-            {discountTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {discountTypeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </NativeSelect>
         </div>
       </div>
 
-      {/* Value + usage limit */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label htmlFor="discount-value" className={labelClass}>
-            Value
-          </label>
-          <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-subtle">
-              {type === "Percentage" ? "%" : "€"}
-            </span>
-            <Input
-              id="discount-value"
-              type="number"
-              inputMode="decimal"
-              className={`${fieldClass} pl-8`}
-              placeholder={type === "Percentage" ? "20" : "20.00"}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="discount-usage" className={labelClass}>
-            Usage Limit
-          </label>
+      {/* Value */}
+      <div className="space-y-2">
+        <label htmlFor="discount-value" className={labelClass}>
+          {type === "PERCENTAGE" ? "Discount Percentage" : "Discount Amount"}
+        </label>
+        <div className="relative">
           <Input
-            id="discount-usage"
+            id="discount-value"
             type="number"
-            inputMode="numeric"
+            min={0}
+            max={type === "PERCENTAGE" ? 100 : undefined}
+            step={type === "PERCENTAGE" ? 1 : 0.01}
             className={fieldClass}
-            placeholder="500"
-            value={usageLimit}
-            onChange={(e) => setUsageLimit(e.target.value)}
+            placeholder={type === "PERCENTAGE" ? "e.g., 15" : "e.g., 10.00"}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            required
           />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-subtle">
+            {type === "PERCENTAGE" ? "%" : "€"}
+          </span>
         </div>
       </div>
 
-      {/* Dates */}
+      {/* Usage Limit */}
+      <div className="space-y-2">
+        <label htmlFor="usage-limit" className={labelClass}>
+          Usage Limit
+        </label>
+        <Input
+          id="usage-limit"
+          type="number"
+          min={1}
+          className={fieldClass}
+          placeholder="Maximum number of uses"
+          value={usageLimit}
+          onChange={(e) => setUsageLimit(e.target.value)}
+          required
+        />
+      </div>
+
+      {/* Validity Period */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <DateField
-          id="discount-start"
+          id="start-date"
           label="Start Date"
           value={startDate}
           onChange={setStartDate}
         />
-        <DateField id="discount-end" label="End Date" value={endDate} onChange={setEndDate} />
+        <DateField
+          id="end-date"
+          label="End Date"
+          value={endDate}
+          onChange={setEndDate}
+        />
       </div>
 
-      {/* Active status */}
-      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-input bg-muted/30 p-3.5">
-        <span>
-          <span className="block text-sm font-semibold text-foreground">Active Status</span>
-          <span className="block text-xs leading-relaxed text-subtle">
-            Turn this discount on or off immediately.
-          </span>
-        </span>
-        <Switch checked={active} onCheckedChange={setActive} />
-      </label>
-
       {/* Actions */}
-      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" size="xl" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" size="xl">
-          Save Discount
-        </Button>
+      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+        <span className="hidden sm:block" />
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <Button type="button" variant="outline" size="xl" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="xl">
+            {discount ? "Save Changes" : "Create Discount"}
+          </Button>
+        </div>
       </div>
     </form>
   );

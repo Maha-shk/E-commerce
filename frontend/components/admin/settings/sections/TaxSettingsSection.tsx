@@ -5,7 +5,26 @@ import { ToggleRow } from "@/components/admin/settings/ToggleRow";
 import { Divider } from "@/components/admin/settings/Divider";
 import { regionalTaxRates } from "@/lib/admin/settings";
 
-export function TaxSettingsSection() {
+interface TaxSettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function TaxSettingsSection({ data, onChange }: TaxSettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
   return (
     <SettingsSection
       id="tax"
@@ -18,6 +37,8 @@ export function TaxSettingsSection() {
         label="Enable tax calculation"
         description="Automatically calculate tax on every order."
         defaultChecked
+        checked={getToggleValue("tax-calculation", true)}
+        onChange={handleChange}
       />
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -26,9 +47,15 @@ export function TaxSettingsSection() {
           label="Default Tax Percentage"
           type="number"
           trailing="%"
-          defaultValue="20"
+          value={getValue("default-tax-rate", "20")}
+          onChange={(e) => handleChange("default-tax-rate", e.target.value)}
         />
-        <SettingsField id="vat-number" label="VAT / GST Number" defaultValue="IT12345678901" />
+        <SettingsField
+          id="vat-number"
+          label="VAT / GST Number"
+          value={getValue("vat-number", "IT12345678901")}
+          onChange={(e) => handleChange("vat-number", e.target.value)}
+        />
       </div>
 
       <ToggleRow
@@ -36,12 +63,16 @@ export function TaxSettingsSection() {
         label="Tax-inclusive pricing"
         description="Display product prices with tax already included."
         defaultChecked
+        checked={getToggleValue("tax-inclusive-pricing", true)}
+        onChange={handleChange}
       />
       <ToggleRow
         id="regional-tax-rules"
         label="Regional tax rules"
         description="Apply different tax rates depending on the customer's region."
         defaultChecked
+        checked={getToggleValue("regional-tax-rules", true)}
+        onChange={handleChange}
       />
 
       <Divider />

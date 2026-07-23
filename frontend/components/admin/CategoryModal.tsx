@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Archive, ArchiveRestore, Lock, ImagePlus, Image as ImageIcon, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Archive, ArchiveRestore, ImagePlus, Image as ImageIcon, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,18 +12,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
-import { slugify, type Category, type CategoryVisibility } from "@/lib/admin/categories";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useCreateCategory, useUpdateCategory } from "@/lib/hooks/use-admin";
+import type { Category, CategoryVisibility } from "@/lib/api/models";
 
 type CategoryModalProps = {
   /** Truthy when the modal is open. Pass a Category to edit, or `"new"` to add. */
   target: Category | "new" | null;
   onClose: () => void;
   /** Toggles the category between active and archived. */
-  onToggleArchive: (id: string) => void;
+  onToggleArchive: (category: Category) => void;
 };
 
-/** UI-only add/edit category modal. Nothing is persisted yet. */
+/** Slugify helper: converts a category name into a URL-safe slug. */
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function CategoryModal({ target, onClose, onToggleArchive }: CategoryModalProps) {
   const isEdit = target && target !== "new";
 
@@ -67,21 +78,30 @@ function CategoryFields({
 }: {
   category?: Category;
   onClose: () => void;
-  onToggleArchive: (id: string) => void;
+  onToggleArchive: (category: Category) => void;
 }) {
   const [name, setName] = useState(category?.name ?? "");
   const [description, setDescription] = useState(category?.description ?? "");
   const [visibility, setVisibility] = useState<CategoryVisibility>(
-    category?.visibility ?? "visible",
+    category?.visibility ?? "VISIBLE",
   );
-  const [thumbnail, setThumbnail] = useState<Thumbnail | null>(category?.thumbnail ?? null);
+  const [thumbnail, setThumbnail] = useState<Thumbnail | null>(
+    category?.thumbnailName
+      ? { name: category.thumbnailName, size: category.thumbnailSize || "0 B" }
+      : null,
+  );
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
+  const [slug, setSlug] = useState(category?.slug ?? "");
 
-  // Slug is auto-generated from the name (falls back to any existing slug when untouched).
-  const slug = useMemo(() => slugify(name) || (name ? "" : category?.slug ?? ""), [name, category]);
-  const isArchived = category?.status === "archived";
+  // Auto-generate slug from name
+  useEffect(() => {
+    if (!category?.slug) {
+      setSlug(slugify(name));
+    }
+  }, [name, category?.slug]);
+
+  const createCategory = useCreateCategory();
+  const updateCategory = useUpdateCategory();
 
   function handleFile(files: FileList | null) {
     const file = files?.[0];
@@ -93,16 +113,41 @@ function CategoryFields({
     });
   }
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
-    // Frontend-only for now — no backend to persist to yet.
-    onClose();
+
+    const body = {
+      name,
+      slug,
+      description,
+      visibility,
+    };
+
+    if (category) {
+      // Update existing
+      updateCategory.mutate(
+        { id: category.id, body },
+        {
+          onSuccess: () => {
+            toast.success("Category updated successfully");
+            onClose();
+          },
+        },
+      );
+    } else {
+      // Create new
+      createCategory.mutate(body, {
+        onSuccess: () => {
+          toast.success("Category created successfully");
+          onClose();
+        },
+      });
+    }
   }
 
   function handleArchive() {
     if (!category) return;
-    onToggleArchive(category.id);
-    onClose();
+    onToggleArchive(category);
   }
 
   return (
@@ -127,6 +172,7 @@ function CategoryFields({
           placeholder="e.g., Summer Collection 2024"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
         />
       </div>
 
@@ -139,15 +185,12 @@ function CategoryFields({
           <div className="relative">
             <Input
               id="cat-slug"
-              readOnly
               value={slug}
+              onChange={(e) => setSlug(e.target.value)}
               placeholder="summer-collection-2024"
-              className={`${fieldClass} pr-20 italic text-muted-foreground`}
+              className={fieldClass}
+              required
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 text-xs font-semibold tracking-wide text-subtle">
-              <Lock className="size-3" />
-              AUTO
-            </span>
           </div>
         </div>
 
@@ -159,7 +202,7 @@ function CategoryFields({
             <span
               className={cn(
                 "pointer-events-none absolute left-3 top-1/2 z-10 size-2 -translate-y-1/2 rounded-full",
-                visibility === "visible" ? "bg-green" : "bg-subtle",
+                visibility === "VISIBLE" ? "bg-green" : "bg-subtle",
               )}
             />
             <NativeSelect
@@ -168,8 +211,8 @@ function CategoryFields({
               value={visibility}
               onChange={(e) => setVisibility(e.target.value as CategoryVisibility)}
             >
-              <option value="visible">Visible</option>
-              <option value="hidden">Hidden</option>
+              <option value="VISIBLE">Visible</option>
+              <option value="HIDDEN">Hidden</option>
             </NativeSelect>
           </div>
         </div>
@@ -195,20 +238,16 @@ function CategoryFields({
         <span className={labelClass}>Category Media</span>
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragActive(true);
-          }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragActive(false);
-            handleFile(e.dataTransfer.files);
+          onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/svg+xml,image/png,image/jpeg";
+            input.onchange = (e) => handleFile((e.target as HTMLInputElement).files);
+            input.click();
           }}
           className={cn(
             "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-6 text-center transition-colors",
-            dragActive ? "border-primary bg-accent" : "border-border bg-muted/30 hover:bg-muted/50",
+            "border-border bg-muted/30 hover:bg-muted/50",
           )}
         >
           <span className="flex size-11 items-center justify-center rounded-full bg-card ring-1 ring-border">
@@ -219,13 +258,6 @@ function CategoryFields({
             <span className="mt-0.5 block text-xs text-subtle">SVG, PNG, JPG (Max 2MB)</span>
           </span>
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/svg+xml,image/png,image/jpeg"
-          className="hidden"
-          onChange={(e) => handleFile(e.target.files)}
-        />
 
         {thumbnail && (
           <div className="flex items-center gap-3 rounded-lg border p-3">
@@ -258,20 +290,36 @@ function CategoryFields({
       {/* Actions */}
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
         {category ? (
-          <Button type="button" variant="outline" size="xl" onClick={handleArchive}>
-            {isArchived ? <ArchiveRestore /> : <Archive />}
-            {isArchived ? "Restore Category" : "Archive Category"}
+          <Button
+            type="button"
+            variant="outline"
+            size="xl"
+            onClick={handleArchive}
+            disabled={createCategory.isPending || updateCategory.isPending}
+          >
+            {category.status === "ARCHIVED" ? <ArchiveRestore /> : <Archive />}
+            {category.status === "ARCHIVED" ? "Restore Category" : "Archive Category"}
           </Button>
         ) : (
           <span className="hidden sm:block" />
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row">
-          <Button type="button" variant="outline" size="xl" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            size="xl"
+            onClick={onClose}
+            disabled={createCategory.isPending || updateCategory.isPending}
+          >
             Cancel
           </Button>
-          <Button type="submit" size="xl">
-            Save Category
+          <Button
+            type="submit"
+            size="xl"
+            disabled={createCategory.isPending || updateCategory.isPending}
+          >
+            {createCategory.isPending || updateCategory.isPending ? "Saving..." : "Save Category"}
           </Button>
         </div>
       </div>

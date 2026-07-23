@@ -7,6 +7,7 @@ type SettingsTextareaFieldProps = ComponentProps<typeof Textarea> & {
   id: string;
   hint?: string;
   wrapperClassName?: string;
+  value?: string;
 };
 
 /** Labelled textarea for the settings page. */
@@ -16,6 +17,7 @@ export function SettingsTextareaField({
   hint,
   wrapperClassName,
   className,
+  value,
   ...props
 }: SettingsTextareaFieldProps) {
   return (
@@ -23,7 +25,12 @@ export function SettingsTextareaField({
       <label htmlFor={id} className="text-sm font-medium text-muted-foreground">
         {label}
       </label>
-      <Textarea id={id} className={cn("rounded-lg bg-muted/40", className)} {...props} />
+      <Textarea
+        id={id}
+        value={value}
+        className={cn("rounded-lg bg-muted/40", className)}
+        {...props}
+      />
       {hint && <p className="text-xs text-subtle">{hint}</p>}
     </div>
   );

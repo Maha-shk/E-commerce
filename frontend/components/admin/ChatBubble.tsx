@@ -1,9 +1,13 @@
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/lib/admin/messages";
+import type { ChatMessage } from "@/lib/api/models";
 
 /** A single chat message bubble. Outgoing = navy/right, incoming = muted/left. */
 export function ChatBubble({ message }: { message: ChatMessage }) {
-  const outgoing = message.direction === "outgoing";
+  const outgoing = message.direction === "OUTGOING";
+  const time = new Date(message.createdAt).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <div className={cn("flex flex-col gap-1", outgoing ? "items-end" : "items-start")}>
@@ -17,7 +21,7 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
       >
         {message.text}
       </div>
-      <span className="px-1 text-xs text-subtle">{message.time}</span>
+      <span className="px-1 text-xs text-subtle">{time}</span>
     </div>
   );
 }

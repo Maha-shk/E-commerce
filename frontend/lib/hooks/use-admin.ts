@@ -299,7 +299,7 @@ export function useMarkNotificationRead() {
 }
 
 export function useMarkAllNotificationsRead() {
-  return useAdminMutation(() => notificationsApi.markAllRead(), {
+  return useAdminMutation((_?: unknown) => notificationsApi.markAllRead(), {
     successMessage: "All notifications marked as read",
     invalidate: [queryKeys.notifications.all],
   });

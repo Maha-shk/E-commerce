@@ -11,27 +11,24 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatEuro } from "@/lib/admin/format";
-import {
-  averageOrderValue,
-  type Customer,
-  type CustomerOrderStatus,
-  type CustomerStatus,
-} from "@/lib/admin/customers";
+import { userStatusLabel, orderStatusLabel, type CustomerDetail, type OrderStatus } from "@/lib/api/models";
+import type { UserStatus } from "@/lib/api/types";
 
 type BadgeVariant = "success" | "warning" | "info" | "navy" | "secondary" | "destructive";
 
-const customerStatusVariant: Record<CustomerStatus, BadgeVariant> = {
-  Active: "success",
-  Inactive: "secondary",
-  Suspended: "destructive",
+const customerStatusVariant: Record<UserStatus, BadgeVariant> = {
+  ACTIVE: "success",
+  INACTIVE: "secondary",
+  SUSPENDED: "destructive",
 };
 
-const orderStatusVariant: Record<CustomerOrderStatus, BadgeVariant> = {
-  Delivered: "success",
-  Processing: "info",
-  Shipped: "navy",
-  Returned: "warning",
-  Cancelled: "destructive",
+const orderStatusVariant: Record<OrderStatus, BadgeVariant> = {
+  PENDING: "warning",
+  PROCESSING: "info",
+  SHIPPED: "navy",
+  DELIVERED: "success",
+  CANCELLED: "destructive",
+  RETURNED: "warning",
 };
 
 /** Customer profile. Presentation only, apart from the suspend/reinstate action. */
@@ -40,7 +37,7 @@ export function CustomerDetailsModal({
   onClose,
   onToggleSuspend,
 }: {
-  customer: Customer | null;
+  customer: CustomerDetail | null;
   onClose: () => void;
   /** Toggles the customer between suspended and active. */
   onToggleSuspend: (id: string) => void;
@@ -103,12 +100,13 @@ function CustomerDetails({
   onClose,
   onToggleSuspend,
 }: {
-  customer: Customer;
+  customer: CustomerDetail;
   onClose: () => void;
   onToggleSuspend: (id: string) => void;
 }) {
-  const avgOrder = averageOrderValue(customer);
-  const isSuspended = customer.status === "Suspended";
+  const isSuspended = customer.status === "SUSPENDED";
+
+  const defaultAddress = customer.addresses.find((a) => a.isDefault);
 
   return (
     <div className="space-y-5">
@@ -121,14 +119,19 @@ function CustomerDetails({
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle className="text-xl">{customer.name}</DialogTitle>
+            <DialogTitle className="text-xl">{customer.fullName}</DialogTitle>
             <Badge variant={customerStatusVariant[customer.status]} className="uppercase">
               <span className="size-1.5 rounded-full bg-current" />
-              {customer.status}
+              {userStatusLabel[customer.status]}
             </Badge>
+            {!customer.emailVerified && (
+              <Badge variant="warning" className="uppercase">
+                Unverified
+              </Badge>
+            )}
           </div>
           <DialogDescription className="mt-0.5">
-            Customer since {customer.joinedAt}
+            Customer since {new Date(customer.createdAt).toLocaleDateString()}
           </DialogDescription>
         </div>
       </div>
@@ -139,28 +142,34 @@ function CustomerDetails({
           <SectionTitle icon={UserRound}>Customer Information</SectionTitle>
           <div className="mt-2">
             <InfoRow label="Email" value={customer.email} />
-            <InfoRow label="Phone" value={customer.phone} />
-            <InfoRow label="Account status" value={customer.status} />
-            <InfoRow label="Member since" value={customer.joinedAt} />
+            <InfoRow label="Phone" value={customer.phone || "N/A"} />
+            <InfoRow label="Account status" value={userStatusLabel[customer.status]} />
+            <InfoRow label="Member since" value={new Date(customer.createdAt).toLocaleDateString()} />
           </div>
         </div>
 
         <div className="rounded-xl bg-muted/40 p-4">
           <SectionTitle icon={MapPin}>Delivery Address</SectionTitle>
           <div className="mt-3 rounded-lg bg-card p-3 ring-1 ring-foreground/5">
-            <Badge variant="secondary" className="uppercase">
-              Default shipping
-            </Badge>
-            <address className="mt-2 text-sm not-italic text-foreground">
-              {customer.address.map((line, i) => (
-                <span
-                  key={line}
-                  className={i === 0 ? "block font-semibold" : "block text-muted-foreground"}
-                >
-                  {line}
-                </span>
-              ))}
-            </address>
+            {defaultAddress ? (
+              <>
+                <Badge variant="secondary" className="uppercase">
+                  Default shipping
+                </Badge>
+                <address className="mt-2 text-sm not-italic text-foreground">
+                  {defaultAddress.lines.map((line, i) => (
+                    <span
+                      key={i}
+                      className={i === 0 ? "block font-semibold" : "block text-muted-foreground"}
+                    >
+                      {line}
+                    </span>
+                  ))}
+                </address>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No default address set</p>
+            )}
           </div>
         </div>
       </div>
@@ -171,7 +180,7 @@ function CustomerDetails({
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <SummaryTile label="Total orders" value={String(customer.totalOrders)} />
           <SummaryTile label="Total spent" value={formatEuro(customer.totalSpent)} />
-          <SummaryTile label="Avg. order value" value={formatEuro(avgOrder)} />
+          <SummaryTile label="Avg. order value" value={formatEuro(customer.averageOrderValue)} />
         </div>
       </div>
 
@@ -194,17 +203,19 @@ function CustomerDetails({
                 {customer.recentOrders.map((order) => (
                   <tr key={order.id}>
                     <td className="py-2.5 pr-2 font-medium whitespace-nowrap text-foreground">
-                      {order.id}
+                      {order.orderNumber}
                     </td>
                     <td className="px-2 py-2.5 whitespace-nowrap text-muted-foreground">
-                      {order.date}
+                      {new Date(order.date).toLocaleDateString()}
                     </td>
                     <td className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-foreground">
                       {formatEuro(order.total)}
                     </td>
                     <td className="py-2.5 pl-2">
                       <div className="flex justify-end">
-                        <Badge variant={orderStatusVariant[order.status]}>{order.status}</Badge>
+                        <Badge variant={orderStatusVariant[order.status]}>
+                          {orderStatusLabel[order.status]}
+                        </Badge>
                       </div>
                     </td>
                   </tr>

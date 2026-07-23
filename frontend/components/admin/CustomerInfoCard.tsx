@@ -2,22 +2,19 @@ import { Mail, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  conversationOrderStatusVariant,
-  formatEuro,
-  type Conversation,
-} from "@/lib/admin/messages";
+import { formatEuro } from "@/lib/admin/format";
+import { userStatusLabel, type ConversationDetail } from "@/lib/api/models";
 
-const accountStatusVariant: Record<Conversation["accountStatus"], "success" | "warning" | "info"> = {
-  Active: "success",
+const accountStatusVariant: Record<"ACTIVE" | "VIP" | "NEW", "success" | "warning" | "info"> = {
+  ACTIVE: "success",
   VIP: "warning",
-  New: "info",
+  NEW: "info",
 };
 
 /** Right-hand customer profile + recent orders panel. */
-export function CustomerInfoCard({ conversation }: { conversation: Conversation }) {
-  const { customer, totalOrders, totalSpent, customerSince, accountStatus, recentOrders } =
-    conversation;
+export function CustomerInfoCard({ conversation }: { conversation: ConversationDetail }) {
+  const { customer, totalOrders, totalSpent, recentOrders } = conversation;
+  const customerSince = new Date(customer.createdAt).toLocaleDateString();
 
   return (
     <div className="space-y-4">
@@ -31,65 +28,72 @@ export function CustomerInfoCard({ conversation }: { conversation: Conversation 
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-display text-base font-semibold text-foreground">
-                {customer.name}
-              </p>
-              <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                <Mail className="size-3.5 text-subtle" />
-                {customer.email}
-              </p>
-              <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                <Phone className="size-3.5 text-subtle" />
-                {customer.phone}
-              </p>
+              <p className="font-display text-lg font-semibold text-foreground">{customer.fullName}</p>
+              <p className="text-xs text-subtle">{customer.email}</p>
+            </div>
+            <Badge variant={accountStatusVariant[customer.status as keyof typeof accountStatusVariant] || "info"}>
+              {userStatusLabel[customer.status]}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Orders</p>
+              <p className="font-display text-lg font-semibold text-foreground">{totalOrders}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Spent</p>
+              <p className="font-display text-lg font-semibold text-foreground">{formatEuro(totalSpent)}</p>
             </div>
           </div>
 
-          <div className="space-y-2.5 border-t pt-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-subtle">Total Orders</span>
-              <span className="font-semibold text-foreground">{totalOrders}</span>
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <div className="flex items-center gap-1">
+              <Mail className="size-3.5 text-subtle" />
+              <span className="text-muted-foreground">{customer.email}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-subtle">Total Spending</span>
-              <span className="font-semibold text-foreground">{formatEuro(totalSpent)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-subtle">Customer Since</span>
-              <span className="font-medium text-foreground">{customerSince}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-subtle">Current Status</span>
-              <Badge variant={accountStatusVariant[accountStatus]}>{accountStatus}</Badge>
-            </div>
+            {customer.phone && (
+              <div className="flex items-center gap-1">
+                <Phone className="size-3.5 text-subtle" />
+                <span className="text-muted-foreground">{customer.phone}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Recent orders */}
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="border-b px-4 py-3">
-          <h3 className="font-display text-sm font-semibold text-foreground">Recent Orders</h3>
-        </div>
-        <div className="divide-y">
-          {recentOrders.map((order) => (
-            <div key={order.id} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">{order.id}</p>
-                <p className="text-xs text-subtle">{order.date}</p>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-sm font-semibold text-foreground">
-                  {formatEuro(order.amount)}
-                </span>
-                <Badge variant={conversationOrderStatusVariant[order.status]} className="uppercase">
-                  {order.status}
-                </Badge>
-              </div>
+      <Card>
+        <CardContent className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Recent Orders</h3>
+          {recentOrders.length > 0 ? (
+            <div className="space-y-2">
+              {recentOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between rounded-lg border border-input bg-muted/30 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{order.orderNumber}</p>
+                    <p className="text-xs text-subtle">{new Date(order.date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-foreground">{formatEuro(order.amount)}</p>
+                    <p className="text-xs text-muted-foreground">{order.status}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          ) : (
+            <p className="py-4 text-center text-sm text-muted-foreground">No recent orders</p>
+          )}
+        </CardContent>
       </Card>
+
+      {/* Customer since */}
+      <div className="text-center">
+        <p className="text-xs text-subtle">Customer since {customerSince}</p>
+      </div>
     </div>
   );
 }

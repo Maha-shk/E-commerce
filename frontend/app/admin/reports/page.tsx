@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Search, Download, ChevronLeft, ChevronRight, FileSearch } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -12,13 +12,19 @@ import { MetricCard } from "@/components/admin/MetricCard";
 import { ReportStatusBadge } from "@/components/admin/ReportStatusBadge";
 import { ScheduleReportButton } from "@/components/admin/ScheduleReportModal";
 import { SortButton } from "@/components/admin/SortButton";
-import {
-  reportViews,
-  reportStatusOptions,
-  formatEuro,
-  type ReportTabKey,
-} from "@/lib/admin/reports";
+import { useReport } from "@/lib/hooks/use-admin";
 import { cn } from "@/lib/utils";
+import { formatEuro } from "@/lib/admin/format";
+
+type ReportTabKey = "orders" | "sales" | "products";
+
+const reportTabs: { key: ReportTabKey; label: string }[] = [
+  { key: "orders", label: "Orders" },
+  { key: "sales", label: "Sales" },
+  { key: "products", label: "Products" },
+];
+
+const statusOptions = ["All Statuses", "Completed", "Processing", "Returned"];
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<ReportTabKey>("orders");
@@ -26,27 +32,31 @@ export default function ReportsPage() {
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("All Statuses");
 
-  const view = reportViews.find((v) => v.key === tab) ?? reportViews[0];
+  const { data: view } = useReport({
+    tab: tab,
+    from: undefined,
+    to: undefined,
+    category: category === "All" ? undefined : category,
+  });
 
   /** Category options come from the active report — they differ per tab. */
-  const categoryOptions = useMemo(
-    () => Array.from(new Set(view.rows.map((r) => r.detail))),
-    [view],
-  );
+  const categoryOptions = view
+    ? Array.from(new Set(view.rows.map((r) => r.detail)))
+    : [];
 
-  const rows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return view.rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.title.toLowerCase().includes(q) ||
-        row.reference.toLowerCase().includes(q) ||
-        row.subtitle.toLowerCase().includes(q);
-      const matchesCategory = category === "All" || row.detail === category;
-      const matchesStatus = status === "All Statuses" || row.status === status;
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
-  }, [view, search, category, status]);
+  const rows = view
+    ? view.rows.filter((row) => {
+        const q = search.trim().toLowerCase();
+        const matchesSearch =
+          !q ||
+          row.title.toLowerCase().includes(q) ||
+          row.reference.toLowerCase().includes(q) ||
+          row.subtitle.toLowerCase().includes(q);
+        const matchesCategory = category === "All" || row.detail === category;
+        const matchesStatus = status === "All Statuses" || row.status === status;
+        return matchesSearch && matchesCategory && matchesStatus;
+      })
+    : [];
 
   function handleTabChange(key: ReportTabKey) {
     setTab(key);
@@ -71,7 +81,7 @@ export default function ReportsPage() {
 
       {/* Report tabs */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 border-b">
-        {reportViews.map((v) => {
+        {reportTabs.map((v) => {
           const active = v.key === tab;
           return (
             <button
@@ -94,8 +104,13 @@ export default function ReportsPage() {
 
       {/* Summary metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {view.metrics.map((metric) => (
-          <MetricCard key={metric.label} {...metric} />
+        {view?.metrics.map((metric) => (
+          <MetricCard
+            key={metric.label}
+            label={metric.label}
+            value={String(metric.value)}
+            trend={{ direction: "stable", text: "N/A" }}
+          />
         ))}
       </div>
 
@@ -127,7 +142,7 @@ export default function ReportsPage() {
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
-              {reportStatusOptions.map((s) => (
+              {statusOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -157,11 +172,11 @@ export default function ReportsPage() {
             <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
               <tr>
                 <th className="px-5 py-3 text-left">Image</th>
-                <th className="px-2 py-3 text-left">{view.columns.primary}</th>
-                <th className="px-2 py-3 text-left">{view.columns.reference}</th>
-                <th className="px-2 py-3 text-left">{view.columns.detail}</th>
+                <th className="px-2 py-3 text-left">{view?.columns.primary}</th>
+                <th className="px-2 py-3 text-left">{view?.columns.reference}</th>
+                <th className="px-2 py-3 text-left">{view?.columns.detail}</th>
                 <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-right">{view.columns.amount}</th>
+                <th className="px-4 py-3 text-right">{view?.columns.amount}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -211,7 +226,7 @@ export default function ReportsPage() {
         {/* Pagination (static) */}
         <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            Showing {rows.length} of {view.totalEntries} entries
+            Showing {rows.length} of {view?.totalEntries ?? 0} entries
           </p>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon-sm" aria-label="Previous page" disabled>

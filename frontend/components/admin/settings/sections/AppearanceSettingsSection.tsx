@@ -8,7 +8,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { themeOptions, primaryColorSwatches, secondaryColorSwatches } from "@/lib/admin/settings";
 
-function ColorSwatchPicker({ name, colors, defaultValue }: { name: string; colors: string[]; defaultValue: string }) {
+interface ColorSwatchPickerProps {
+  name: string;
+  colors: string[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function ColorSwatchPicker({ name, colors, value, onChange }: ColorSwatchPickerProps) {
   return (
     <div className="flex flex-wrap gap-3">
       {colors.map((color) => (
@@ -17,7 +24,8 @@ function ColorSwatchPicker({ name, colors, defaultValue }: { name: string; color
             type="radio"
             name={name}
             value={color}
-            defaultChecked={color === defaultValue}
+            checked={color === value}
+            onChange={(e) => onChange(e.target.value)}
             className="peer sr-only"
           />
           <span
@@ -31,7 +39,26 @@ function ColorSwatchPicker({ name, colors, defaultValue }: { name: string; color
   );
 }
 
-export function AppearanceSettingsSection() {
+interface AppearanceSettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function AppearanceSettingsSection({ data, onChange }: AppearanceSettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
   return (
     <SettingsSection
       id="appearance"
@@ -41,7 +68,11 @@ export function AppearanceSettingsSection() {
     >
       <div className="space-y-3">
         <p className="text-sm font-medium text-muted-foreground">Theme Selection</p>
-        <RadioGroup defaultValue="light" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <RadioGroup
+          value={getValue("theme", "light")}
+          onValueChange={(value) => handleChange("theme", value)}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+        >
           {themeOptions.map((theme) => (
             <label
               key={theme.id}
@@ -66,7 +97,8 @@ export function AppearanceSettingsSection() {
           <ColorSwatchPicker
             name="primary-color"
             colors={primaryColorSwatches}
-            defaultValue={primaryColorSwatches[0]}
+            value={getValue("primary-color", primaryColorSwatches[0])}
+            onChange={(value) => handleChange("primary-color", value)}
           />
         </div>
         <div className="space-y-2">
@@ -74,7 +106,8 @@ export function AppearanceSettingsSection() {
           <ColorSwatchPicker
             name="secondary-color"
             colors={secondaryColorSwatches}
-            defaultValue={secondaryColorSwatches[0]}
+            value={getValue("secondary-color", secondaryColorSwatches[0])}
+            onChange={(value) => handleChange("secondary-color", value)}
           />
         </div>
       </div>
@@ -90,12 +123,16 @@ export function AppearanceSettingsSection() {
         label="Dark Mode Toggle"
         description="Let customers switch the storefront to a dark theme."
         defaultChecked={false}
+        checked={getToggleValue("dark-mode-toggle", false)}
+        onChange={handleChange}
       />
       <ToggleRow
         id="homepage-banner"
         label="Homepage Banner Visibility"
         description="Show the promotional banner at the top of the homepage."
         defaultChecked
+        checked={getToggleValue("homepage-banner", true)}
+        onChange={handleChange}
       />
     </SettingsSection>
   );

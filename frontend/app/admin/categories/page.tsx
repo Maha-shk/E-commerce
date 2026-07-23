@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Search,
   Download,
@@ -13,16 +13,6 @@ import {
   Layers,
   Boxes,
   TriangleAlert,
-  Shirt,
-  Laptop,
-  Sofa,
-  HeartPulse,
-  Dumbbell,
-  Gamepad2,
-  BookOpen,
-  Car,
-  ShoppingBasket,
-  PawPrint,
   type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
@@ -35,105 +25,92 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SortButton } from "@/components/admin/SortButton";
 import { CategoryModal } from "@/components/admin/CategoryModal";
 import {
-  categories as initialCategories,
-  type Category,
-  type CategoryIconKey,
-  type CategoryStatus,
-} from "@/lib/admin/categories";
+  useCategories,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+} from "@/lib/hooks/use-admin";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { categoryStatusLabel, type Category, type CategoryStatus, type CategoryVisibility } from "@/lib/api/models";
 
 const PAGE_SIZE = 5;
 
-const categoryIcons: Record<CategoryIconKey, LucideIcon> = {
-  fashion: Shirt,
-  electronics: Laptop,
-  home: Sofa,
-  health: HeartPulse,
-  sports: Dumbbell,
-  toys: Gamepad2,
-  books: BookOpen,
-  automotive: Car,
-  grocery: ShoppingBasket,
-  pets: PawPrint,
+const categoryIcons: Record<string, LucideIcon> = {
+  fashion: FolderTree,
+  electronics: Boxes,
+  home: Layers,
+  health: TriangleAlert,
+  sports: TriangleAlert,
+  toys: TriangleAlert,
+  books: TriangleAlert,
+  automotive: TriangleAlert,
+  grocery: TriangleAlert,
+  pets: TriangleAlert,
 };
 
-const statusLabel: Record<CategoryStatus, string> = {
-  active: "Active",
-  archived: "Archived",
-};
+const statusOptions: CategoryStatus[] = ["ACTIVE", "ARCHIVED"];
 
-const statusVariant: Record<CategoryStatus, "success" | "secondary"> = {
-  active: "success",
-  archived: "secondary",
-};
+const visibilityOptions: CategoryVisibility[] = ["VISIBLE", "HIDDEN"];
 
-const statusOptions: CategoryStatus[] = ["active", "archived"];
+function getIconForKey(iconKey: string | null): LucideIcon {
+  return (iconKey && categoryIcons[iconKey]) || FolderTree;
+}
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | CategoryStatus>("All");
   const [page, setPage] = useState(1);
   const [modalTarget, setModalTarget] = useState<Category | "new" | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
 
-  const stats = useMemo(() => {
-    const totalSubcategories = categories.reduce((sum, c) => sum + c.subcategories, 0);
-    const activeProducts = categories.reduce((sum, c) => sum + c.products, 0);
-    const empty = categories.filter((c) => c.products === 0).length;
-    const avgPerRoot = categories.length ? totalSubcategories / categories.length : 0;
-    return { totalSubcategories, activeProducts, empty, avgPerRoot };
-  }, [categories]);
+  const debouncedSearch = useDebounce(search);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return categories.filter((c) => {
-      const matchesSearch =
-        !q ||
-        c.name.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q);
-      const matchesStatus = status === "All" || c.status === status;
-      return matchesSearch && matchesStatus;
+  const { data, isLoading, isError, error, refetch } = useCategories({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    status: status === "All" ? undefined : status,
+  });
+
+  const createCategory = useCreateCategory();
+  const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
+
+  const categories = data?.data ?? [];
+  const totalPages = data?.meta.totalPages ?? 1;
+
+  function withPageReset<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setPage(1);
+    };
+  }
+
+  function handleToggleArchive(category: Category) {
+    const newStatus: CategoryStatus = category.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE";
+    updateCategory.mutate({
+      id: category.id,
+      body: { ...category, status: newStatus },
     });
-  }, [categories, search, status]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  function handleSearchChange(value: string) {
-    setSearch(value);
-    setPage(1);
-  }
-
-  function handleStatusChange(value: string) {
-    setStatus(value as "All" | CategoryStatus);
-    setPage(1);
-  }
-
-  function handleToggleArchive(id: string) {
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, status: c.status === "archived" ? "active" : "archived" } : c,
-      ),
-    );
+    setModalTarget(null);
   }
 
   function handleConfirmDelete() {
     if (!pendingDelete) return;
-    setCategories((prev) => prev.filter((c) => c.id !== pendingDelete.id));
+    deleteCategory.mutate(pendingDelete.id);
     setPendingDelete(null);
   }
 
   function handleExport() {
-    const header = ["ID", "Name", "Slug", "Subcategories", "Products", "Status"];
-    const rows = filtered.map((c) => [
+    const header = ["ID", "Name", "Slug", "Subcategories", "Products", "Status", "Visibility"];
+    const rows = categories.map((c) => [
       c.id,
       c.name,
       c.slug,
       String(c.subcategories),
       String(c.products),
       c.status,
+      c.visibility,
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
@@ -176,9 +153,9 @@ export default function CategoriesPage() {
             </p>
             <div className="flex items-baseline gap-2">
               <p className="font-display text-2xl font-semibold text-foreground">
-                {categories.length}
+                {data?.meta.total ?? 0}
               </p>
-              <span className="text-xs font-medium text-success">+2 this month</span>
+              <span className="text-xs font-medium text-subtle">Across all pages</span>
             </div>
           </CardContent>
         </Card>
@@ -189,14 +166,9 @@ export default function CategoriesPage() {
               <Layers className="size-4" />
               Subcategories
             </p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-foreground">
-                {stats.totalSubcategories}
-              </p>
-              <span className="text-xs font-medium text-subtle">
-                Avg. {stats.avgPerRoot.toFixed(1)} per root
-              </span>
-            </div>
+            <p className="font-display text-2xl font-semibold text-foreground">
+              {categories.reduce((sum, c) => sum + c.subcategories, 0)}
+            </p>
           </CardContent>
         </Card>
 
@@ -207,7 +179,7 @@ export default function CategoriesPage() {
               Active Products
             </p>
             <p className="font-display text-2xl font-semibold text-foreground">
-              {stats.activeProducts.toLocaleString()}
+              {categories.reduce((sum, c) => sum + c.products, 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -219,7 +191,9 @@ export default function CategoriesPage() {
               Empty Categories
             </p>
             <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-destructive">{stats.empty}</p>
+              <p className="font-display text-2xl font-semibold text-destructive">
+                {categories.filter((c) => c.products === 0).length}
+              </p>
               <span className="text-xs font-medium text-destructive">Needs attention</span>
             </div>
           </CardContent>
@@ -238,12 +212,12 @@ export default function CategoriesPage() {
               aria-label="Filter by status"
               className="w-auto min-w-36"
               value={status}
-              onChange={(e) => handleStatusChange(e.target.value)}
+              onChange={(e) => withPageReset(setStatus)(e.target.value as "All" | CategoryStatus)}
             >
               <option value="All">All statuses</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {statusLabel[s]}
+                  {categoryStatusLabel[s]}
                 </option>
               ))}
             </NativeSelect>
@@ -257,7 +231,7 @@ export default function CategoriesPage() {
                 placeholder="Search by name, ID or description…"
                 className="h-10 rounded-lg bg-card pl-9"
                 value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
             <SortButton />
@@ -278,8 +252,8 @@ export default function CategoriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {paged.map((category) => {
-                const Icon = categoryIcons[category.icon];
+              {categories.map((category) => {
+                const Icon = getIconForKey(category.icon);
                 return (
                   <tr key={category.id} className="hover:bg-muted/30">
                     <td className="px-5 py-3">
@@ -298,9 +272,9 @@ export default function CategoriesPage() {
                       {category.subcategories}
                     </td>
                     <td className="px-2 py-3">
-                      <Badge variant={statusVariant[category.status]}>
+                      <Badge variant={category.status === "ACTIVE" ? "success" : "secondary"}>
                         <span className="size-1.5 rounded-full bg-current" />
-                        {statusLabel[category.status]}
+                        {categoryStatusLabel[category.status]}
                       </Badge>
                     </td>
                     <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
@@ -331,7 +305,7 @@ export default function CategoriesPage() {
                 );
               })}
 
-              {paged.length === 0 && (
+              {categories.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <FolderTree className="mx-auto mb-2 size-8 text-muted-foreground" />
@@ -346,7 +320,7 @@ export default function CategoriesPage() {
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            Showing {paged.length} of {filtered.length} categories
+            Showing {categories.length} of {data?.meta.total ?? 0} categories
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -354,14 +328,14 @@ export default function CategoriesPage() {
               size="icon-sm"
               aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={page === 1}
             >
               <ChevronLeft />
             </Button>
             {Array.from({ length: totalPages }).map((_, i) => (
               <Button
                 key={i}
-                variant={currentPage === i + 1 ? "default" : "outline"}
+                variant={page === i + 1 ? "default" : "outline"}
                 size="icon-sm"
                 onClick={() => setPage(i + 1)}
               >
@@ -373,7 +347,7 @@ export default function CategoriesPage() {
               size="icon-sm"
               aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={page >= totalPages}
             >
               <ChevronRight />
             </Button>

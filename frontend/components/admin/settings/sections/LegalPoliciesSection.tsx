@@ -3,7 +3,12 @@ import { SettingsSection } from "@/components/admin/settings/SettingsSection";
 import { Button } from "@/components/ui/button";
 import { legalDocuments } from "@/lib/admin/settings";
 
-export function LegalPoliciesSection() {
+interface LegalPoliciesSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function LegalPoliciesSection({ data, onChange }: LegalPoliciesSectionProps) {
   return (
     <SettingsSection
       id="legal"

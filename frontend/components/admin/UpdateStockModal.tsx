@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { InventoryItem } from "@/lib/admin/inventory";
+import type { InventoryItem } from "@/lib/api/models";
 
 type AdjustmentType = "increase" | "decrease" | "set";
 
@@ -23,14 +23,13 @@ const adjustmentTypes: { key: AdjustmentType; label: string }[] = [
   { key: "set", label: "Set Exact Qty" },
 ];
 
-/** UI-only stock adjustment modal. Fields are placeholders — no persistence. */
-export function UpdateStockModal({
-  item,
-  onClose,
-}: {
+type UpdateStockModalProps = {
   item: InventoryItem | null;
   onClose: () => void;
-}) {
+  onSave?: (adjustment: { delta?: number; setTo?: number; reason?: string }) => void;
+};
+
+export function UpdateStockModal({ item, onClose, onSave }: UpdateStockModalProps) {
   return (
     <Dialog
       open={!!item}
@@ -39,16 +38,46 @@ export function UpdateStockModal({
       }}
     >
       <DialogContent className="gap-0">
-        {item && <UpdateStockForm key={item.id} item={item} onClose={onClose} />}
+        {item && <UpdateStockForm key={item.id} item={item} onClose={onClose} onSave={onSave} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function UpdateStockForm({ item, onClose }: { item: InventoryItem; onClose: () => void }) {
+function UpdateStockForm({
+  item,
+  onClose,
+  onSave,
+}: {
+  item: InventoryItem;
+  onClose: () => void;
+  onSave?: (adjustment: { delta?: number; setTo?: number; reason?: string }) => void;
+}) {
   const [type, setType] = useState<AdjustmentType>("increase");
   const [quantity, setQuantity] = useState("");
   const [notes, setNotes] = useState("");
+
+  function handleSave() {
+    const qty = parseInt(quantity, 10);
+    if (isNaN(qty) || qty <= 0) return;
+
+    const adjustment: { delta?: number; setTo?: number; reason?: string } = {
+      reason: notes || undefined,
+    };
+
+    if (type === "increase") {
+      adjustment.delta = qty;
+    } else if (type === "decrease") {
+      adjustment.delta = -qty;
+    } else {
+      adjustment.setTo = qty;
+    }
+
+    if (onSave) {
+      onSave(adjustment);
+    }
+    onClose();
+  }
 
   return (
     <div className="space-y-5">
@@ -90,7 +119,7 @@ function UpdateStockForm({ item, onClose }: { item: InventoryItem; onClose: () =
           <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Last Updated</p>
           <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-foreground">
             <Clock className="size-4 text-subtle" />
-            {item.lastUpdated}
+            {new Date(item.lastUpdated).toLocaleDateString()}
           </p>
         </div>
       </div>
@@ -151,7 +180,7 @@ function UpdateStockForm({ item, onClose }: { item: InventoryItem; onClose: () =
 
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Button type="button" size="xl" className="flex-1" onClick={onClose}>
+        <Button type="button" size="xl" className="flex-1" onClick={handleSave}>
           <ArrowLeftRight />
           Update Stock
         </Button>
@@ -162,7 +191,7 @@ function UpdateStockForm({ item, onClose }: { item: InventoryItem; onClose: () =
 
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-subtle">
         <History className="size-3.5" />
-        This action will be logged in the global audit trail for Cento Servizi.
+        This action will be logged in the global audit trail.
       </p>
     </div>
   );

@@ -42,6 +42,16 @@ export const stockStatusLabel: Record<StockStatus, string> = {
   OUT_OF_STOCK: "Out of Stock",
 };
 
+export const categoryStatusLabel: Record<CategoryStatus, string> = {
+  ACTIVE: "Active",
+  ARCHIVED: "Archived",
+};
+
+export const categoryVisibilityLabel: Record<CategoryVisibility, string> = {
+  VISIBLE: "Visible",
+  HIDDEN: "Hidden",
+};
+
 export const orderStatusLabel: Record<OrderStatus, string> = {
   PENDING: "Pending",
   PROCESSING: "Processing",

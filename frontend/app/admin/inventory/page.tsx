@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -22,20 +22,24 @@ import { NativeSelect } from "@/components/ui/select-native";
 import { UpdateStockModal } from "@/components/admin/UpdateStockModal";
 import { SortButton } from "@/components/admin/SortButton";
 import {
-  inventory,
-  inventoryCategories,
-  stockStatuses,
-  type InventoryItem,
-  type StockStatus,
-} from "@/lib/admin/inventory";
+  useInventory,
+  useInventoryStats,
+  useAdjustStock,
+} from "@/lib/hooks/use-admin";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useCategories } from "@/lib/hooks/use-admin";
+import { stockStatusLabel, type InventoryItem, type StockStatus } from "@/lib/api/models";
+import { formatCompact } from "@/lib/admin/format";
 
 const PAGE_SIZE = 5;
 
 const statusVariant: Record<StockStatus, "success" | "warning" | "destructive"> = {
-  "In Stock": "success",
-  "Low Stock": "warning",
-  "Out of Stock": "destructive",
+  IN_STOCK: "success",
+  LOW_STOCK: "warning",
+  OUT_OF_STOCK: "destructive",
 };
+
+const statusOptions: StockStatus[] = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 
 function compactUsd(value: number): string {
   return `$${new Intl.NumberFormat("en-US", {
@@ -46,55 +50,45 @@ function compactUsd(value: number): string {
 
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
+  const [categoryId, setCategoryId] = useState("All");
   const [status, setStatus] = useState<"All" | StockStatus>("All");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
 
-  const stats = useMemo(() => {
-    const totalSku = inventory.length;
-    const outOfStock = inventory.filter((i) => i.status === "Out of Stock").length;
-    const lowStock = inventory.filter((i) => i.status === "Low Stock").length;
-    const totalValue = inventory.reduce((sum, i) => sum + i.stock * i.unitValue, 0);
-    return { totalSku, outOfStock, lowStock, totalValue };
-  }, []);
+  const debouncedSearch = useDebounce(search);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return inventory.filter((i) => {
-      const matchesSearch =
-        !q || i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q);
-      const matchesCategory = category === "All" || i.category === category;
-      const matchesStatus = status === "All" || i.status === status;
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
-  }, [search, category, status]);
+  const { data, isLoading, isError, error, refetch } = useInventory({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    categoryId: categoryId === "All" ? undefined : categoryId,
+    status: status === "All" ? undefined : status,
+  });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const paged = filtered.slice(start, start + PAGE_SIZE);
+  const { data: stats } = useInventoryStats();
+  const { data: categoriesData } = useCategories({ limit: 100 });
+  const adjustStock = useAdjustStock();
 
-  function resetPage<T>(setter: (v: T) => void) {
+  const inventory = data?.data ?? [];
+  const totalPages = data?.meta.totalPages ?? 1;
+  const categories = categoriesData?.data ?? [];
+
+  function withPageReset<T>(setter: (value: T) => void) {
     return (value: T) => {
       setter(value);
       setPage(1);
     };
   }
 
-  const setSearchReset = resetPage(setSearch);
-  const setCategoryReset = resetPage(setCategory);
-  const setStatusReset = resetPage(setStatus as (v: string) => void);
-
   function handleExport() {
     const header = ["Name", "SKU", "Category", "Stock", "Status", "Last Updated"];
-    const rows = filtered.map((i) => [
+    const rows = inventory.map((i) => [
       i.name,
       i.sku,
-      i.category,
+      i.category || "N/A",
       String(i.stock),
-      i.status,
-      i.lastUpdated,
+      stockStatusLabel[i.status],
+      new Date(i.lastUpdated).toLocaleDateString(),
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
@@ -136,12 +130,9 @@ export default function InventoryPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Total SKU</p>
             <div className="flex items-baseline gap-2">
               <p className="font-display text-2xl font-semibold text-foreground">
-                {stats.totalSku.toLocaleString()}
+                {(stats?.totalProducts ?? 0).toLocaleString()}
               </p>
-              <span className="flex items-center gap-0.5 text-xs font-medium text-success">
-                <TrendingUp className="size-3.5" />
-                12%
-              </span>
+              <span className="text-xs font-medium text-subtle">Products</span>
             </div>
           </CardContent>
         </Card>
@@ -151,7 +142,7 @@ export default function InventoryPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Out of Stock</p>
             <div className="flex items-baseline gap-2">
               <p className="font-display text-2xl font-semibold text-destructive">
-                {stats.outOfStock}
+                {stats?.outOfStock ?? 0}
               </p>
               <span className="text-xs font-medium text-subtle">Items flagged</span>
             </div>
@@ -162,7 +153,9 @@ export default function InventoryPage() {
           <CardContent className="flex flex-col gap-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Low Stock</p>
             <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-warning">{stats.lowStock}</p>
+              <p className="font-display text-2xl font-semibold text-warning">
+                {stats?.lowStock ?? 0}
+              </p>
               <span className="text-xs font-medium text-subtle">Reorder soon</span>
             </div>
           </CardContent>
@@ -173,7 +166,7 @@ export default function InventoryPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Total Value</p>
             <div className="flex items-baseline gap-2">
               <p className="font-display text-2xl font-semibold text-foreground">
-                {compactUsd(stats.totalValue)}
+                {compactUsd(stats?.totalValue ?? 0)}
               </p>
               <span className="text-xs font-medium text-subtle">USD Est.</span>
             </div>
@@ -192,13 +185,13 @@ export default function InventoryPage() {
             <NativeSelect
               aria-label="Filter by category"
               className="w-auto min-w-40"
-              value={category}
-              onChange={(e) => setCategoryReset(e.target.value)}
+              value={categoryId}
+              onChange={(e) => withPageReset(setCategoryId)(e.target.value)}
             >
               <option value="All">All categories</option>
-              {inventoryCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </NativeSelect>
@@ -207,12 +200,12 @@ export default function InventoryPage() {
               aria-label="Filter by stock status"
               className="w-auto min-w-36"
               value={status}
-              onChange={(e) => setStatusReset(e.target.value)}
+              onChange={(e) => withPageReset(setStatus)(e.target.value as "All" | StockStatus)}
             >
               <option value="All">All statuses</option>
-              {stockStatuses.map((s) => (
+              {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {stockStatusLabel[s]}
                 </option>
               ))}
             </NativeSelect>
@@ -226,7 +219,7 @@ export default function InventoryPage() {
                 placeholder="Search by name or SKU…"
                 className="h-10 rounded-lg bg-card pl-9"
                 value={search}
-                onChange={(e) => setSearchReset(e.target.value)}
+                onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
             <SortButton />
@@ -249,7 +242,7 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {paged.map((item) => (
+              {inventory.map((item) => (
                 <tr key={item.id} className="hover:bg-muted/30">
                   <td className="px-5 py-3">
                     <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
@@ -261,19 +254,19 @@ export default function InventoryPage() {
                   </td>
                   <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{item.sku}</td>
                   <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                    {item.category}
+                    {item.category || "N/A"}
                   </td>
                   <td className="px-2 py-3">
                     <Badge variant={statusVariant[item.status]}>
                       <span className="size-1.5 rounded-full bg-current" />
-                      {item.status}
+                      {stockStatusLabel[item.status]}
                     </Badge>
                   </td>
                   <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
                     {item.stock.toLocaleString()}
                   </td>
                   <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                    {item.lastUpdated}
+                    {new Date(item.lastUpdated).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end">
@@ -291,7 +284,7 @@ export default function InventoryPage() {
                 </tr>
               ))}
 
-              {paged.length === 0 && (
+              {inventory.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={8} className="px-4 py-14 text-center text-sm text-subtle">
                     <PackageSearch className="mx-auto mb-2 size-8 text-muted-foreground" />
@@ -306,7 +299,7 @@ export default function InventoryPage() {
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            Showing {paged.length} of {filtered.length} products
+            Showing {inventory.length} of {data?.meta.total ?? 0} products
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -314,14 +307,14 @@ export default function InventoryPage() {
               size="icon-sm"
               aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={page === 1}
             >
               <ChevronLeft />
             </Button>
             {Array.from({ length: totalPages }).map((_, i) => (
               <Button
                 key={i}
-                variant={currentPage === i + 1 ? "default" : "outline"}
+                variant={page === i + 1 ? "default" : "outline"}
                 size="icon-sm"
                 onClick={() => setPage(i + 1)}
               >
@@ -333,7 +326,7 @@ export default function InventoryPage() {
               size="icon-sm"
               aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={page >= totalPages}
             >
               <ChevronRight />
             </Button>
@@ -341,7 +334,18 @@ export default function InventoryPage() {
         </div>
       </Card>
 
-      <UpdateStockModal item={selected} onClose={() => setSelected(null)} />
+      <UpdateStockModal
+        item={selected}
+        onClose={() => setSelected(null)}
+        onSave={(adjustment) => {
+          if (selected) {
+            adjustStock.mutate({
+              productId: selected.id,
+              ...adjustment,
+            });
+          }
+        }}
+      />
     </div>
   );
 }

@@ -6,7 +6,20 @@ import { SettingsTextareaField } from "@/components/admin/settings/SettingsTexta
 import { UploadField } from "@/components/admin/settings/UploadField";
 import { currencies, timeZones, languages } from "@/lib/admin/settings";
 
-export function StoreInformationSection() {
+interface StoreInformationSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function StoreInformationSection({ data, onChange }: StoreInformationSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
   return (
     <SettingsSection
       id="store-information"
@@ -15,7 +28,12 @@ export function StoreInformationSection() {
       description="Basic details customers see across the storefront and receipts."
     >
       <div className="grid gap-5 sm:grid-cols-2">
-        <SettingsField id="store-name" label="Store Name" defaultValue="CENTO Servizi" />
+        <SettingsField
+          id="store-name"
+          label="Store Name"
+          value={getValue("store-name", "CENTO Servizi")}
+          onChange={(e) => handleChange("store-name", e.target.value)}
+        />
         <UploadField label="Store Logo" hint="PNG or SVG, at least 256×256px" shape="square" />
 
         <SettingsField
@@ -23,21 +41,24 @@ export function StoreInformationSection() {
           label="Store Email"
           type="email"
           icon={<Mail />}
-          defaultValue="hello@centoservizi.com"
+          value={getValue("store-email", "hello@centoservizi.com")}
+          onChange={(e) => handleChange("store-email", e.target.value)}
         />
         <SettingsField
           id="support-email"
           label="Customer Support Email"
           type="email"
           icon={<Headset />}
-          defaultValue="support@centoservizi.com"
+          value={getValue("support-email", "support@centoservizi.com")}
+          onChange={(e) => handleChange("support-email", e.target.value)}
         />
         <SettingsField
           id="support-phone"
           label="Support Phone Number"
           type="tel"
           icon={<Phone />}
-          defaultValue="+39 02 5551 0142"
+          value={getValue("support-phone", "+39 02 5551 0142")}
+          onChange={(e) => handleChange("support-phone", e.target.value)}
           wrapperClassName="sm:col-span-2"
         />
 
@@ -45,25 +66,40 @@ export function StoreInformationSection() {
           id="business-address"
           label="Business Address"
           rows={3}
-          defaultValue={"Via della Spiga, 12\n20121 Milano (MI), Italy"}
+          value={getValue("business-address", "Via della Spiga, 12\n20121 Milano (MI), Italy")}
+          onChange={(e) => handleChange("business-address", e.target.value)}
           wrapperClassName="sm:col-span-2"
         />
         <SettingsTextareaField
           id="store-description"
           label="Store Description"
           rows={3}
-          defaultValue="Premium home and lifestyle essentials, curated for modern Italian living."
+          value={getValue("store-description", "Premium home and lifestyle essentials, curated for modern Italian living.")}
+          onChange={(e) => handleChange("store-description", e.target.value)}
           wrapperClassName="sm:col-span-2"
         />
 
-        <SettingsSelectField id="currency" label="Currency" options={currencies} defaultValue="EUR (€)" />
+        <SettingsSelectField
+          id="currency"
+          label="Currency"
+          options={currencies}
+          value={getValue("currency", "EUR (€)")}
+          onChange={(value) => handleChange("currency", value)}
+        />
         <SettingsSelectField
           id="time-zone"
           label="Time Zone"
           options={timeZones}
-          defaultValue={timeZones[0]}
+          value={getValue("time-zone", timeZones[0])}
+          onChange={(value) => handleChange("time-zone", value)}
         />
-        <SettingsSelectField id="language" label="Language" options={languages} defaultValue="English" />
+        <SettingsSelectField
+          id="language"
+          label="Language"
+          options={languages}
+          value={getValue("language", "English")}
+          onChange={(value) => handleChange("language", value)}
+        />
       </div>
     </SettingsSection>
   );

@@ -7,7 +7,34 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { shippingMethods, shippingRegions } from "@/lib/admin/settings";
 
-export function ShippingSettingsSection() {
+interface ShippingSettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function ShippingSettingsSection({ data, onChange }: ShippingSettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
+  const handleShippingMethodToggle = (methodId: string, checked: boolean) => {
+    handleChange(`shipping-method-${methodId}`, checked);
+  };
+
+  const handleRegionToggle = (region: string, checked: boolean) => {
+    handleChange(`shipping-region-${region}`, checked);
+  };
+
   return (
     <SettingsSection
       id="shipping"
@@ -20,6 +47,8 @@ export function ShippingSettingsSection() {
         label="Enable shipping"
         description="Turn off to run the storefront as pickup-only."
         defaultChecked
+        checked={getToggleValue("enable-shipping", true)}
+        onChange={handleChange}
       />
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -28,14 +57,16 @@ export function ShippingSettingsSection() {
           label="Free Shipping Threshold"
           type="number"
           icon={<span className="text-sm font-semibold">€</span>}
-          defaultValue="75"
+          value={getValue("free-shipping-threshold", "75")}
+          onChange={(e) => handleChange("free-shipping-threshold", e.target.value)}
         />
         <SettingsField
           id="flat-shipping-rate"
           label="Flat Shipping Rate"
           type="number"
           icon={<span className="text-sm font-semibold">€</span>}
-          defaultValue="4.99"
+          value={getValue("flat-shipping-rate", "4.99")}
+          onChange={(e) => handleChange("flat-shipping-rate", e.target.value)}
         />
       </div>
 
@@ -57,7 +88,11 @@ export function ShippingSettingsSection() {
               </span>
               <span className="flex shrink-0 items-center gap-3">
                 <span className="text-sm font-semibold text-foreground">{method.price}</span>
-                <Switch id={`ship-${method.id}`} defaultChecked={method.defaultChecked} />
+                <Switch
+                  id={`ship-${method.id}`}
+                  checked={getToggleValue(`shipping-method-${method.id}`, method.defaultChecked)}
+                  onCheckedChange={(checked) => handleShippingMethodToggle(method.id, checked)}
+                />
               </span>
             </label>
           ))}
@@ -67,7 +102,8 @@ export function ShippingSettingsSection() {
       <SettingsField
         id="delivery-estimation"
         label="Delivery Estimation"
-        defaultValue="3–5 business days"
+        value={getValue("delivery-estimation", "3–5 business days")}
+        onChange={(e) => handleChange("delivery-estimation", e.target.value)}
         hint="Shown on the product and checkout pages."
       />
 
@@ -78,6 +114,8 @@ export function ShippingSettingsSection() {
         label="International shipping"
         description="Allow orders to be shipped outside your home country."
         defaultChecked
+        checked={getToggleValue("international-shipping", true)}
+        onChange={handleChange}
       />
 
       {/* Shipping regions */}
@@ -86,7 +124,11 @@ export function ShippingSettingsSection() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {shippingRegions.map((region, i) => (
             <label key={region} className="group flex items-center gap-2 text-sm text-foreground">
-              <Checkbox id={`region-${i}`} defaultChecked={i < 2} />
+              <Checkbox
+                id={`region-${i}`}
+                checked={getToggleValue(`shipping-region-${region}`, i < 2)}
+                onCheckedChange={(checked) => handleRegionToggle(region, checked as boolean)}
+              />
               <span>{region}</span>
             </label>
           ))}

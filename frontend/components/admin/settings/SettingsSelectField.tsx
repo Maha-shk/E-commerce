@@ -7,6 +7,7 @@ type SettingsSelectFieldProps = ComponentProps<typeof NativeSelect> & {
   id: string;
   options: string[];
   wrapperClassName?: string;
+  value?: string;
 };
 
 /** Labelled dropdown for the settings page, backed by the shared NativeSelect. */
@@ -16,6 +17,7 @@ export function SettingsSelectField({
   options,
   wrapperClassName,
   className,
+  value,
   ...props
 }: SettingsSelectFieldProps) {
   return (
@@ -23,7 +25,12 @@ export function SettingsSelectField({
       <label htmlFor={id} className="text-sm font-medium text-muted-foreground">
         {label}
       </label>
-      <NativeSelect id={id} className={cn("h-11 rounded-lg bg-muted/40", className)} {...props}>
+      <NativeSelect
+        id={id}
+        value={value}
+        className={cn("h-11 rounded-lg bg-muted/40", className)}
+        {...props}
+      >
         {options.map((option) => (
           <option key={option} value={option}>
             {option}

@@ -1,8 +1,17 @@
 import { Switch } from "@/components/ui/switch";
 import type { ToggleSetting } from "@/lib/admin/settings";
 
+interface ToggleRowProps extends ToggleSetting {
+  checked?: boolean;
+  onChange?: (id: string, value: boolean) => void;
+}
+
 /** Label + description + switch row, used throughout the settings toggles. */
-export function ToggleRow({ id, label, description, defaultChecked }: ToggleSetting) {
+export function ToggleRow({ id, label, description, defaultChecked, checked, onChange }: ToggleRowProps) {
+  const handleChange = (checked: boolean) => {
+    onChange?.(id, checked);
+  };
+
   return (
     <label
       htmlFor={id}
@@ -12,17 +21,27 @@ export function ToggleRow({ id, label, description, defaultChecked }: ToggleSett
         <span className="block text-sm font-semibold text-foreground">{label}</span>
         <span className="mt-0.5 block text-xs leading-relaxed text-subtle">{description}</span>
       </span>
-      <Switch id={id} defaultChecked={defaultChecked} className="mt-0.5 shrink-0" />
+      <Switch
+        id={id}
+        checked={checked ?? defaultChecked}
+        onCheckedChange={handleChange}
+        className="mt-0.5 shrink-0"
+      />
     </label>
   );
 }
 
+interface ToggleRowGroupProps {
+  items: ToggleSetting[];
+  onChange?: (id: string, value: boolean) => void;
+}
+
 /** Vertically stacked group of ToggleRows. */
-export function ToggleRowGroup({ items }: { items: ToggleSetting[] }) {
+export function ToggleRowGroup({ items, onChange }: ToggleRowGroupProps) {
   return (
     <div className="space-y-3">
       {items.map((item) => (
-        <ToggleRow key={item.id} {...item} />
+        <ToggleRow key={item.id} {...item} onChange={onChange} />
       ))}
     </div>
   );

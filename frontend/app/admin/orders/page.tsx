@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Search,
   Download,
@@ -24,16 +24,21 @@ import { OrderStatusBadge } from "@/components/admin/OrderBadges";
 import { ChangeOrderStatusModal } from "@/components/admin/ChangeOrderStatusModal";
 import { OrderDetailsModal } from "@/components/admin/OrderDetailsModal";
 import { SortButton } from "@/components/admin/SortButton";
-import {
-  orders,
-  orderStatuses,
-  orderTotals,
-  formatEuro,
-  type Order,
-  type OrderStatus,
-} from "@/lib/admin/orders";
+import { useOrders, useOrderStats, useUpdateOrderStatus } from "@/lib/hooks/use-admin";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { formatEuro } from "@/lib/admin/format";
+import { orderStatusLabel, type Order, type OrderStatus } from "@/lib/api/models";
 
 const PAGE_SIZE = 5;
+
+const statusOptions: OrderStatus[] = [
+  "PENDING",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+  "RETURNED",
+];
 
 function StatCard({
   label,
@@ -65,41 +70,35 @@ export default function OrdersPage() {
   const [statusTarget, setStatusTarget] = useState<Order | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Order | null>(null);
 
-  const stats = useMemo(() => {
-    const pending = orders.filter((o) => o.status === "Pending").length;
-    const delivered = orders.filter((o) => o.status === "Delivered").length;
-    // Revenue counts only orders that were actually paid for.
-    const revenue = orders
-      .filter((o) => o.paymentStatus === "Paid")
-      .reduce((sum, o) => sum + orderTotals(o).total, 0);
-    return { total: orders.length, pending, delivered, revenue };
-  }, []);
+  const debouncedSearch = useDebounce(search);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return orders.filter((o) => {
-      const matchesSearch =
-        !q ||
-        o.id.toLowerCase().includes(q) ||
-        o.customer.name.toLowerCase().includes(q) ||
-        o.customer.email.toLowerCase().includes(q);
-      const matchesStatus = statusFilter === "All" || o.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [search, statusFilter]);
+  const { data, isLoading, isError, error, refetch } = useOrders({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    status: statusFilter === "All" ? undefined : statusFilter,
+  });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const paged = filtered.slice(start, start + PAGE_SIZE);
+  const { data: stats } = useOrderStats();
+  const updateOrderStatus = useUpdateOrderStatus();
+
+  const orders = data?.data ?? [];
+  const totalPages = data?.meta.totalPages ?? 1;
+
+  function withPageReset<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setPage(1);
+    };
+  }
 
   function handleExport() {
     const header = ["Order ID", "Date", "Customer", "Total", "Payment Status", "Order Status"];
-    const rows = filtered.map((o) => [
-      o.id,
-      o.date,
-      o.customer.name,
-      orderTotals(o).total.toFixed(2),
+    const rows = orders.map((o) => [
+      o.orderNumber,
+      new Date(o.placedAt).toLocaleDateString(),
+      o.customer?.fullName || "",
+      o.totals.total.toFixed(2),
       o.paymentStatus,
       o.status,
     ]);
@@ -132,12 +131,12 @@ export default function OrdersPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="Total Orders"
-          value={stats.total.toLocaleString()}
-          corner={<Badge variant="success">+8%</Badge>}
+          value={(stats?.total ?? 0).toLocaleString()}
+          corner={<Badge variant="success">All time</Badge>}
         />
         <StatCard
           label="Pending"
-          value={stats.pending.toLocaleString()}
+          value={(stats?.byStatus?.PENDING ?? 0).toLocaleString()}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-warning-muted text-warning">
               <Clock className="size-4" />
@@ -146,7 +145,7 @@ export default function OrdersPage() {
         />
         <StatCard
           label="Delivered"
-          value={stats.delivered.toLocaleString()}
+          value={(stats?.byStatus?.DELIVERED ?? 0).toLocaleString()}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
               <CheckCircle2 className="size-4" />
@@ -155,7 +154,7 @@ export default function OrdersPage() {
         />
         <StatCard
           label="Revenue"
-          value={formatEuro(stats.revenue)}
+          value={formatEuro(stats?.revenue ?? 0)}
           corner={
             <span className="flex size-9 items-center justify-center rounded-full bg-success-muted text-success">
               <Wallet className="size-4" />
@@ -176,15 +175,12 @@ export default function OrdersPage() {
               aria-label="Filter by order status"
               className="w-auto min-w-36"
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as "All" | OrderStatus);
-                setPage(1);
-              }}
+              onChange={(e) => withPageReset(setStatusFilter)(e.target.value as "All" | OrderStatus)}
             >
               <option value="All">All statuses</option>
-              {orderStatuses.map((s) => (
+              {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {orderStatusLabel[s]}
                 </option>
               ))}
             </NativeSelect>
@@ -198,10 +194,7 @@ export default function OrdersPage() {
                 placeholder="Search by order ID or customer…"
                 className="h-10 rounded-lg bg-card pl-9"
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
             <SortButton />
@@ -221,28 +214,34 @@ export default function OrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {paged.map((order) => (
+              {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-muted/30">
                   <td className="px-5 py-3">
                     <Avatar aria-hidden className="size-11">
                       <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
-                        {order.customer.initials}
+                        {order.customer?.fullName
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase() || "?"}
                       </AvatarFallback>
                     </Avatar>
                   </td>
                   <td className="px-2 py-3">
-                    <p className="font-semibold text-foreground">{order.customer.name}</p>
-                    <p className="line-clamp-1 text-xs text-subtle">{order.customer.email}</p>
+                    <p className="font-semibold text-foreground">{order.customer?.fullName || "Unknown"}</p>
+                    <p className="line-clamp-1 text-xs text-subtle">{order.customer?.email || ""}</p>
                   </td>
                   <td className="px-2 py-3 font-medium whitespace-nowrap text-muted-foreground">
-                    {order.id}
+                    {order.orderNumber}
                   </td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{order.date}</td>
+                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
+                    {new Date(order.placedAt).toLocaleDateString()}
+                  </td>
                   <td className="px-2 py-3">
                     <button
                       type="button"
                       onClick={() => setStatusTarget(order)}
-                      aria-label={`Change status for order ${order.id}`}
+                      aria-label={`Change status for order ${order.orderNumber}`}
                       title="Change order status"
                       className="rounded-4xl outline-none transition-opacity hover:opacity-75 focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
@@ -250,7 +249,7 @@ export default function OrdersPage() {
                     </button>
                   </td>
                   <td className="px-2 py-3 text-right font-semibold whitespace-nowrap text-foreground">
-                    {formatEuro(orderTotals(order).total)}
+                    {formatEuro(order.totals.total)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
@@ -258,7 +257,7 @@ export default function OrdersPage() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => setDetailsTarget(order)}
-                        aria-label={`View details for order ${order.id}`}
+                        aria-label={`View details for order ${order.orderNumber}`}
                       >
                         <Eye />
                       </Button>
@@ -266,7 +265,7 @@ export default function OrdersPage() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => setStatusTarget(order)}
-                        aria-label={`Change status for order ${order.id}`}
+                        aria-label={`Change status for order ${order.orderNumber}`}
                       >
                         <Pencil />
                       </Button>
@@ -275,7 +274,7 @@ export default function OrdersPage() {
                 </tr>
               ))}
 
-              {paged.length === 0 && (
+              {orders.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
                     <Inbox className="mx-auto mb-2 size-8 text-muted-foreground" />
@@ -290,7 +289,7 @@ export default function OrdersPage() {
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-subtle">
-            Showing {paged.length} of {filtered.length} orders
+            Showing {orders.length} of {data?.meta.total ?? 0} orders
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -298,14 +297,14 @@ export default function OrdersPage() {
               size="icon-sm"
               aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={page === 1}
             >
               <ChevronLeft />
             </Button>
             {Array.from({ length: totalPages }).map((_, i) => (
               <Button
                 key={i}
-                variant={currentPage === i + 1 ? "default" : "outline"}
+                variant={page === i + 1 ? "default" : "outline"}
                 size="icon-sm"
                 onClick={() => setPage(i + 1)}
               >
@@ -317,7 +316,7 @@ export default function OrdersPage() {
               size="icon-sm"
               aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={page >= totalPages}
             >
               <ChevronRight />
             </Button>
@@ -325,7 +324,15 @@ export default function OrdersPage() {
         </div>
       </Card>
 
-      <ChangeOrderStatusModal order={statusTarget} onClose={() => setStatusTarget(null)} />
+      <ChangeOrderStatusModal
+        order={statusTarget}
+        onClose={() => setStatusTarget(null)}
+        onSave={(updates) => {
+          if (statusTarget) {
+            updateOrderStatus.mutate({ id: statusTarget.id, ...updates });
+          }
+        }}
+      />
       <OrderDetailsModal order={detailsTarget} onClose={() => setDetailsTarget(null)} />
     </div>
   );

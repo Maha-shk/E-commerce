@@ -528,7 +528,7 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                 );
               })}
 
-              {visibility === "scheduled" && (
+              {visibility === "SCHEDULED" && (
                 <div className="space-y-2 px-2.5 pb-1 pt-2">
                   <Label
                     htmlFor="scheduled-date"

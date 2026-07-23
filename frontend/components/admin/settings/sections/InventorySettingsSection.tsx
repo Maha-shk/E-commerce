@@ -6,7 +6,31 @@ import { ToggleRowGroup } from "@/components/admin/settings/ToggleRow";
 import { Divider } from "@/components/admin/settings/Divider";
 import { outOfStockVisibilityOptions, stockReservationOptions, inventoryToggles } from "@/lib/admin/settings";
 
-export function InventorySettingsSection() {
+interface InventorySettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function InventorySettingsSection({ data, onChange }: InventorySettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
+  const togglesWithValues = inventoryToggles.map((toggle) => ({
+    ...toggle,
+    defaultChecked: getToggleValue(toggle.id, toggle.defaultChecked),
+  }));
+
   return (
     <SettingsSection
       id="inventory"
@@ -20,25 +44,31 @@ export function InventorySettingsSection() {
           label="Low Stock Threshold"
           type="number"
           trailing="units"
-          defaultValue="10"
+          value={getValue("low-stock-threshold", "10")}
+          onChange={(e) => handleChange("low-stock-threshold", e.target.value)}
         />
         <SettingsSelectField
           id="out-of-stock-visibility"
           label="Out-of-Stock Visibility"
           options={outOfStockVisibilityOptions}
-          defaultValue={outOfStockVisibilityOptions[1]}
+          value={getValue("out-of-stock-visibility", outOfStockVisibilityOptions[1])}
+          onChange={(value) => handleChange("out-of-stock-visibility", value)}
         />
       </div>
 
       <Divider />
 
-      <ToggleRowGroup items={inventoryToggles} />
+      <ToggleRowGroup
+        items={togglesWithValues}
+        onChange={handleChange}
+      />
 
       <SettingsSelectField
         id="stock-reservation"
         label="Stock Reservation Duration"
         options={stockReservationOptions}
-        defaultValue="30 minutes"
+        value={getValue("stock-reservation", "30 minutes")}
+        onChange={(value) => handleChange("stock-reservation", value)}
         wrapperClassName="sm:max-w-xs"
       />
     </SettingsSection>

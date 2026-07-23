@@ -6,7 +6,30 @@ import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { paymentMethods } from "@/lib/admin/settings";
 
-export function PaymentSettingsSection() {
+interface PaymentSettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function PaymentSettingsSection({ data, onChange }: PaymentSettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
+  const handlePaymentMethodToggle = (methodId: string, checked: boolean) => {
+    handleChange(`payment-method-${methodId}`, checked);
+  };
+
   return (
     <SettingsSection
       id="payments"
@@ -30,7 +53,12 @@ export function PaymentSettingsSection() {
                 <span className="block text-sm font-semibold text-foreground">{method.name}</span>
                 <span className="block text-xs text-subtle">{method.description}</span>
               </span>
-              <Switch id={`pay-${method.id}`} defaultChecked={method.defaultChecked} className="shrink-0" />
+              <Switch
+                id={`pay-${method.id}`}
+                checked={getToggleValue(`payment-method-${method.id}`, method.defaultChecked)}
+                onCheckedChange={(checked) => handlePaymentMethodToggle(method.id, checked)}
+                className="shrink-0"
+              />
             </label>
           );
         })}
@@ -41,7 +69,10 @@ export function PaymentSettingsSection() {
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">Default Payment Method</p>
-          <RadioGroup defaultValue="card">
+          <RadioGroup
+            value={getValue("default-payment-method", "card")}
+            onValueChange={(value) => handleChange("default-payment-method", value)}
+          >
             {paymentMethods.map((method) => (
               <label
                 key={method.id}
@@ -60,7 +91,8 @@ export function PaymentSettingsSection() {
           label="Transaction Fee Percentage"
           type="number"
           trailing="%"
-          defaultValue="2.9"
+          value={getValue("transaction-fee", "2.9")}
+          onChange={(e) => handleChange("transaction-fee", e.target.value)}
           wrapperClassName="h-fit"
         />
       </div>

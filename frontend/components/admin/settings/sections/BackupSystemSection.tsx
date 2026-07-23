@@ -6,7 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { backupFrequencyOptions, systemInfo } from "@/lib/admin/settings";
 
-export function BackupSystemSection() {
+interface BackupSystemSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function BackupSystemSection({ data, onChange }: BackupSystemSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
   return (
     <SettingsSection
       id="backup"
@@ -19,7 +32,8 @@ export function BackupSystemSection() {
           id="backup-frequency"
           label="Backup Frequency"
           options={backupFrequencyOptions}
-          defaultValue="Daily"
+          value={getValue("backup-frequency", "Daily")}
+          onChange={(value) => handleChange("backup-frequency", value)}
         />
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">System Version</p>

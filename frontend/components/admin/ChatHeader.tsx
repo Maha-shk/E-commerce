@@ -2,7 +2,8 @@ import { ChevronLeft, Info, Phone, MoreVertical } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/admin/StatusDot";
-import type { Conversation } from "@/lib/admin/messages";
+import { cn } from "@/lib/utils";
+import type { ConversationDetail } from "@/lib/api/models";
 
 /** Chat window header: customer identity, presence, and quick actions. */
 export function ChatHeader({
@@ -10,13 +11,13 @@ export function ChatHeader({
   onBack,
   onOpenDetails,
 }: {
-  conversation: Conversation;
+  conversation: ConversationDetail;
   /** Return to the list (mobile). */
   onBack?: () => void;
   /** Open the customer details panel (tablet / mobile). */
   onOpenDetails?: () => void;
 }) {
-  const { customer, presence } = conversation;
+  const { customer } = conversation;
 
   return (
     <div className="flex items-center gap-3 border-b px-4 py-3">
@@ -30,38 +31,30 @@ export function ChatHeader({
         <ChevronLeft />
       </Button>
 
-      <span className="relative shrink-0">
-        <Avatar className="size-10">
-          <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
-            {customer.initials}
-          </AvatarFallback>
-        </Avatar>
-        {presence === "online" && (
-          <StatusDot tone="online" ring className="absolute bottom-0 right-0" />
-        )}
-      </span>
+      <Avatar className="size-10">
+        <AvatarFallback className="bg-muted text-xs font-semibold text-foreground">
+          {customer.initials}
+        </AvatarFallback>
+      </Avatar>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-foreground">{customer.name}</p>
-        <p className="flex items-center gap-1.5 text-xs text-subtle">
-          <StatusDot tone={presence === "online" ? "online" : "offline"} className="size-1.5" />
-          {presence === "online" ? "Online" : "Offline"}
+        <p className="truncate text-sm font-semibold text-foreground">{customer.fullName}</p>
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <StatusDot tone="success" className="size-1.5" />
+          Active now
         </p>
       </div>
 
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" aria-label="Call customer" className="hidden sm:inline-flex">
-          <Phone />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="xl:hidden"
-          aria-label="Customer details"
-          onClick={onOpenDetails}
-        >
-          <Info />
-        </Button>
+        {customer.phone && (
+          <a
+            href={`tel:${customer.phone}`}
+            className="rounded-lg p-2 hover:bg-muted"
+            aria-label="Call customer"
+          >
+            <Phone className="size-4 text-subtle" />
+          </a>
+        )}
         <Button variant="ghost" size="icon-sm" aria-label="More options">
           <MoreVertical />
         </Button>

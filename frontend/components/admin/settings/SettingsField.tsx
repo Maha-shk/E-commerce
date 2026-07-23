@@ -11,6 +11,7 @@ type SettingsFieldProps = ComponentProps<typeof Input> & {
   trailing?: ReactNode;
   hint?: string;
   wrapperClassName?: string;
+  value?: string;
 };
 
 /** Labelled input for the settings page — icon is optional, unlike ProfileField. */
@@ -22,6 +23,7 @@ export function SettingsField({
   hint,
   wrapperClassName,
   className,
+  value,
   ...props
 }: SettingsFieldProps) {
   return (
@@ -37,6 +39,7 @@ export function SettingsField({
         ) : null}
         <Input
           id={id}
+          value={value}
           className={cn("h-11 rounded-lg bg-muted/40", icon && "pl-10", trailing && "pr-12", className)}
           {...props}
         />

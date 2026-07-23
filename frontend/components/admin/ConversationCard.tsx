@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusDot } from "@/components/admin/StatusDot";
 import { cn } from "@/lib/utils";
-import type { Conversation } from "@/lib/admin/messages";
+import type { Conversation } from "@/lib/api/models";
 
 /** A single row in the conversation list. */
 export function ConversationCard({
@@ -13,7 +13,8 @@ export function ConversationCard({
   active?: boolean;
   onSelect?: () => void;
 }) {
-  const { customer, presence, lastMessage, time, unread } = conversation;
+  const { customer, lastMessage, lastMessageAt, unread } = conversation;
+  const time = new Date(lastMessageAt).toLocaleDateString();
 
   return (
     <button
@@ -33,14 +34,14 @@ export function ConversationCard({
             {customer.initials}
           </AvatarFallback>
         </Avatar>
-        {presence === "online" && (
-          <StatusDot tone="online" ring className="absolute bottom-0 right-0" />
+        {unread > 0 && (
+          <StatusDot tone="success" ring className="absolute bottom-0 right-0" />
         )}
       </span>
 
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate font-semibold text-foreground">{customer.name}</span>
+          <span className="truncate font-semibold text-foreground">{customer.fullName}</span>
           <span className="shrink-0 text-xs text-subtle">{time}</span>
         </span>
         <span className="mt-0.5 flex items-center justify-between gap-2">

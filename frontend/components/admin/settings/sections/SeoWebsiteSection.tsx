@@ -6,7 +6,26 @@ import { UploadField } from "@/components/admin/settings/UploadField";
 import { ToggleRow } from "@/components/admin/settings/ToggleRow";
 import { Divider } from "@/components/admin/settings/Divider";
 
-export function SeoWebsiteSection() {
+interface SeoWebsiteSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function SeoWebsiteSection({ data, onChange }: SeoWebsiteSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
   return (
     <SettingsSection
       id="seo-website"
@@ -17,19 +36,22 @@ export function SeoWebsiteSection() {
       <SettingsField
         id="website-title"
         label="Website Title"
-        defaultValue="CENTO Servizi — Premium Home & Lifestyle"
+        value={getValue("website-title", "CENTO Servizi — Premium Home & Lifestyle")}
+        onChange={(e) => handleChange("website-title", e.target.value)}
       />
       <SettingsTextareaField
         id="meta-description"
         label="Meta Description"
         rows={3}
-        defaultValue="Shop premium home and lifestyle essentials, curated for modern Italian living. Free shipping over €75."
+        value={getValue("meta-description", "Shop premium home and lifestyle essentials, curated for modern Italian living. Free shipping over €75.")}
+        onChange={(e) => handleChange("meta-description", e.target.value)}
         hint="128/160 characters"
       />
       <SettingsField
         id="meta-keywords"
         label="Meta Keywords"
-        defaultValue="home decor, lifestyle, italian design, premium essentials"
+        value={getValue("meta-keywords", "home decor, lifestyle, italian design, premium essentials")}
+        onChange={(e) => handleChange("meta-keywords", e.target.value)}
         hint="Comma-separated"
       />
 
@@ -47,13 +69,16 @@ export function SeoWebsiteSection() {
         label="Canonical URL"
         type="url"
         icon={<LinkIcon />}
-        defaultValue="https://www.centoservizi.com"
+        value={getValue("canonical-url", "https://www.centoservizi.com")}
+        onChange={(e) => handleChange("canonical-url", e.target.value)}
       />
       <ToggleRow
         id="robots-indexing"
         label="Allow search engine indexing"
         description="Let Google and other search engines index and rank this site."
         defaultChecked
+        checked={getToggleValue("robots-indexing", true)}
+        onChange={handleChange}
       />
     </SettingsSection>
   );

@@ -10,7 +10,31 @@ import { loginAttemptOptions, passwordExpiryOptions, securityToggles, trustedDev
 
 const deviceIcons = { "MacBook Pro · Chrome": Laptop, "iPhone 15 · Safari": Smartphone, "Windows PC · Edge": Monitor } as const;
 
-export function SecuritySettingsSection() {
+interface SecuritySettingsSectionProps {
+  data?: Record<string, unknown>;
+  onChange?: (id: string, value: unknown) => void;
+}
+
+export function SecuritySettingsSection({ data, onChange }: SecuritySettingsSectionProps) {
+  const handleChange = (id: string, value: unknown) => {
+    onChange?.(id, value);
+  };
+
+  const getValue = (key: string, defaultValue: string) => {
+    return (data?.[key] as string) ?? defaultValue;
+  };
+
+  const getToggleValue = (key: string, defaultValue: boolean) => {
+    const value = data?.[key];
+    if (typeof value === "boolean") return value;
+    return defaultValue;
+  };
+
+  const togglesWithValues = securityToggles.map((toggle) => ({
+    ...toggle,
+    defaultChecked: getToggleValue(toggle.id, toggle.defaultChecked),
+  }));
+
   return (
     <SettingsSection
       id="security"
@@ -31,7 +55,12 @@ export function SecuritySettingsSection() {
             Require a one-time code in addition to a password for admin sign-in.
           </span>
         </span>
-        <Switch id="two-factor-auth" className="mt-0.5 shrink-0" />
+        <Switch
+          id="two-factor-auth"
+          checked={getToggleValue("two-factor-auth", false)}
+          onCheckedChange={(checked) => handleChange("two-factor-auth", checked)}
+          className="mt-0.5 shrink-0"
+        />
       </label>
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -39,17 +68,22 @@ export function SecuritySettingsSection() {
           id="login-attempts"
           label="Login Attempt Limits"
           options={loginAttemptOptions}
-          defaultValue="5 attempts"
+          value={getValue("login-attempts", "5 attempts")}
+          onChange={(value) => handleChange("login-attempts", value)}
         />
         <SettingsSelectField
           id="password-expiry"
           label="Password Expiry Duration"
           options={passwordExpiryOptions}
-          defaultValue="90 days"
+          value={getValue("password-expiry", "90 days")}
+          onChange={(value) => handleChange("password-expiry", value)}
         />
       </div>
 
-      <ToggleRowGroup items={securityToggles} />
+      <ToggleRowGroup
+        items={togglesWithValues}
+        onChange={handleChange}
+      />
 
       <Divider />
 

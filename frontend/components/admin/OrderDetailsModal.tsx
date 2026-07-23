@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/OrderBadges";
-import { orderTotals, formatEuro, type Order } from "@/lib/admin/orders";
+import { formatEuro } from "@/lib/admin/format";
+import { orderStatusLabel, paymentStatusLabel, type Order } from "@/lib/api/models";
 
 /** Read-only order breakdown. Presentation only — nothing is editable. */
 export function OrderDetailsModal({
@@ -58,18 +59,21 @@ function SectionTitle({
 }
 
 function OrderDetails({ order, onClose }: { order: Order; onClose: () => void }) {
-  const totals = orderTotals(order);
+  const totals = order.totals;
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <DialogTitle className="text-2xl">Order {order.id}</DialogTitle>
+          <DialogTitle className="text-2xl">Order {order.orderNumber}</DialogTitle>
           <OrderStatusBadge status={order.status} />
           <PaymentStatusBadge status={order.paymentStatus} />
         </div>
-        <DialogDescription className="mt-1">Placed on {order.placedAt}</DialogDescription>
+        <DialogDescription className="mt-1">
+          Placed on {new Date(order.placedAt).toLocaleDateString()} at{" "}
+          {new Date(order.placedAt).toLocaleTimeString()}
+        </DialogDescription>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -77,9 +81,9 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
         <div className="rounded-xl bg-muted/40 p-4">
           <SectionTitle icon={UserRound}>Customer Info</SectionTitle>
           <div className="mt-2 divide-y">
-            <InfoRow label="Name" value={order.customer.name} />
-            <InfoRow label="Email" value={order.customer.email} />
-            <InfoRow label="Phone" value={order.customer.phone} />
+            <InfoRow label="Name" value={order.customer?.fullName || "Unknown"} />
+            <InfoRow label="Email" value={order.customer?.email || "N/A"} />
+            <InfoRow label="Phone" value={order.customer?.phone || "N/A"} />
           </div>
         </div>
 
@@ -87,15 +91,15 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
         <div className="rounded-xl bg-muted/40 p-4">
           <SectionTitle icon={Truck}>Shipping Info</SectionTitle>
           <div className="mt-2 divide-y">
-            <InfoRow label="Method" value={order.shipping.method} />
-            <InfoRow label="Tracking #" value={order.shipping.tracking} />
+            <InfoRow label="Method" value={order.shippingMethod || "N/A"} />
+            <InfoRow label="Tracking #" value={order.shippingTracking || "Not available"} />
             <div className="py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wider text-subtle">
                 Shipping Address
               </p>
               <address className="mt-0.5 text-sm font-medium not-italic text-foreground">
-                {order.shipping.address.map((line) => (
-                  <span key={line} className="block">
+                {order.shippingAddress.map((line, i) => (
+                  <span key={i} className="block">
                     {line}
                   </span>
                 ))}
@@ -121,7 +125,7 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
             </thead>
             <tbody className="divide-y">
               {order.items.map((item) => (
-                <tr key={item.sku}>
+                <tr key={item.id}>
                   <td className="py-3 pr-2">
                     <div className="flex items-center gap-3">
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
@@ -136,7 +140,7 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
                   </td>
                   <td className="px-2 py-3 text-right text-muted-foreground">{item.quantity}</td>
                   <td className="py-3 pl-2 text-right font-semibold whitespace-nowrap text-foreground">
-                    {formatEuro(item.unitPrice * item.quantity)}
+                    {formatEuro(item.lineTotal)}
                   </td>
                 </tr>
               ))}
@@ -167,7 +171,7 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
           )}
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Payment method</span>
-            <span className="font-medium text-foreground">{order.paymentMethod}</span>
+            <span className="font-medium text-foreground">{order.paymentMethod || "N/A"}</span>
           </div>
           <div className="mt-1 flex items-center justify-between border-t pt-3">
             <span className="font-display text-base font-semibold text-foreground">Total</span>
