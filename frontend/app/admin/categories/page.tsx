@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { SortButton } from "@/components/admin/SortButton";
 import { CategoryModal } from "@/components/admin/CategoryModal";
 import {
   useCategories,
@@ -234,7 +233,6 @@ export default function CategoriesPage() {
                 onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
-            <SortButton />
           </div>
         </div>
 

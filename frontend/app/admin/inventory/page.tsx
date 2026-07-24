@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { UpdateStockModal } from "@/components/admin/UpdateStockModal";
-import { SortButton } from "@/components/admin/SortButton";
 import {
   useInventory,
   useInventoryStats,
@@ -222,7 +221,6 @@ export default function InventoryPage() {
                 onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
-            <SortButton />
           </div>
         </div>
 

@@ -23,7 +23,6 @@ import { NativeSelect } from "@/components/ui/select-native";
 import { OrderStatusBadge } from "@/components/admin/OrderBadges";
 import { ChangeOrderStatusModal } from "@/components/admin/ChangeOrderStatusModal";
 import { OrderDetailsModal } from "@/components/admin/OrderDetailsModal";
-import { SortButton } from "@/components/admin/SortButton";
 import { useOrders, useOrderStats, useUpdateOrderStatus } from "@/lib/hooks/use-admin";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { formatEuro } from "@/lib/admin/format";
@@ -196,7 +195,6 @@ export default function OrdersPage() {
                 onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
-            <SortButton />
           </div>
         </div>
         <div className="overflow-x-auto">

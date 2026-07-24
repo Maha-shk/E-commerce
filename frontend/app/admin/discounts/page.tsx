@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EditDiscountModal } from "@/components/admin/EditDiscountModal";
-import { SortButton } from "@/components/admin/SortButton";
 import {
   useDiscounts,
   useCreateDiscount,
@@ -202,7 +201,6 @@ export default function DiscountsPage() {
                 onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
-            <SortButton />
           </div>
         </div>
 

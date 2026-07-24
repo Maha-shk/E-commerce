@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, MessagesSquare } from "lucide-react";
+import { Search, MessagesSquare, X } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,20 @@ export default function MessagesPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showCustomerDetails, setShowCustomerDetails] = useState(true);
+
+  // Persist customer details visibility in localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('admin_show_customer_details');
+    if (saved !== null) {
+      setShowCustomerDetails(saved === 'true');
+    }
+  }, []);
+
+  // Save to localStorage when state changes
+  useEffect(() => {
+    localStorage.setItem('admin_show_customer_details', String(showCustomerDetails));
+  }, [showCustomerDetails]);
 
   const { data: conversationsData } = useConversations({
     search: search || undefined,
@@ -119,9 +133,11 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className={`grid gap-6 transition-all duration-300 ${
+        showCustomerDetails ? 'lg:grid-cols-[350px_1fr_350px]' : 'lg:grid-cols-[350px_1fr]'
+      }`}>
         {/* Conversation list */}
-        <Card className="h-[600px] overflow-y-auto">
+        <Card className="h-[700px] overflow-y-auto">
           <div className="divide-y">
             {transformedConversations.map((conv) => (
               <ConversationCard
@@ -142,13 +158,13 @@ export default function MessagesPage() {
         </Card>
 
         {/* Chat window */}
-        <Card className="lg:col-span-2 h-[600px] flex flex-col">
+        <Card className="h-[700px] flex flex-col">
           {selected ? (
             <>
               <ChatHeader
                 conversation={selected}
                 onBack={() => setSelectedId(null)}
-                onOpenDetails={() => {/* TODO */}}
+                onOpenDetails={() => setShowCustomerDetails(!showCustomerDetails)}
               />
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -181,15 +197,22 @@ export default function MessagesPage() {
         </Card>
 
         {/* Customer details panel (desktop) */}
-        {selected && (
-          <Sheet open={!!selected} onOpenChange={(open) => !open && setSelectedId(null)}>
-            <SheetContent className="w-full sm:max-w-md">
-              <SheetTitle>Customer Details</SheetTitle>
-              <div className="p-6">
-                <CustomerInfoCard conversation={selected} />
+        {selected && showCustomerDetails && (
+          <Card className="h-[700px] overflow-y-auto relative">
+            <button
+              onClick={() => setShowCustomerDetails(false)}
+              className="absolute top-4 right-4 z-10 rounded-md p-2 hover:bg-muted transition-colors"
+              aria-label="Close customer details"
+            >
+              <X className="size-4" />
+            </button>
+            <div className="p-6">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold">Customer Details</h3>
               </div>
-            </SheetContent>
-          </Sheet>
+              <CustomerInfoCard conversation={selected} />
+            </div>
+          </Card>
         )}
       </div>
     </div>

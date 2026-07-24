@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NativeSelect } from "@/components/ui/select-native";
 import { CustomerDetailsModal } from "@/components/admin/CustomerDetailsModal";
-import { SortButton } from "@/components/admin/SortButton";
 import {
   useCustomers,
   useCustomer,
@@ -202,7 +201,6 @@ export default function CustomersPage() {
                 onChange={(e) => withPageReset(setSearch)(e.target.value)}
               />
             </div>
-            <SortButton />
           </div>
         </div>
 

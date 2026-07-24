@@ -24,6 +24,16 @@ export class PaginationQueryDto {
   @IsOptional()
   search?: string;
 
+  @ApiPropertyOptional({ description: 'Field to sort by' })
+  @IsString()
+  @IsOptional()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ description: 'Sort order: asc or desc' })
+  @IsString()
+  @IsOptional()
+  sortOrder?: 'asc' | 'desc' = 'desc';
+
   get skip(): number {
     return (this.page - 1) * this.limit;
   }
