@@ -19,7 +19,7 @@ export const authApi = {
     post<LoginResponse>("/auth/login", payload),
 
   verifyOtp: (payload: { email: string; code: string }) =>
-    post<MessageResponse>("/auth/verify-otp", payload),
+    post<MessageResponse & LoginResponse>("/auth/verify-otp", payload),
 
   resendOtp: (payload: { email: string }) =>
     post<MessageResponse>("/auth/resend-otp", payload),

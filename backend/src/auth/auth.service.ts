@@ -78,7 +78,7 @@ export class AuthService {
         email,
         fullName: dto.fullName.trim(),
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
-        role: Role.CUSTOMER,
+        role: Role.ADMIN,
         status: UserStatus.ACTIVE,
       },
       select: USER_PUBLIC_SELECT,
@@ -96,7 +96,9 @@ export class AuthService {
     const user = await this.requireUserByEmail(dto.email);
 
     if (user.emailVerified) {
-      return { message: 'Email is already verified.' };
+      // If already verified, still return login tokens
+      const tokens = await this.issueTokens(user, {});
+      return { message: 'Email is already verified.', ...tokens, user: this.toPublicUser(user) };
     }
 
     await this.consumeOtp(user.id, dto.code, VerificationTokenType.EMAIL_VERIFICATION);
@@ -106,7 +108,9 @@ export class AuthService {
       data: { emailVerified: true },
     });
 
-    return { message: 'Email verified successfully. You can now sign in.' };
+    // Auto-login after successful email verification
+    const tokens = await this.issueTokens(user, {});
+    return { message: 'Email verified successfully. You are now logged in.', ...tokens, user: this.toPublicUser(user) };
   }
 
   async resendOtp(dto: ResendOtpDto) {

@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { ShieldCheck, ArrowRight, Lock } from "lucide-react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useSession } from "@/lib/hooks/use-auth";
 
 export default function VerifiedPage() {
+  const { isAdmin } = useSession();
+
   return (
     <AuthShell showLogo={false} footer="Privacy · Support">
       <AuthCard className="text-center">
