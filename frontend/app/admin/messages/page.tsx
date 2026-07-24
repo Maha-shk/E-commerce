@@ -144,7 +144,10 @@ export default function MessagesPage() {
                 key={conv.id}
                 conversation={conv}
                 active={selectedId === conv.id}
-                onSelect={() => setSelectedId(conv.id)}
+                onSelect={() => {
+                  setSelectedId(conv.id);
+                  setShowCustomerDetails(true);
+                }}
               />
             ))}
             {transformedConversations.length === 0 && (

@@ -1,8 +1,7 @@
-import { ChevronLeft, Info, Phone, MoreVertical } from "lucide-react";
+import { ChevronLeft, Phone, MoreVertical } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/admin/StatusDot";
-import { cn } from "@/lib/utils";
 import type { ConversationDetail } from "@/lib/api/models";
 
 /** Chat window header: customer identity, presence, and quick actions. */
@@ -38,7 +37,13 @@ export function ChatHeader({
       </Avatar>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{customer.fullName}</p>
+        <button
+          onClick={onOpenDetails}
+          className="truncate text-sm font-semibold text-foreground hover:text-primary transition-colors cursor-pointer text-left"
+          title="View customer details"
+        >
+          {customer.fullName}
+        </button>
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <StatusDot tone="success" className="size-1.5" />
           Active now
