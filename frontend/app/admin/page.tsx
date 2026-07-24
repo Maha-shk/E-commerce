@@ -18,7 +18,6 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScheduleReportButton } from "@/components/admin/ScheduleReportModal";
 import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { ErrorState, LoadingState, Skeleton, TableSkeleton } from "@/components/admin/QueryState";
 import {
@@ -340,7 +339,6 @@ export default function AdminDashboardPage() {
         subtitle="Monitor sales performance and inventory health."
         action={
           <div className="flex items-center gap-2">
-            <ScheduleReportButton />
             <Button size="xl">
               <Download />
               Export Data

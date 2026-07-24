@@ -93,13 +93,12 @@ export default function OrdersPage() {
   }
 
   function handleExport() {
-    const header = ["Order ID", "Date", "Customer", "Total", "Payment Status", "Order Status"];
+    const header = ["Order ID", "Date", "Customer", "Total", "Order Status"];
     const rows = orders.map((o) => [
       o.orderNumber,
       new Date(o.placedAt).toLocaleDateString(),
       o.customer?.fullName || "",
       o.totals.total.toFixed(2),
-      o.paymentStatus,
       o.status,
     ]);
     const csv = [header, ...rows]
@@ -118,7 +117,7 @@ export default function OrdersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Order Management"
-        subtitle="Track fulfilment and payment activity across all customer orders."
+        subtitle="Track fulfilment across all customer orders."
         action={
           <Button variant="outline" size="xl" onClick={handleExport}>
             <Download />

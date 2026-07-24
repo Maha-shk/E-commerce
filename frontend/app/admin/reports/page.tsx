@@ -10,7 +10,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NativeSelect } from "@/components/ui/select-native";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { ReportStatusBadge } from "@/components/admin/ReportStatusBadge";
-import { ScheduleReportButton } from "@/components/admin/ScheduleReportModal";
 import { SortButton } from "@/components/admin/SortButton";
 import { useReport } from "@/lib/hooks/use-admin";
 import { cn } from "@/lib/utils";
@@ -162,7 +161,6 @@ export default function ReportsPage() {
               />
             </div>
             <SortButton />
-            <ScheduleReportButton iconOnly />
           </div>
         </div>
 

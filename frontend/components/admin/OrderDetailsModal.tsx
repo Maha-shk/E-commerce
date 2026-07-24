@@ -8,9 +8,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/OrderBadges";
+import { OrderStatusBadge } from "@/components/admin/OrderBadges";
 import { formatEuro } from "@/lib/admin/format";
-import { orderStatusLabel, paymentStatusLabel, type Order } from "@/lib/api/models";
+import { orderStatusLabel, type Order } from "@/lib/api/models";
 
 /** Read-only order breakdown. Presentation only — nothing is editable. */
 export function OrderDetailsModal({
@@ -68,7 +68,6 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
         <div className="flex flex-wrap items-center gap-2.5">
           <DialogTitle className="text-2xl">Order {order.orderNumber}</DialogTitle>
           <OrderStatusBadge status={order.status} />
-          <PaymentStatusBadge status={order.paymentStatus} />
         </div>
         <DialogDescription className="mt-1">
           Placed on {new Date(order.placedAt).toLocaleDateString()} at{" "}

@@ -18,7 +18,7 @@ import { orderStatusLabel, type Order, type OrderStatus } from "@/lib/api/models
 type ChangeOrderStatusModalProps = {
   order: Order | null;
   onClose: () => void;
-  onSave?: (updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string }) => void;
+  onSave?: (updates: { status?: OrderStatus; shippingTracking?: string }) => void;
 };
 
 export function ChangeOrderStatusModal({ order, onClose, onSave }: ChangeOrderStatusModalProps) {
@@ -43,10 +43,9 @@ function ChangeOrderStatusForm({
 }: {
   order: Order;
   onClose: () => void;
-  onSave?: (updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string }) => void;
+  onSave?: (updates: { status?: OrderStatus; shippingTracking?: string }) => void;
 }) {
   const [status, setStatus] = useState<OrderStatus>(order.status);
-  const [paymentStatus, setPaymentStatus] = useState(order.paymentStatus);
   const [shippingTracking, setShippingTracking] = useState(order.shippingTracking || "");
   const [notify, setNotify] = useState(false);
 
@@ -59,16 +58,11 @@ function ChangeOrderStatusForm({
     "RETURNED",
   ];
 
-  const paymentStatusOptions = ["PAID", "PENDING", "REFUNDED", "FAILED"];
-
   function handleSave() {
-    const updates: { status?: OrderStatus; paymentStatus?: string; shippingTracking?: string } = {};
+    const updates: { status?: OrderStatus; shippingTracking?: string } = {};
 
     if (status !== order.status) {
       updates.status = status;
-    }
-    if (paymentStatus !== order.paymentStatus) {
-      updates.paymentStatus = paymentStatus;
     }
     if (shippingTracking !== order.shippingTracking) {
       updates.shippingTracking = shippingTracking || undefined;
@@ -118,28 +112,6 @@ function ChangeOrderStatusForm({
           {statusOptions.map((s) => (
             <option key={s} value={s}>
               {orderStatusLabel[s]}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-
-      {/* Payment status */}
-      <div className="space-y-2">
-        <label
-          htmlFor="payment-status"
-          className="text-xs font-semibold uppercase tracking-wider text-subtle"
-        >
-          Payment Status
-        </label>
-        <NativeSelect
-          id="payment-status"
-          className="h-11 rounded-lg bg-card"
-          value={paymentStatus}
-          onChange={(e) => setPaymentStatus(e.target.value as typeof paymentStatus)}
-        >
-          {paymentStatusOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
             </option>
           ))}
         </NativeSelect>
