@@ -57,7 +57,7 @@ export function useLogin() {
       setSession(data);
       toast.success(`Welcome back, ${data.user.fullName.split(" ")[0]}!`);
       // Staff land in the admin console, customers in their portal.
-      router.push(isAdminRole(data.user.role) ? "/admin" : "/dashboard");
+      router.push(isAdminRole(data.user.role) ? "/dashboard" : "/account");
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });

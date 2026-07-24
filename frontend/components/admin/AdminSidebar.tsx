@@ -66,7 +66,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col bg-sidebar">
       {/* Brand */}
       <div className="flex items-center px-6 py-5">
-        <Link href="/admin" onClick={onNavigate} aria-label="CENTO Servizi home">
+        <Link href="/dashboard" onClick={onNavigate} aria-label="CENTO Servizi home">
           <Logo className="h-11 w-auto" />
         </Link>
       </div>
@@ -143,7 +143,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="min-w-52">
               <DropdownMenuItem asChild>
-                <Link href="/admin/profile" onClick={onNavigate}>
+                <Link href="/profile" onClick={onNavigate}>
                   <UserRound />
                   My Profile
                 </Link>

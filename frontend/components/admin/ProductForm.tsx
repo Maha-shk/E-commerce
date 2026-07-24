@@ -183,7 +183,7 @@ export function ProductForm({ mode, product }: ProductFormProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="xl">
-            <Link href="/admin/products">Cancel</Link>
+            <Link href="/products">Cancel</Link>
           </Button>
           <Button type="submit" size="xl">
             Save Product

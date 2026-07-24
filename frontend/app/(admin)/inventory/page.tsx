@@ -113,7 +113,7 @@ export default function InventoryPage() {
               Export Data
             </Button>
             <Button asChild size="xl">
-              <Link href="/admin/products/new">
+              <Link href="/products/new">
                 <Plus />
                 Add Product
               </Link>

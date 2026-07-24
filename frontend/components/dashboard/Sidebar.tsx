@@ -33,7 +33,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col bg-sidebar">
       {/* Brand */}
       <div className="flex h-16 items-center px-6">
-        <Link href="/dashboard" onClick={onNavigate} aria-label="CENTO Servizi home">
+        <Link href="/account" onClick={onNavigate} aria-label="CENTO Servizi home">
           <Logo />
         </Link>
       </div>

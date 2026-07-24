@@ -32,7 +32,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
 
     // Authenticated, but a customer account — send them to their own portal.
     if (user && !isAdmin) {
-      router.replace("/dashboard");
+      router.replace("/account");
     }
   }, [hydrated, isAuthenticated, isError, isAdmin, user, pathname, router]);
 

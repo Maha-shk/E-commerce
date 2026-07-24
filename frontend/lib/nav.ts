@@ -10,33 +10,33 @@ export type NavItem = {
 
 /** Primary navigation for the customer dashboard. */
 export const dashboardNav: NavItem[] = [
-  { name: "Overview", href: "/dashboard", icon: "overview", exact: true },
-  { name: "My Orders", href: "/dashboard/orders", icon: "orders" },
-  { name: "Wishlist", href: "/dashboard/wishlist", icon: "wishlist" },
-  { name: "Address Book", href: "/dashboard/addresses", icon: "address" },
-  { name: "Profile", href: "/dashboard/profile", icon: "profile" },
+  { name: "Overview", href: "/account", icon: "overview", exact: true },
+  { name: "My Orders", href: "/account/orders", icon: "orders" },
+  { name: "Wishlist", href: "/account/wishlist", icon: "wishlist" },
+  { name: "Address Book", href: "/account/addresses", icon: "address" },
+  { name: "Profile", href: "/account/profile", icon: "profile" },
 ];
 
 export type PageMeta = { title: string; subtitle: string };
 
 const pageMeta: Record<string, PageMeta> = {
-  "/dashboard": {
+  "/account": {
     title: "Overview",
     subtitle: "A snapshot of your orders, wishlist and account activity.",
   },
-  "/dashboard/orders": {
+  "/account/orders": {
     title: "My Orders",
     subtitle: "Track deliveries and review your purchase history.",
   },
-  "/dashboard/wishlist": {
+  "/account/wishlist": {
     title: "Wishlist",
     subtitle: "Products you've saved for later.",
   },
-  "/dashboard/addresses": {
+  "/account/addresses": {
     title: "Address Book",
     subtitle: "Manage your shipping and billing addresses.",
   },
-  "/dashboard/profile": {
+  "/account/profile": {
     title: "Profile",
     subtitle: "Update your personal details and account security.",
   },

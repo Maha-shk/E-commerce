@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useUnreadCount } from "@/lib/hooks/use-admin";
 
 /** Routes where the global search field is suppressed. */
-const HIDE_SEARCH_ON = ["/admin/profile"];
+const HIDE_SEARCH_ON = ["/profile"];
 
 /** Sticky header for the admin console: mobile menu trigger, global search, notifications. */
 export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
@@ -49,7 +49,7 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
             aria-label="Messages"
             className="relative size-10"
           >
-            <Link href="/admin/messages">
+            <Link href="/messages">
               <Mail className="size-5" />
               <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
             </Link>
@@ -64,7 +64,7 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
             }
             className="relative size-10"
           >
-            <Link href="/admin/notifications">
+            <Link href="/notifications">
               <Bell className="size-5" />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-white ring-2 ring-background">

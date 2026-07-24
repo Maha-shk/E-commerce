@@ -206,7 +206,7 @@ function RecentOrdersCard() {
 
       <div className="border-t p-3">
         <Button asChild variant="ghost" className="w-full font-semibold text-primary">
-          <Link href="/admin/orders">View All Orders</Link>
+          <Link href="/orders">View All Orders</Link>
         </Button>
       </div>
     </Card>
@@ -286,7 +286,7 @@ function ProductInventoryCard() {
                           size="icon-sm"
                           aria-label={`Edit ${product.name}`}
                         >
-                          <Link href={`/admin/products/${product.id}/edit`}>
+                          <Link href={`/products/${product.id}/edit`}>
                             <Pencil />
                           </Link>
                         </Button>
@@ -324,7 +324,7 @@ function ProductInventoryCard() {
           Showing {products.length} of {data?.meta.total ?? 0} products
         </p>
         <Button asChild variant="ghost" size="sm" className="font-semibold text-primary">
-          <Link href="/admin/products">View all</Link>
+          <Link href="/products">View all</Link>
         </Button>
       </div>
     </Card>
