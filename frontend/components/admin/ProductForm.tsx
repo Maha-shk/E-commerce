@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Loader2 } from "lucide-react";
 import { useCategories, useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-admin";
-import type { Product, ProductVisibility } from "@/lib/api/models";
+import type { Product, ProductVisibility, StockStatus } from "@/lib/api/models";
 import { cn } from "@/lib/utils";
 
 type ProductFormProps = {
@@ -141,8 +141,30 @@ export function ProductForm({ mode, product }: ProductFormProps) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    // Frontend-only for now — no backend to persist to yet.
-    router.push("/admin/products");
+
+    const stockValue = parseInt(stock) || 0;
+
+    const productData = {
+      name,
+      brand,
+      categoryId: categoryId || null,
+      description,
+      sku,
+      stock: stockValue,
+      price: parseFloat(basePrice) || 0,
+      discount: parseFloat(discount) || 0,
+      visibility,
+      scheduledDate: visibility === "SCHEDULED" ? scheduledDate : null,
+      tags,
+      images: images.map(img => img.url),
+      variants,
+    };
+
+    if (mode === "add") {
+      createProduct.mutate(productData);
+    } else {
+      updateProduct.mutate(productData);
+    }
   }
 
   return (
