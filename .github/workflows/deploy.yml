@@ -1,0 +1,138 @@
+name: Deploy Frontend to cPanel
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Create production environment file
+      run: |
+        cd frontend
+        echo "NEXT_PUBLIC_API_URL=${{ secrets.API_URL }}" > .env.production
+
+    - name: Build Next.js application
+      run: |
+        cd frontend
+        npm run build
+        echo "Build completed successfully"
+
+    - name: Verify build output
+      run: |
+        echo "Checking if build directory exists..."
+        if [ -d "frontend/out" ]; then
+          echo "✅ Build directory found"
+          ls -la frontend/out
+        else
+          echo "❌ Build directory not found"
+          exit 1
+        fi
+
+    - name: Create .htaccess file
+      run: |
+        cd frontend/out
+        cat > .htaccess << 'EOF'
+        # Enable Rewrite Engine for SPA routing
+        RewriteEngine On
+        RewriteBase /
+
+        # Handle static files directly
+        RewriteRule ^index\.html$ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule . /index.html [L]
+
+        # Security Headers
+        <IfModule mod_headers.c>
+          Header set X-Content-Type-Options "nosniff"
+          Header set X-Frame-Options "SAMEORIGIN"
+          Header set X-XSS-Protection "1; mode=block"
+          Header set Referrer-Policy "strict-origin-when-cross-origin"
+        </IfModule>
+
+        # Gzip Compression
+        <IfModule mod_deflate.c>
+          AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript
+        </IfModule>
+
+        # Cache Control
+        <IfModule mod_expires.c>
+          ExpiresActive On
+          ExpiresByType image/jpg "access plus 1 year"
+          ExpiresByType image/jpeg "access plus 1 year"
+          ExpiresByType image/gif "access plus 1 year"
+          ExpiresByType image/png "access plus 1 year"
+          ExpiresByType image/webp "access plus 1 year"
+          ExpiresByType text/css "access plus 1 month"
+          ExpiresByType application/javascript "access plus 1 month"
+        </IfModule>
+        EOF
+
+    - name: Deploy to cPanel via FTP
+      uses: SamKirkland/FTP-Deploy-Action@4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        server-dir: /public_html/
+        local-dir: frontend/out/
+        exclude: |
+          **/.git*
+          **/.git*/**
+          **/node_modules/**
+          **/.env*
+
+    - name: Deployment summary
+      if: success()
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "📤 Deployed to: ${{ secrets.FTP_SERVER }}"
+        echo "🌐 Access your site at: https://admin.cento-servizi.it"
+        echo "📦 API URL: ${{ secrets.API_URL }}"
+
+    - name: Deployment failure notification
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Please check the logs above for details."
+        exit 1
+
+  build-summary:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+
+    steps:
+    - name: Deployment Summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ${{ needs.build-and-deploy.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ needs.build-and-deploy.result }}" == "success" ]; then
+          echo "✅ **Deployment successful!** Your site should be live at: https://admin.cento-servizi.it" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Deployment failed.** Please check the workflow logs." >> $GITHUB_STEP_SUMMARY
+        fi
