@@ -20,6 +20,8 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
+# Disable Next.js font optimization to avoid Google Fonts network issues
+ENV NEXT_PUBLIC_SKIP_FONT_OPTIMIZATION=true
 RUN npm run build
 
 # ---- runtime: minimal image serving the standalone server ----

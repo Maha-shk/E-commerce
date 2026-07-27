@@ -1,21 +1,13 @@
 import type { Metadata } from "next";
-import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-poppins",
-  display: "swap",
-});
+// Use system fonts to avoid Google Fonts network issues in Docker builds
+const systemFonts = cn(
+  "font-sans antialiased",
+  "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+);
 
 export const metadata: Metadata = {
   title: "CENTO Servizi — Customer Portal",
@@ -28,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn(inter.variable, poppins.variable)}>
-      <body className="min-h-screen">
+    <html lang="en">
+      <body className={cn("min-h-screen", systemFonts)}>
         <Providers>{children}</Providers>
       </body>
     </html>
