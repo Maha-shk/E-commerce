@@ -1,17 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Static export for cPanel deployment - generates HTML/CSS/JS files
-  // This allows deployment to traditional web hosting without Node.js
-  output: "export",
+  // Standalone output for Docker deployment
+  output: "standalone",
 
-  // Image optimization configuration for static export
+  // Image optimization configuration
   images: {
-    unoptimized: true, // Required for static export
+    unoptimized: false, // Enable optimization for Docker deployment
   },
 
-  // Add trailing slash for better static routing
-  trailingSlash: true,
+  // Add trailing slash for better routing
+  trailingSlash: false,
 
   // Base path and asset prefix (empty for root domain deployment)
   basePath: "",
@@ -19,7 +18,7 @@ const nextConfig: NextConfig = {
 
   // Environment variables (will be set during build)
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://api.cento-servizi.it/api",
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api",
   },
 };
 

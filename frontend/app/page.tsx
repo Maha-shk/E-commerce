@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
 export default function Home() {
-  // Redirect unauthenticated users to login
-  redirect("/login");
+  // Redirect to dashboard - admin routes work at /dashboard, /orders, etc.
+  redirect("/dashboard");
 }
