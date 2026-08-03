@@ -1,4 +1,8 @@
 {
+  "name": "E-commerce",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E-commerce platform with NestJS backend and Next.js frontend",
   "dependencies": {
     "nodemailer": "^9.0.3"
   }

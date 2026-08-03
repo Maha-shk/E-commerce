@@ -45,3 +45,16 @@ EXPOSE 4000
 # Entrypoint applies pending migrations (and seeds on first run) before starting.
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
+
+# ---- development: full development environment with hot reload ----
+FROM node:22-bookworm-slim AS development
+WORKDIR /app
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm install
+RUN npx prisma generate
+
+EXPOSE 4000
+CMD ["npm", "run", "start:dev"]

@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   // Image optimization configuration
   images: {
     unoptimized: false, // Enable optimization for Docker deployment
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+        port: '',
+        pathname: '/**',
+      },
+    ],
   },
 
   // Add trailing slash for better routing

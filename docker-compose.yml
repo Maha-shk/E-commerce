@@ -65,6 +65,12 @@ services:
       MAIL_FROM: ${MAIL_FROM:-CENTO Admin <no-reply@cento.local>}
     ports:
       - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      # Anonymous volume to preserve node_modules inside container
+      - /app/node_modules
+      # Uncomment below for development with hot reload (requires dev server)
+      # - ./backend/src:/app/src:ro
+      # - ./backend/prisma:/app/prisma:ro
 
   # ---- Next.js frontend ----------------------------------------------------
   frontend:
@@ -83,6 +89,15 @@ services:
       PORT: 3000
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      # Mount only public folder for image updates without rebuilding
+      - ./frontend/public:/app/public:ro
+      # Anonymous volume to preserve node_modules inside container
+      - /app/node_modules
+      # Uncomment below for development with hot reload (requires dev server)
+      # - ./frontend/app:/app/app:ro
+      # - ./frontend/components:/app/components:ro
+      # - ./frontend/lib:/app/lib:ro
 
 volumes:
   # Local, persistent Postgres storage. Remove with `docker compose down -v`.

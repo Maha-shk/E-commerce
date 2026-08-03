@@ -6,6 +6,40 @@ import { useState } from "react";
 
 export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [bestSellersScrollIndex, setBestSellersScrollIndex] = useState(0);
+  const [salesScrollIndex, setSalesScrollIndex] = useState(0);
+
+  const scrollBestSellers = (direction: 'left' | 'right') => {
+    const container = document.getElementById('bestsellers-container');
+    if (container) {
+      const cardWidth = 288 + 24; // w-72 (288px) + gap-6 (24px)
+      const scrollAmount = cardWidth * 2; // Scroll 2 cards at a time
+
+      if (direction === 'left') {
+        container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        setBestSellersScrollIndex(Math.max(0, bestSellersScrollIndex - 2));
+      } else {
+        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        setBestSellersScrollIndex(Math.min(3, bestSellersScrollIndex + 2));
+      }
+    }
+  };
+
+  const scrollSales = (direction: 'left' | 'right') => {
+    const container = document.getElementById('sales-container');
+    if (container) {
+      const cardWidth = 288 + 24; // w-72 (288px) + gap-6 (24px)
+      const scrollAmount = cardWidth * 2; // Scroll 2 cards at a time
+
+      if (direction === 'left') {
+        container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        setSalesScrollIndex(Math.max(0, salesScrollIndex - 2));
+      } else {
+        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        setSalesScrollIndex(Math.min(3, salesScrollIndex + 2));
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -51,17 +85,17 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* User Icon */}
-              <Link href="/auth/login" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </Link>
-
               {/* Favorite/Heart Icon */}
               <Link href="/favorites" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </Link>
+
+              {/* User Icon */}
+              <Link href="/auth/login" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </Link>
 
@@ -100,7 +134,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="pt-16 md:pt-20 pb-8 md:pb-12 bg-white">
         <div className="container mx-auto px-4">
           <div className="relative h-120 md:h-140 rounded-3xl overflow-hidden shadow-2xl">
             <Image
@@ -114,12 +148,12 @@ export default function HomePage() {
             <div className="absolute inset-0 flex items-center">
               <div className="container mx-auto px-4">
                 <div className="max-w-2xl" style={{ marginLeft: '3rem' }}>
-                  <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-4 leading-tight">
                     Experience the Future of Audio Engineering
                   </h1>
                   <Link
                     href="/products"
-                    className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-colors shadow-lg"
+                    className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-3xl font-semibold text-sm transition-colors shadow-lg"
                   >
                     Shop Now
                   </Link>
@@ -182,37 +216,77 @@ export default function HomePage() {
               </svg>
             </Link>
           </div>
-          <div className="flex overflow-x-auto gap-6 pb-4 scrollbar-hide">
-            {[
-              { name: "Dell XPS Laptop", price: "$999.99", image: "product-1.jpg" },
-              { name: "Audio Over-Ear Headphones", price: "$299.99", image: "product-2.jpg" },
-              { name: "Minimalist Duffel Bag", price: "$149.99", image: "product-3.jpg" },
-              { name: "Linear Mechanical Keyboard", price: "$89.99", image: "product-4.jpg" }
-            ].map((product, index) => (
-              <div
-                key={index}
-                className="shrink-0 w-72 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden group"
-              >
-                <div className="relative h-56 overflow-hidden">
-                  <Image
-                    src={`/images/homepage/${product.image}`}
-                    alt={product.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+
+          {/* Carousel Container */}
+          <div className="relative">
+            {/* Left Navigation Arrow - Positioned in middle */}
+            <button
+              onClick={() => scrollBestSellers('left')}
+              disabled={bestSellersScrollIndex === 0}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+              aria-label="Previous products"
+              style={{ transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Products Carousel */}
+            <div
+              id="bestsellers-container"
+              className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitScrollbar: 'none'
+              }}
+            >
+              {[
+                { name: "Dell XPS Laptop", price: "$999.99", image: "https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=400&h=300&fit=crop" },
+                { name: "Audio Over-Ear Headphones", price: "$299.99", image: "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=400&h=300&fit=crop" },
+                { name: "Minimalist Duffel Bag", price: "$149.99", image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=300&fit=crop" },
+                { name: "Linear Mechanical Keyboard", price: "$89.99", image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=300&fit=crop" },
+                { name: "Smart Watch Pro", price: "$199.99", image: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=400&h=300&fit=crop" }
+              ].map((product, index) => (
+                <div
+                  key={index}
+                  className="shrink-0 w-72 bg-white rounded-xl shadow-md hover:shadow-lg transition-all overflow-hidden group"
+                >
+                  <div className="relative h-56 overflow-hidden">
+                    <Image
+                      src={product.image}
+                      alt={product.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="p-5">
+                    <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2">{product.name}</h3>
+                    <p className="text-orange-500 font-bold text-lg">{product.price}</p>
+                  </div>
                 </div>
-                <div className="p-5">
-                  <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2">{product.name}</h3>
-                  <p className="text-orange-500 font-bold text-lg">{product.price}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* Right Navigation Arrow - Positioned in middle */}
+            <button
+              onClick={() => scrollBestSellers('right')}
+              disabled={bestSellersScrollIndex >= 3}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+              aria-label="Next products"
+              style={{ transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       </section>
 
       {/* New Arrivals */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="pt-16 md:pt-20 pb-4 md:pb-8 bg-white">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
@@ -228,18 +302,18 @@ export default function HomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Featured Bundle - Larger Card */}
             <div className="lg:col-span-2 bg-gray-50 rounded-2xl overflow-hidden group">
-              <div className="relative h-80">
+              <div className="relative h-full" style={{ minHeight: '512px' }}>
                 <Image
-                  src="/images/homepage/bundle-product.jpg"
+                  src="https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?w=1200&h=600&fit=crop"
                   alt="Studio Tech Bundle"
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                 <div className="absolute bottom-0 left-0 right-0 p-8">
                   <h3 className="text-white text-2xl font-bold mb-2">Studio Tech Bundle</h3>
                   <p className="text-white/80 mb-4">Complete setup for creators</p>
-                  <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                  <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-3xl font-semibold transition-colors">
                     Explore Bundle
                   </button>
                 </div>
@@ -249,24 +323,25 @@ export default function HomePage() {
             {/* Two Smaller Products */}
             <div className="space-y-6">
               {[
-                { name: "Professional Camera Kit", price: "$1,299.99", image: "camera-product.jpg" },
-                { name: "Mechanical Keyboard Pro", price: "$159.99", image: "keyboard-product.jpg" }
+                { name: "Professional Camera Kit", price: "$1,299.99", image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&h=400&fit=crop" },
+                { name: "Mechanical Keyboard Pro", price: "$159.99", image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=600&h=400&fit=crop" }
               ].map((product, index) => (
                 <div
                   key={index}
-                  className="bg-gray-50 rounded-xl overflow-hidden group flex h-[calc(50%-12px)]"
+                  className="bg-gray-50 rounded-xl overflow-hidden group h-64"
                 >
-                  <div className="relative w-1/2">
+                  <div className="relative h-full">
                     <Image
-                      src={`/images/homepage/${product.image}`}
+                      src={product.image}
                       alt={product.name}
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                  </div>
-                  <div className="w-1/2 p-4 flex flex-col justify-center">
-                    <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 text-sm">{product.name}</h3>
-                    <p className="text-orange-500 font-bold">{product.price}</p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <h3 className="text-white font-semibold mb-1 text-sm">{product.name}</h3>
+                      <p className="text-white font-bold">{product.price}</p>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -276,7 +351,7 @@ export default function HomePage() {
       </section>
 
       {/* Sales Section */}
-      <section className="py-16 md:py-20 bg-gray-50">
+      <section className="py-16 md:py-20 bg-white">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
@@ -289,37 +364,77 @@ export default function HomePage() {
               </svg>
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { name: "Studio Headphones", price: "$129.99", originalPrice: "$199.99", image: "sale-1.jpg", discount: 35 },
-              { name: "Travel Duffel", price: "$79.99", originalPrice: "$129.99", image: "sale-2.jpg", discount: 38 },
-              { name: "Essential Hoodie", price: "$39.99", originalPrice: "$69.99", image: "sale-3.jpg", discount: 43 },
-              { name: "Chrono Timepiece", price: "$499.99", originalPrice: "$799.99", image: "sale-4.jpg", discount: 38 }
-            ].map((product, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden group"
-              >
-                <div className="relative h-56 overflow-hidden">
-                  <Image
-                    src={`/images/homepage/${product.image}`}
-                    alt={product.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                    -{product.discount}%
+
+          {/* Carousel Container */}
+          <div className="relative">
+            {/* Left Navigation Arrow - Positioned in middle */}
+            <button
+              onClick={() => scrollSales('left')}
+              disabled={salesScrollIndex === 0}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+              aria-label="Previous products"
+              style={{ transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Products Carousel */}
+            <div
+              id="sales-container"
+              className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitScrollbar: 'none'
+              }}
+            >
+              {[
+                { name: "Studio Headphones", price: "$129.99", originalPrice: "$199.99", discount: 35, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop" },
+                { name: "Travel Duffel", price: "$79.99", originalPrice: "$129.99", discount: 38, image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=300&fit=crop" },
+                { name: "Essential Hoodie", price: "$39.99", originalPrice: "$69.99", discount: 43, image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=300&fit=crop" },
+                { name: "Chrono Timepiece", price: "$499.99", originalPrice: "$799.99", discount: 38, image: "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop" },
+                { name: "Wireless Earbuds", price: "$149.99", originalPrice: "$229.99", discount: 35, image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&h=300&fit=crop" }
+              ].map((product, index) => (
+                <div
+                  key={index}
+                  className="shrink-0 w-72 bg-white rounded-xl shadow-md hover:shadow-lg transition-all overflow-hidden group"
+                >
+                  <div className="relative h-56 overflow-hidden">
+                    <Image
+                      src={product.image}
+                      alt={product.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                      -{product.discount}%
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2">{product.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 line-through text-sm">{product.originalPrice}</span>
+                      <span className="text-orange-500 font-bold text-lg">{product.price}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="p-5">
-                  <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2">{product.name}</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-orange-500 font-bold text-lg">{product.price}</span>
-                    <span className="text-gray-400 line-through text-sm">{product.originalPrice}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* Right Navigation Arrow - Positioned in middle */}
+            <button
+              onClick={() => scrollSales('right')}
+              disabled={salesScrollIndex >= 3}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+              aria-label="Next products"
+              style={{ transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       </section>
