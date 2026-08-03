@@ -1,0 +1,36 @@
+# =============================================================================
+# Development mode with hot reloading
+# -----------------------------------------------------------------------------
+# Use this for local development with instant feedback:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
+services:
+  # ---- Next.js frontend (development mode) ------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      # Mount the frontend source code for hot reloading
+      - ./frontend:/app
+      - /app/node_modules
+    # Override the restart policy for development
+    restart: unless-stopped
+
+  # ---- NestJS backend (development mode) ------------------------------------
+  backend:
+    build:
+      context: ./backend
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      # Mount the backend source code for hot reloading
+      - ./backend:/app
+      - /app/node_modules
+      - /app/dist
+    restart: unless-stopped
