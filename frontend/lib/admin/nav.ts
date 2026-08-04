@@ -21,15 +21,15 @@ export type AdminNavItem = {
 
 /** Primary navigation for the admin console. */
 export const adminNav: AdminNavItem[] = [
-  { name: "Dashboard", href: "/dashboard", icon: "dashboard", exact: true },
-  { name: "Product", href: "/products", icon: "product" },
-  { name: "Category", href: "/categories", icon: "category" },
-  { name: "Inventory", href: "/inventory", icon: "inventory" },
-  { name: "Customers", href: "/customers", icon: "customers" },
-  { name: "Orders", href: "/orders", icon: "orders" },
-  { name: "Discounts", href: "/discounts", icon: "discounts" },
-  { name: "Reports", href: "/reports", icon: "reports" },
-  { name: "Settings", href: "/settings", icon: "settings" },
+  { name: "Dashboard", href: "/admin/dashboard", icon: "dashboard", exact: true },
+  { name: "Product", href: "/admin/products", icon: "product" },
+  { name: "Category", href: "/admin/categories", icon: "category" },
+  { name: "Inventory", href: "/admin/inventory", icon: "inventory" },
+  { name: "Customers", href: "/admin/customers", icon: "customers" },
+  { name: "Orders", href: "/admin/orders", icon: "orders" },
+  { name: "Discounts", href: "/admin/discounts", icon: "discounts" },
+  { name: "Reports", href: "/admin/reports", icon: "reports" },
+  { name: "Settings", href: "/admin/settings", icon: "settings" },
 ];
 
 /** Returns whether a nav item should render as active for a given pathname. */

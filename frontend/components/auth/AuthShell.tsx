@@ -36,6 +36,6 @@ export function AuthShell({
 /** The soft card surface used on every auth screen. */
 export function AuthCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-2xl border bg-card p-6 shadow-soft sm:p-8", className)}>{children}</div>
+    <div className={cn("rounded-2xl border bg-card p-6 sm:p-8", className)}>{children}</div>
   );
 }

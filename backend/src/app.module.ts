@@ -22,6 +22,7 @@ import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MessagesModule } from './messages/messages.module';
 import { SettingsModule } from './settings/settings.module';
+import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
@@ -43,6 +44,9 @@ import { SettingsModule } from './settings/settings.module';
     // Auth & identity
     AuthModule,
     UsersModule,
+
+    // Public API
+    PublicModule,
 
     // Admin dashboard features
     DashboardModule,
