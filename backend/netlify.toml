@@ -1,0 +1,25 @@
+[build]
+  command = "bash netlify/build.sh"
+  functions = "netlify/functions"
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+  # Include necessary files in serverless functions
+  included_files = ["prisma/schema.prisma", "prisma/migrations/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[dev]
+  command = "npm run start:dev"
+  port = 4000
+  targetPort = 4000
+  publish = "dist"
+
+# Environment variables (also set these in Netlify dashboard)
+[environment]
+  NODE_ENV = "production"

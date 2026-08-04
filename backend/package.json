@@ -22,7 +22,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "netlify": "netlify dev",
+    "netlify:build": "bash netlify/build.sh"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -36,6 +38,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.6",
     "@nestjs/throttler": "^6.5.0",
+    "@netlify/functions": "^2.8.2",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
@@ -69,6 +72,7 @@
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^17.0.0",
     "jest": "^30.0.0",
+    "netlify-cli": "^17.0.0",
     "prettier": "^3.4.2",
     "prisma": "^6.19.3",
     "source-map-support": "^0.5.21",
