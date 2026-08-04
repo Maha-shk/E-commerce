@@ -34,7 +34,7 @@ export function HomePageHeader({ mobileMenuOpen, setMobileMenuOpen }: {
             <Link href="/products" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">
               Products
             </Link>
-            <Link href="/products?new=true" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">
+            <Link href="/new-arrivals" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">
               New Arrivals
             </Link>
             <Link href="/contact" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">

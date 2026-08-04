@@ -9,6 +9,7 @@ export const customerKeys = {
   product: (id: string) => [...customerKeys.all, 'products', id] as const,
   relatedProducts: (categoryId: string | null, productId: string) =>
     [...customerKeys.all, 'products', 'related', categoryId, productId] as const,
+  brands: ['brands'] as const,
 } as const;
 
 /**
@@ -35,12 +36,13 @@ export function useProducts(params?: {
   sale?: boolean;
   page?: number;
   limit?: number;
-}) {
+}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: customerKeys.products(params),
     queryFn: () => publicService.getProducts(params),
     select: (data) => data.data,
     staleTime: 2 * 60 * 1000, // 2 minutes
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -57,5 +59,17 @@ export function useRelatedProducts(categoryId: string | null, productId: string,
     enabled: !!categoryId,
     select: (data) => data.data.filter((p) => p.id !== productId),
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Hook to get all unique brands
+ */
+export function useBrands() {
+  return useQuery({
+    queryKey: customerKeys.brands,
+    queryFn: () => publicService.getBrands(),
+    select: (data) => data.data,
+    staleTime: 10 * 60 * 1000, // 10 minutes - brands don't change often
   });
 }

@@ -22,7 +22,6 @@ export interface Category {
   thumbnailName: string | null;
   parentId: string | null;
   productCount: number;
-  subcategoryCount: number;
 }
 
 export interface Product {
@@ -135,6 +134,14 @@ export const publicService = {
       '/public/featured-products',
       { params },
     );
+    return data;
+  },
+
+  /**
+   * Get all unique brands
+   */
+  async getBrands(): Promise<ApiResponse<string[]>> {
+    const { data } = await api.get<ApiResponse<string[]>>('/public/brands');
     return data;
   },
 };

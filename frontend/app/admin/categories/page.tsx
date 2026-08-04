@@ -101,12 +101,11 @@ export default function CategoriesPage() {
   }
 
   function handleExport() {
-    const header = ["ID", "Name", "Slug", "Subcategories", "Products", "Status", "Visibility"];
+    const header = ["ID", "Name", "Slug", "Products", "Status", "Visibility"];
     const rows = categories.map((c) => [
       c.id,
       c.name,
       c.slug,
-      String(c.subcategories),
       String(c.products),
       c.status,
       c.visibility,
@@ -143,7 +142,7 @@ export default function CategoriesPage() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Card>
           <CardContent className="flex flex-col gap-1">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
@@ -156,18 +155,6 @@ export default function CategoriesPage() {
               </p>
               <span className="text-xs font-medium text-subtle">Across all pages</span>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <Layers className="size-4" />
-              Subcategories
-            </p>
-            <p className="font-display text-2xl font-semibold text-foreground">
-              {categories.reduce((sum, c) => sum + c.subcategories, 0)}
-            </p>
           </CardContent>
         </Card>
 
@@ -243,7 +230,6 @@ export default function CategoriesPage() {
                 <th className="px-5 py-3 text-left">Image</th>
                 <th className="px-2 py-3 text-left">Category Name</th>
                 <th className="px-2 py-3 text-left">Slug</th>
-                <th className="px-2 py-3 text-left">Subcategories</th>
                 <th className="px-2 py-3 text-left">Status</th>
                 <th className="px-2 py-3 text-left">Products</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -265,9 +251,6 @@ export default function CategoriesPage() {
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
                       {category.slug}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                      {category.subcategories}
                     </td>
                     <td className="px-2 py-3">
                       <Badge variant={category.status === "ACTIVE" ? "success" : "secondary"}>
@@ -305,7 +288,7 @@ export default function CategoriesPage() {
 
               {categories.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-subtle">
+                  <td colSpan={6} className="px-4 py-14 text-center text-sm text-subtle">
                     <FolderTree className="mx-auto mb-2 size-8 text-muted-foreground" />
                     No categories match your filters.
                   </td>

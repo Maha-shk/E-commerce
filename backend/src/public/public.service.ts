@@ -1,12 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ProductsService } from '../products/products.service';
 import { CategoriesService } from '../categories/categories.service';
+import { MessagesService } from '../messages/messages.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { MessageDirection, Role } from '@prisma/client';
+import { ContactFormDto } from './dto/contact.dto';
 
 @Injectable()
 export class PublicService {
   constructor(
     private readonly productsService: ProductsService,
     private readonly categoriesService: CategoriesService,
+    private readonly messagesService: MessagesService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async getBanners(params?: any) {
@@ -27,11 +33,8 @@ export class PublicService {
         name: cat.name,
         slug: cat.slug,
         description: cat.description || '',
-        icon: cat.icon || 'home',
         thumbnailName: cat.thumbnailName || null,
-        parentId: cat.parentId || null,
-        productCount: cat.productCount || 0,
-        subcategoryCount: cat.subcategoryCount || 0,
+        productCount: cat.products || 0,
       })),
     };
   }
@@ -211,5 +214,115 @@ export class PublicService {
         };
       }),
     };
+  }
+
+  async getBrands() {
+    // Fetch all products to extract unique brands
+    const queryParams = {
+      page: 1,
+      limit: 1000, // Get all products to extract brands
+      skip: 0,
+      sortBy: 'name' as const,
+      sortOrder: 'asc' as const,
+    };
+
+    const products = await this.productsService.findAll(queryParams);
+
+    // Extract unique brands and filter out null/empty values
+    const brands = [...new Set(
+      products.data
+        .map((product: any) => product.brand)
+        .filter((brand: string) => brand && brand.trim().length > 0)
+    )].sort(); // Sort alphabetically
+
+    return {
+      success: true,
+      data: brands,
+    };
+  }
+
+  async submitContactForm(data: ContactFormDto) {
+    // Check if a customer with this email already exists
+    let customer = await this.prisma.user.findFirst({
+      where: {
+        email: data.email,
+        role: Role.CUSTOMER,
+      },
+      select: { id: true },
+    });
+
+    // If no customer exists, create a new guest customer
+    if (!customer) {
+      customer = await this.prisma.user.create({
+        data: {
+          email: data.email,
+          fullName: data.name,
+          role: Role.CUSTOMER,
+          status: 'ACTIVE',
+          // Generate a random password for guest customers (they can reset it later)
+          passwordHash: Buffer.from(Math.random().toString()).toString('base64'),
+        },
+        select: { id: true },
+      });
+    }
+
+    // Check if there's an existing conversation for this customer
+    const existingConversation = await this.prisma.conversation.findFirst({
+      where: { customerId: customer.id },
+      select: { id: true },
+    });
+
+    // Prepare the message text with subject
+    const messageText = `[${data.subject}]\n\n${data.message}`;
+
+    if (existingConversation) {
+      // Add message to existing conversation
+      await this.prisma.message.create({
+        data: {
+          conversationId: existingConversation.id,
+          direction: MessageDirection.INCOMING,
+          text: messageText,
+        },
+      });
+
+      // Update conversation's last message time and unread count
+      await this.prisma.conversation.update({
+        where: { id: existingConversation.id },
+        data: {
+          lastMessageAt: new Date(),
+          unreadCount: { increment: 1 },
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          conversationId: existingConversation.id,
+          message: 'Your message has been sent successfully!',
+        },
+      };
+    } else {
+      // Create new conversation with the message
+      const conversation = await this.prisma.conversation.create({
+        data: {
+          customerId: customer.id,
+          messages: {
+            create: {
+              direction: MessageDirection.INCOMING,
+              text: messageText,
+            },
+          },
+          unreadCount: 1,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          conversationId: conversation.id,
+          message: 'Your message has been sent successfully!',
+        },
+      };
+    }
   }
 }

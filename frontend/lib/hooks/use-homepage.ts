@@ -50,6 +50,31 @@ export function useHomepageCategories(limit = 10) {
 }
 
 /**
+ * Hook to get all categories for categories page
+ */
+export function useCategories(limit = 100) {
+  return useQuery({
+    queryKey: [...homepageKeys.categories(), 'all'],
+    queryFn: () => publicService.getCategories({ limit }),
+    select: (data) => data.data,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+/**
+ * Hook to get a single category by slug
+ */
+export function useCategoryBySlug(slug: string) {
+  return useQuery({
+    queryKey: [...homepageKeys.categories(), 'slug', slug],
+    queryFn: () => publicService.getCategories({ limit: 100 }),
+    select: (data) => data?.data?.find(cat => cat.slug === slug) || null,
+    enabled: !!slug,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+/**
  * Hook to get best sellers for homepage
  */
 export function useBestSellers(limit = 5) {

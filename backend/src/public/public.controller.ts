@@ -1,7 +1,10 @@
-import { Controller, Get, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, Body } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
 import { PublicService } from './public.service';
+import { ContactFormDto } from './dto/contact.dto';
 
+@ApiTags('public')
 @Public()
 @Controller('public')
 export class PublicController {
@@ -59,5 +62,16 @@ export class PublicController {
     @Query('limit') limit?: number,
   ) {
     return this.publicService.getFeaturedProducts({ section, limit });
+  }
+
+  @Get('brands')
+  async getBrands() {
+    return this.publicService.getBrands();
+  }
+
+  @Post('contact')
+  @ApiOperation({ summary: 'Submit contact form (public endpoint - no auth required)' })
+  async submitContactForm(@Body() contactFormDto: ContactFormDto) {
+    return this.publicService.submitContactForm(contactFormDto);
   }
 }

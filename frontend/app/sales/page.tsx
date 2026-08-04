@@ -9,7 +9,7 @@ import { Loader2, ChevronDown, ChevronUp, Check } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
-function ProductsPageContent() {
+function SalesContent() {
   const searchParams = useSearchParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -66,8 +66,9 @@ function ProductsPageContent() {
   const categoryParam = searchParams.get("category");
   const searchParam = searchParams.get("search");
 
-  // Fetch products
+  // Fetch sale products
   const { data: products, isLoading, isError } = useProducts({
+    sale: true,
     categoryId: categoryParam || undefined,
     search: searchParam || undefined,
     limit: 50,
@@ -132,15 +133,16 @@ function ProductsPageContent() {
     if (sortBy === "price-high") return b.salePrice - a.salePrice;
     if (sortBy === "name") return a.name.localeCompare(b.name);
     if (sortBy === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    if (sortBy === "discount") return b.discountPercent - a.discountPercent;
     return 0;
   });
 
   const sortOptions = [
     { value: "newest", label: "Newest Arrivals" },
+    { value: "discount", label: "Biggest Discount" },
     { value: "price-low", label: "Price: Low to High" },
     { value: "price-high", label: "Price: High to Low" },
     { value: "name", label: "Name: A to Z" },
-    { value: "featured", label: "Featured" },
   ];
 
   // Get current sort label
@@ -340,54 +342,57 @@ function ProductsPageContent() {
 
           {/* Main Content Area */}
           <div className="flex-1">
-            {/* Sort Bar and Product Count */}
-            <div className="flex items-center justify-between mb-6">
-              <p className="text-gray-600 text-sm">
-                Showing <span className="font-semibold text-gray-900">{sortedProducts.length}</span> {sortedProducts.length === 1 ? "product" : "products"}
-              </p>
+            {/* Page Title and Sort Bar */}
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">Sales</h1>
+              <div className="flex items-center justify-between">
+                <p className="text-gray-600 text-sm">
+                  Showing <span className="font-semibold text-gray-900">{sortedProducts.length}</span> {sortedProducts.length === 1 ? "product" : "products"}
+                </p>
 
-              {/* Sort Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setSortOpen(!sortOpen)}
-                  className={`flex items-center space-x-3 px-5 py-2.5 border-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    sortOpen
-                      ? "border-[#00234E] bg-[#00234E]/5 shadow-md shadow-[#00234E]/20"
-                      : "border-gray-200 hover:border-[#00234E] hover:bg-[#00234E]/5"
-                  }`}
-                >
-                  <span className="text-gray-600">Sort by:</span>
-                  <span className="font-semibold text-[#00234E]">{currentSortLabel}</span>
-                  <ChevronDown className={`w-4 h-4 text-[#00234E] transition-transform duration-200 ${sortOpen ? 'rotate-180' : ''}`} />
-                </button>
+                {/* Sort Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setSortOpen(!sortOpen)}
+                    className={`flex items-center space-x-3 px-5 py-2.5 border-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      sortOpen
+                        ? "border-[#00234E] bg-[#00234E]/5 shadow-md shadow-[#00234E]/20"
+                        : "border-gray-200 hover:border-[#00234E] hover:bg-[#00234E]/5"
+                    }`}
+                  >
+                    <span className="text-gray-600">Sort by:</span>
+                    <span className="font-semibold text-[#00234E]">{currentSortLabel}</span>
+                    <ChevronDown className={`w-4 h-4 text-[#00234E] transition-transform duration-200 ${sortOpen ? 'rotate-180' : ''}`} />
+                  </button>
 
-                {sortOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white border-2 border-gray-100 rounded-lg shadow-xl shadow-gray-200/50 z-10 overflow-hidden">
-                    <div className="p-1">
-                      {sortOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setSortBy(option.value);
-                            setSortOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-3 text-sm transition-all duration-200 rounded-md ${
-                            sortBy === option.value
-                              ? "bg-[#00234E] text-white font-semibold shadow-md"
-                              : "text-gray-700 hover:bg-gray-100 font-medium"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{option.label}</span>
-                            {sortBy === option.value && (
-                              <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                  {sortOpen && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white border-2 border-gray-100 rounded-lg shadow-xl shadow-gray-200/50 z-10 overflow-hidden">
+                      <div className="p-1">
+                        {sortOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setSortBy(option.value);
+                              setSortOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm transition-all duration-200 rounded-md ${
+                              sortBy === option.value
+                                ? "bg-[#00234E] text-white font-semibold shadow-md"
+                                : "text-gray-700 hover:bg-gray-100 font-medium"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>{option.label}</span>
+                              {sortBy === option.value && (
+                                <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -535,7 +540,7 @@ function ProductsPageContent() {
   );
 }
 
-export default function ProductsPage() {
+export default function SalesPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-[#FBF9F8]">
@@ -548,7 +553,7 @@ export default function ProductsPage() {
         <HomePageFooter />
       </div>
     }>
-      <ProductsPageContent />
+      <SalesContent />
     </Suspense>
   );
 }

@@ -52,12 +52,12 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#FBF9F8]">
       {/* Header/Navigation */}
       <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
 
       {/* Hero Section */}
-      <section className="pt-16 md:pt-20 pb-8 md:pb-12 bg-white">
+      <section className="pt-16 md:pt-20 pb-8 md:pb-12 bg-[#FBF9F8]">
         <div className="container mx-auto px-4">
           <div className="relative h-120 md:h-140 rounded-3xl overflow-hidden">
             <Image
@@ -88,7 +88,7 @@ export default function HomePage() {
       </section>
 
       {/* Explore Categories */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="py-16 md:py-20 bg-[#FBF9F8]">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
@@ -111,12 +111,27 @@ export default function HomePage() {
                 <Link
                   key={category.id}
                   href={`/categories/${category.slug}`}
-                  className="flex flex-col items-center p-6 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
+                  className="relative overflow-hidden rounded-xl hover:shadow-lg transition-all group"
                 >
-                  <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">
-                    {category.icon || '📦'}
+                  <div className="aspect-square bg-gray-200">
+                    {category.thumbnailName ? (
+                      <img
+                        src={category.thumbnailName}
+                        alt={category.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                        <div className="text-gray-400 text-xs">No image</div>
+                      </div>
+                    )}
                   </div>
-                  <h3 className="text-gray-900 font-medium text-center">{category.name}</h3>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4">
+                    <div className="text-white text-center">
+                      <h3 className="font-semibold text-white text-base drop-shadow-md">{category.name}</h3>
+                    </div>
+                  </div>
                 </Link>
               ))
             ) : null}
@@ -125,13 +140,13 @@ export default function HomePage() {
       </section>
 
       {/* Best Sellers */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="py-16 md:py-20 bg-[#FBF9F8]">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
               Best Sellers
             </h2>
-            <Link href="/products?sort=bestsellers" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
+            <Link href="/best-sellers" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
               View All
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -160,9 +175,8 @@ export default function HomePage() {
               className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
               style={{
                 scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-                WebkitScrollbar: 'none'
-              }}
+                msOverflowStyle: 'none'
+              } as any}
             >
               {bestSellersLoading ? (
                 <div className="w-full flex justify-center py-12">
@@ -173,7 +187,7 @@ export default function HomePage() {
                   <Link
                     key={product.id}
                     href={`/products/${product.id}`}
-                    className="shrink-0 w-72 bg-[#FAFAF9] rounded-xl transition-all overflow-hidden group"
+                    className="shrink-0 w-72 bg-white rounded-xl transition-all overflow-hidden group"
                   >
                     <div className="relative h-56 overflow-hidden rounded-t-xl">
                       {product.images && product.images.length > 0 ? (
@@ -232,13 +246,13 @@ export default function HomePage() {
       </section>
 
       {/* New Arrivals */}
-      <section className="pt-16 md:pt-20 pb-4 md:pb-8 bg-white">
+      <section className="pt-16 md:pt-20 pb-4 md:pb-8 bg-[#FBF9F8]">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
               New Arrivals
             </h2>
-            <Link href="/products?new=true" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
+            <Link href="/new-arrivals" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
               View All
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -257,7 +271,7 @@ export default function HomePage() {
                   <Link
                     key={newArrivals[0].id}
                     href={`/products/${newArrivals[0].id}`}
-                    className="lg:col-span-2 bg-[#FAFAF9] rounded-2xl overflow-hidden group"
+                    className="lg:col-span-2 bg-white rounded-2xl overflow-hidden group"
                   >
                     <div className="relative h-full rounded-2xl" style={{ minHeight: '512px' }}>
                       {newArrivals[0].images && newArrivals[0].images.length > 0 ? (
@@ -297,7 +311,7 @@ export default function HomePage() {
                     <Link
                       key={product.id}
                       href={`/products/${product.id}`}
-                      className="bg-[#FAFAF9] rounded-xl overflow-hidden group h-64 block"
+                      className="bg-white rounded-xl overflow-hidden group h-64 block"
                     >
                       <div className="relative h-full rounded-xl">
                         {product.images && product.images.length > 0 ? (
@@ -343,13 +357,13 @@ export default function HomePage() {
       </section>
 
       {/* Sales Section */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="py-16 md:py-20 bg-[#FBF9F8]">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
               Sales
             </h2>
-            <Link href="/products?sale=true" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
+            <Link href="/sales" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
               View All
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -378,9 +392,8 @@ export default function HomePage() {
               className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
               style={{
                 scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-                WebkitScrollbar: 'none'
-              }}
+                msOverflowStyle: 'none'
+              } as any}
             >
               {saleProductsLoading ? (
                 <div className="w-full flex justify-center py-12">
@@ -391,7 +404,7 @@ export default function HomePage() {
                   <Link
                     key={product.id}
                     href={`/products/${product.id}`}
-                    className="shrink-0 w-72 bg-[#FAFAF9] rounded-xl transition-all overflow-hidden group"
+                    className="shrink-0 w-72 bg-white rounded-xl transition-all overflow-hidden group"
                   >
                     <div className="relative h-56 overflow-hidden rounded-t-xl">
                       {product.images && product.images.length > 0 ? (

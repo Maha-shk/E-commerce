@@ -55,16 +55,16 @@ function daysAgo(days: number): Date {
 // ---------------------------------------------------------------------------
 
 const CATEGORIES = [
-  { name: 'UAV Systems', icon: 'electronics', description: 'Industrial drones and aerial survey systems.' },
-  { name: 'Power Solutions', icon: 'electronics', description: 'Energy cells, inverters and field power gear.' },
-  { name: 'Infrastructure', icon: 'home', description: 'IoT gateways and distributed sensor networks.' },
-  { name: 'Furniture & Office', icon: 'home', description: 'Ergonomic seating and workspace essentials.' },
-  { name: 'Electronics', icon: 'electronics', description: 'Displays, peripherals and computing hardware.' },
-  { name: 'Audio', icon: 'electronics', description: 'Studio monitoring and professional audio.' },
-  { name: 'Accessories', icon: 'fashion', description: 'Desk accessories, hubs and everyday extras.' },
-  { name: 'Health & Beauty', icon: 'health', description: 'Skincare, fitness equipment and wellness.' },
-  { name: 'Sports & Outdoors', icon: 'sports', description: 'Gear for hiking, cycling and team sports.' },
-  { name: 'Books & Media', icon: 'books', description: 'Bestsellers, audiobooks and digital media.' },
+  { name: 'UAV Systems', icon: '', description: 'Industrial drones and aerial survey systems.', thumbnail: 'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Power Solutions', icon: '', description: 'Energy cells, inverters and field power gear.', thumbnail: 'https://images.unsplash.com/photo-1497440001374-f26997328c1?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Infrastructure', icon: '', description: 'IoT gateways and distributed sensor networks.', thumbnail: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Furniture & Office', icon: '', description: 'Ergonomic seating and workspace essentials.', thumbnail: 'https://images.unsplash.com/photo-1503602642458-232111445840?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Electronics', icon: '', description: 'Displays, peripherals and computing hardware.', thumbnail: 'https://images.unsplash.com/photo-1498049860654-af1a5c076218?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Audio', icon: '', description: 'Studio monitoring and professional audio.', thumbnail: 'https://images.unsplash.com/photo-1545128485-c400e710279f?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Accessories', icon: '', description: 'Desk accessories, hubs and everyday extras.', thumbnail: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Health & Beauty', icon: '', description: 'Skincare, fitness equipment and wellness.', thumbnail: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Sports & Outdoors', icon: '', description: 'Gear for hiking, cycling and team sports.', thumbnail: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
+  { name: 'Books & Media', icon: '', description: 'Bestsellers, audiobooks and digital media.', thumbnail: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800&h=600&fit=crop', thumbnailSize: '800x600' },
 ];
 
 const PRODUCTS = [
@@ -200,12 +200,19 @@ async function main() {
   for (const c of CATEGORIES) {
     const category = await prisma.category.upsert({
       where: { slug: slugify(c.name) },
-      update: {},
+      update: {
+        description: c.description,
+        icon: c.icon,
+        thumbnailName: c.thumbnail,
+        thumbnailSize: c.thumbnailSize,
+      },
       create: {
         name: c.name,
         slug: slugify(c.name),
         description: c.description,
         icon: c.icon,
+        thumbnailName: c.thumbnail,
+        thumbnailSize: c.thumbnailSize,
       },
     });
     categoryIds.set(c.name, category.id);

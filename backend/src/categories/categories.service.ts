@@ -37,7 +37,7 @@ export class CategoriesService {
         take: query.limit,
         orderBy: { createdAt: 'asc' },
         include: {
-          _count: { select: { products: true, subcategories: true } },
+          _count: { select: { products: true } },
         },
       }),
       this.prisma.category.count({ where }),
@@ -49,7 +49,7 @@ export class CategoriesService {
   async findOne(id: string) {
     const category = await this.prisma.category.findUnique({
       where: { id },
-      include: { _count: { select: { products: true, subcategories: true } } },
+      include: { _count: { select: { products: true } } },
     });
     if (!category) throw new NotFoundException(`Category ${id} not found`);
     return toCategoryView(category);
@@ -58,7 +58,6 @@ export class CategoriesService {
   async create(dto: CreateCategoryDto) {
     const slug = dto.slug?.trim() ? slugify(dto.slug) : slugify(dto.name);
     await this.assertSlugFree(slug);
-    if (dto.parentId) await this.assertCategoryExists(dto.parentId);
 
     const category = await this.prisma.category.create({
       data: {
@@ -68,24 +67,16 @@ export class CategoriesService {
         icon: dto.icon ?? 'home',
         ...(dto.status && { status: dto.status }),
         ...(dto.visibility && { visibility: dto.visibility }),
-        parentId: dto.parentId,
         thumbnailName: dto.thumbnailName,
         thumbnailSize: dto.thumbnailSize,
       },
-      include: { _count: { select: { products: true, subcategories: true } } },
+      include: { _count: { select: { products: true } } },
     });
     return toCategoryView(category);
   }
 
   async update(id: string, dto: UpdateCategoryDto) {
     await this.assertCategoryExists(id);
-
-    if (dto.parentId) {
-      if (dto.parentId === id) {
-        throw new BadRequestException('A category cannot be its own parent');
-      }
-      await this.assertCategoryExists(dto.parentId);
-    }
 
     let slug: string | undefined;
     if (dto.slug?.trim()) {
@@ -105,11 +96,10 @@ export class CategoriesService {
         ...(dto.icon && { icon: dto.icon }),
         ...(dto.status && { status: dto.status }),
         ...(dto.visibility && { visibility: dto.visibility }),
-        ...(dto.parentId !== undefined && { parentId: dto.parentId }),
         ...(dto.thumbnailName !== undefined && { thumbnailName: dto.thumbnailName }),
         ...(dto.thumbnailSize !== undefined && { thumbnailSize: dto.thumbnailSize }),
       },
-      include: { _count: { select: { products: true, subcategories: true } } },
+      include: { _count: { select: { products: true } } },
     });
     return toCategoryView(category);
   }
@@ -117,19 +107,14 @@ export class CategoriesService {
   async remove(id: string) {
     const category = await this.prisma.category.findUnique({
       where: { id },
-      include: { _count: { select: { products: true, subcategories: true } } },
+      include: { _count: { select: { products: true } } },
     });
     if (!category) throw new NotFoundException(`Category ${id} not found`);
 
-    // Refuse to orphan products or subcategories.
+    // Refuse to orphan products.
     if (category._count.products > 0) {
       throw new BadRequestException(
         `Cannot delete: ${category._count.products} product(s) still belong to this category. Reassign them first.`,
-      );
-    }
-    if (category._count.subcategories > 0) {
-      throw new BadRequestException(
-        `Cannot delete: ${category._count.subcategories} subcategory(ies) still reference this category.`,
       );
     }
 
@@ -154,7 +139,7 @@ export class CategoriesService {
 }
 
 type CategoryWithCounts = Prisma.CategoryGetPayload<{
-  include: { _count: { select: { products: true; subcategories: true } } };
+  include: { _count: { select: { products: true } } };
 }>;
 
 /** Flattens Prisma's `_count` into the shape the frontend table expects. */
@@ -163,6 +148,5 @@ function toCategoryView(category: CategoryWithCounts) {
   return {
     ...rest,
     products: _count.products,
-    subcategories: _count.subcategories,
   };
 }
