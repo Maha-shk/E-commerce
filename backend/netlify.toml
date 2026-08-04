@@ -5,8 +5,8 @@
 
 [functions]
   node_bundler = "esbuild"
-  # Include necessary files in serverless functions
-  included_files = ["prisma/schema.prisma", "prisma/migrations/**"]
+  included_files = ["prisma/schema.prisma", "prisma/migrations/**", "node_modules/.prisma/**"]
+  external_node_modules = ["@prisma/client", "prisma"]
 
 [[redirects]]
   from = "/api/*"
@@ -20,6 +20,5 @@
   targetPort = 4000
   publish = "dist"
 
-# Environment variables (also set these in Netlify dashboard)
 [environment]
   NODE_ENV = "production"
