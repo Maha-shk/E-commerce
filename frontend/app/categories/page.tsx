@@ -47,7 +47,7 @@ export default function CategoriesPage() {
                 placeholder="Search categories..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00234E] focus:border-[#00234E] transition-all duration-200 hover:border-gray-300"
+                className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00234E] focus:border-[#00234E] transition-all duration-200 hover:border-gray-300"
               />
             </div>
           </div>
@@ -88,7 +88,7 @@ export default function CategoriesPage() {
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-200"
+                className="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-200 hover:border-[#00234E]/30"
               >
                 {/* Category Image/Icon */}
                 <div className="relative h-48 overflow-hidden">

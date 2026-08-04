@@ -6,7 +6,7 @@ import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useCategoryBySlug, useCategories } from "@/lib/hooks/use-homepage";
 import { useProducts } from "@/lib/hooks/use-customer";
-import { Loader2, Search, ChevronDown } from "lucide-react";
+import { Loader2, Search, ChevronDown, Check } from "lucide-react";
 import Link from "next/link";
 
 export default function CategoryDetailPage() {
@@ -171,9 +171,9 @@ export default function CategoryDetailPage() {
 
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filters */}
-          <aside className="lg:w-80 shrink-0">
+          <aside className="lg:w-64 shrink-0">
             <div className="lg:sticky lg:top-24">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h2 className="text-sm font-bold text-[#00234E] tracking-wide mb-6">
                   FILTERS
                 </h2>
@@ -220,14 +220,14 @@ export default function CategoryDetailPage() {
             {/* Search, Sort Bar and Product Count */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               {/* Search Bar */}
-              <div className="relative w-full sm:w-auto sm:flex-1 max-w-md">
+              <div className="relative w-full sm:w-auto sm:flex-1 max-w-xs">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search products in this category..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00234E] focus:border-[#00234E] transition-all duration-200 hover:border-gray-300"
+                  className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00234E] focus:border-[#00234E] transition-all duration-200 hover:border-gray-300"
                 />
               </div>
 
@@ -288,8 +288,8 @@ export default function CategoryDetailPage() {
                     </div>
                   </div>
                 )}
+                </div>
               </div>
-            </div>
             </div>
 
             {/* Loading State */}
