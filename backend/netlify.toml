@@ -6,7 +6,13 @@
 [functions]
   node_bundler = "esbuild"
   included_files = ["prisma/schema.prisma", "prisma/migrations/**", "node_modules/.prisma/**"]
-  external_node_modules = ["@prisma/client", "prisma"]
+  external_node_modules = [
+    "@prisma/client",
+    "prisma",
+    "@nestjs/microservices",
+    "@nestjs/websockets",
+    "class-transformer"
+  ]
 
 [[redirects]]
   from = "/api/*"
