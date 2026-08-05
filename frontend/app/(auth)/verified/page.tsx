@@ -24,7 +24,7 @@ export default function VerifiedPage() {
         </p>
 
         <Button asChild size="xl" className="mt-6 w-full uppercase tracking-wider">
-          <Link href="/dashboard">
+          <Link href="/admin/dashboard">
             Enter Portal
             <ArrowRight />
           </Link>

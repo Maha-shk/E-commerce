@@ -4,12 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-export function HomePageHeader({ mobileMenuOpen, setMobileMenuOpen }: {
+export function HomePageHeader({ mobileMenuOpen, setMobileMenuOpen, cartCount = 0 }: {
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
+  cartCount?: number;
 }) {
-  // Mock cart count - replace with actual cart state
-  const cartCount = 2;
+  // Use provided cart count or default to 0
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">

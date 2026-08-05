@@ -5,13 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useProducts } from "@/lib/hooks/use-customer";
-import { Loader2, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, Check, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
 function ProductsPageContent() {
   const searchParams = useSearchParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     category: true,
     priceRange: true,
@@ -106,6 +107,21 @@ function ProductsPageContent() {
     setSelectedCategories([]);
   };
 
+  // Add to cart function
+  const addToCart = (e: React.MouseEvent, product: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Increment cart count (mock implementation)
+    setCartCount(prev => prev + 1);
+
+    // TODO: Implement actual cart logic
+    console.log('Added to cart:', product.name);
+
+    // Show success feedback
+    alert(`${product.name} added to cart!`);
+  };
+
   // Filter products
   const filteredProducts = products?.filter((product) => {
     // Category filter
@@ -148,7 +164,7 @@ function ProductsPageContent() {
 
   return (
     <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} cartCount={cartCount} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -424,13 +440,13 @@ function ProductsPageContent() {
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {sortedProducts.map((product) => (
-                    <Link
+                    <div
                       key={product.id}
-                      href={`/products/${product.id}`}
                       className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all overflow-hidden group"
                     >
-                      {/* Product Image */}
-                      <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
+                      {/* Product Image - Clickable to product details */}
+                      <Link href={`/products/${product.id}`} className="block">
+                        <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
                         {product.images && product.images.length > 0 ? (
                           <Image
                             src={product.images[0].url}
@@ -471,7 +487,8 @@ function ProductsPageContent() {
                             </span>
                           </div>
                         )}
-                      </div>
+                        </div>
+                      </Link>
 
                       {/* Product Info */}
                       <div className="p-4">
@@ -482,46 +499,62 @@ function ProductsPageContent() {
                           </p>
                         )}
 
-                        {/* Product Name */}
-                        <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 h-10">
-                          {product.name}
-                        </h3>
+                        {/* Product Name - Clickable to product details */}
+                        <Link href={`/products/${product.id}`}>
+                          <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 hover:text-[#00234E] transition-colors leading-tight">
+                            {product.name}
+                          </h3>
+                        </Link>
 
-                        {/* Brand */}
-                        <p className="text-gray-500 text-xs mb-2">{product.brand}</p>
-
-                        {/* Price */}
-                        <div className="flex items-center gap-2">
-                          {product.discountPercent > 0 ? (
-                            <>
+                        {/* Price and Stock Status in same row */}
+                        <div className="flex items-center justify-between">
+                          {/* Price */}
+                          <div className="flex items-center gap-2">
+                            {product.discountPercent > 0 ? (
+                              <>
+                                <span className="text-orange-500 font-bold text-lg">
+                                  €{product.salePrice.toFixed(2)}
+                                </span>
+                                <span className="text-gray-400 line-through text-sm">
+                                  €{product.price.toFixed(2)}
+                                </span>
+                              </>
+                            ) : (
                               <span className="text-orange-500 font-bold text-lg">
-                                €{product.salePrice.toFixed(2)}
-                              </span>
-                              <span className="text-gray-400 line-through text-sm">
                                 €{product.price.toFixed(2)}
                               </span>
-                            </>
-                          ) : (
-                            <span className="text-orange-500 font-bold text-lg">
-                              €{product.price.toFixed(2)}
-                            </span>
-                          )}
+                            )}
+                          </div>
+
+                          {/* Stock Status */}
+                          <div>
+                            {!product.inStock ? (
+                              <span className="text-red-500 text-xs font-medium">Out of Stock</span>
+                            ) : product.lowStock ? (
+                              <span className="text-orange-500 text-xs font-medium">
+                                Only {product.stock} left
+                              </span>
+                            ) : (
+                              <span className="text-green-600 text-xs font-medium">In Stock</span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Stock Status */}
-                        <div className="mt-2">
-                          {!product.inStock ? (
-                            <span className="text-red-500 text-xs font-medium">Out of Stock</span>
-                          ) : product.lowStock ? (
-                            <span className="text-orange-500 text-xs font-medium">
-                              Only {product.stock} left
-                            </span>
-                          ) : (
-                            <span className="text-green-600 text-xs font-medium">In Stock</span>
-                          )}
-                        </div>
+                        {/* Add to Cart Button */}
+                        <button
+                          onClick={(e) => addToCart(e, product)}
+                          disabled={!product.inStock}
+                          className={`w-full mt-3 py-2.5 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+                            product.inStock
+                              ? 'bg-[#00234E] hover:bg-[#001a3a] text-white hover:opacity-90'
+                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <ShoppingCart className="w-4 h-4" />
+                          {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                        </button>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
               </>
@@ -539,7 +572,7 @@ export default function ProductsPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-[#FBF9F8]">
-        <HomePageHeader mobileMenuOpen={false} setMobileMenuOpen={() => {}} />
+        <HomePageHeader mobileMenuOpen={false} setMobileMenuOpen={() => {}} cartCount={0} />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-[#00234E]" />
