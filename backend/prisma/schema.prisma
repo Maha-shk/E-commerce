@@ -6,10 +6,10 @@
 // They mirror the domain the frontend already renders (see frontend/lib/admin/*).
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" covers local dev (e.g. Windows); the debian target matches the
   // node:22-bookworm-slim container the backend runs in.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -162,15 +162,15 @@ model User {
 
 /// Hashed refresh tokens (rotating). One row per active session/device.
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
   userAgent String?
   ip        String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -225,28 +225,28 @@ model Category {
 }
 
 model Product {
-  id            String            @id @default(cuid())
-  name          String
-  brand         String            @default("")
-  categoryId    String?
-  category      Category?         @relation(fields: [categoryId], references: [id])
-  description   String            @default("")
-  sku           String            @unique
-  stock         Int               @default(0)
-  status        StockStatus       @default(IN_STOCK)
-  price         Decimal           @db.Decimal(12, 2)
-  discount      Int               @default(0)
-  visibility    ProductVisibility @default(PUBLIC)
-  scheduledDate DateTime?
-  tags          String[]
-  unitValue     Decimal?          @db.Decimal(12, 2)
+  id               String                @id @default(cuid())
+  name             String
+  brand            String                @default("")
+  categoryId       String?
+  category         Category?             @relation(fields: [categoryId], references: [id])
+  description      String                @default("")
+  sku              String                @unique
+  stock            Int                   @default(0)
+  status           StockStatus           @default(IN_STOCK)
+  price            Decimal               @db.Decimal(12, 2)
+  discount         Int                   @default(0)
+  visibility       ProductVisibility     @default(PUBLIC)
+  scheduledDate    DateTime?
+  tags             String[]
+  unitValue        Decimal?              @db.Decimal(12, 2)
   images           ProductImage[]
   variants         ProductVariant[]
   orderItems       OrderItem[]
   inventoryLogs    InventoryAdjustment[]
   featuredProducts FeaturedProduct[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([categoryId])
   @@index([status])
@@ -330,23 +330,23 @@ model FeaturedProduct {
 // ---------------------------------------------------------------------------
 
 model Order {
-  id              String        @id @default(cuid())
+  id               String        @id @default(cuid())
   /// Human-facing order number, e.g. "ORD-2024-8841".
-  orderNumber     String        @unique
-  customerId      String?
-  customer        User?         @relation(fields: [customerId], references: [id])
-  status          OrderStatus   @default(PENDING)
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentMethod   String?
-  shippingMethod  String?
+  orderNumber      String        @unique
+  customerId       String?
+  customer         User?         @relation(fields: [customerId], references: [id])
+  status           OrderStatus   @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
+  paymentMethod    String?
+  shippingMethod   String?
   shippingTracking String?
-  shippingAddress String[]
-  shippingCost    Decimal       @default(0) @db.Decimal(12, 2)
-  discount        Decimal       @default(0) @db.Decimal(12, 2)
-  placedAt        DateTime      @default(now())
-  items           OrderItem[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  shippingAddress  String[]
+  shippingCost     Decimal       @default(0) @db.Decimal(12, 2)
+  discount         Decimal       @default(0) @db.Decimal(12, 2)
+  placedAt         DateTime      @default(now())
+  items            OrderItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   @@index([customerId])
   @@index([status])
