@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useProducts } from "@/lib/hooks/use-customer";
+import { useCart } from "@/lib/hooks/use-cart";
 import { Loader2, ChevronDown, ChevronUp, Check, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,7 +13,6 @@ import Image from "next/image";
 function ProductsPageContent() {
   const searchParams = useSearchParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     category: true,
     priceRange: true,
@@ -25,6 +25,9 @@ function ProductsPageContent() {
   const [sortOpen, setSortOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [draggingHandle, setDraggingHandle] = useState<'min' | 'max' | null>(null);
+
+  // Cart functionality
+  const { totalItems, addItem } = useCart();
 
   // Add global mouse event listeners for smooth dragging
   useEffect(() => {
@@ -108,18 +111,16 @@ function ProductsPageContent() {
   };
 
   // Add to cart function
-  const addToCart = (e: React.MouseEvent, product: any) => {
+  const addToCart = async (e: React.MouseEvent, product: any) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Increment cart count (mock implementation)
-    setCartCount(prev => prev + 1);
-
-    // TODO: Implement actual cart logic
-    console.log('Added to cart:', product.name);
-
-    // Show success feedback
-    alert(`${product.name} added to cart!`);
+    try {
+      await addItem(product.id, 1);
+      // Cart count will automatically update in header
+    } catch (error) {
+      console.error('Failed to add to cart:', error);
+    }
   };
 
   // Filter products
@@ -164,7 +165,7 @@ function ProductsPageContent() {
 
   return (
     <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} cartCount={cartCount} />
+      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} cartCount={totalItems} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">

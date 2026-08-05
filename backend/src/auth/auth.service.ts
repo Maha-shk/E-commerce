@@ -78,7 +78,7 @@ export class AuthService {
         email,
         fullName: dto.fullName.trim(),
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
-        role: Role.ADMIN,
+        role: Role.CUSTOMER,
         status: UserStatus.ACTIVE,
       },
       select: USER_PUBLIC_SELECT,

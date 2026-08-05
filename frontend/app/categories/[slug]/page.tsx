@@ -6,6 +6,7 @@ import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useCategoryBySlug, useCategories } from "@/lib/hooks/use-homepage";
 import { useProducts } from "@/lib/hooks/use-customer";
+import { useCart } from "@/lib/hooks/use-cart";
 import { Loader2, Search, ChevronDown, Check } from "lucide-react";
 import Link from "next/link";
 
@@ -33,6 +34,9 @@ export default function CategoryDetailPage() {
         }
       : undefined
   );
+
+  // Cart count
+  const { totalItems } = useCart();
 
   // Clear all filters
   const clearFilters = () => {
@@ -90,7 +94,11 @@ export default function CategoryDetailPage() {
   if (categoryLoading) {
     return (
       <div className="min-h-screen bg-[#FBF9F8]">
-        <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+        <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-[#00234E]" />
@@ -104,7 +112,11 @@ export default function CategoryDetailPage() {
   if (!category) {
     return (
       <div className="min-h-screen bg-[#FBF9F8]">
-        <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+        <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-20">
             <p className="text-gray-500 text-lg">Category not found</p>
@@ -119,7 +131,11 @@ export default function CategoryDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
 
       <main className="container mx-auto px-4 py-8">
         {/* Breadcrumb */}
@@ -324,63 +340,64 @@ export default function CategoryDetailPage() {
             {!productsLoading && !productsError && sortedProducts.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {sortedProducts.map((product) => (
-                  <Link
+                  <div
                     key={product.id}
-                    href={`/products/${product.id}`}
                     className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all overflow-hidden group"
                   >
-                    {/* Product Image */}
-                    <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
-                      {product.images && product.images.length > 0 ? (
-                        <img
-                          src={product.images[0].url}
-                          alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-gray-300">
-                            <svg
-                              className="w-12 h-12 mx-auto mb-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                              />
-                            </svg>
-                            <p className="text-xs text-center">No Image</p>
+                    {/* Product Image - Clickable to product details */}
+                    <Link href={`/products/${product.id}`} className="block">
+                      <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
+                        {product.images && product.images.length > 0 ? (
+                          <img
+                            src={product.images[0].url}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-gray-300">
+                              <svg
+                                className="w-12 h-12 mx-auto mb-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={1.5}
+                                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                />
+                              </svg>
+                              <p className="text-xs text-center">No Image</p>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Sale Badge */}
-                      {product.discountPercent > 0 && (
-                        <div className="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md">
-                          -{product.discountPercent}%
-                        </div>
-                      )}
+                        {/* Sale Badge */}
+                        {product.discountPercent > 0 && (
+                          <div className="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md">
+                            -{product.discountPercent}%
+                          </div>
+                        )}
 
-                      {/* Low Stock Badge */}
-                      {product.lowStock && product.inStock && (
-                        <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                          Low Stock
-                        </div>
-                      )}
+                        {/* Low Stock Badge */}
+                        {product.lowStock && product.inStock && (
+                          <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                            Low Stock
+                          </div>
+                        )}
 
-                      {/* Out of Stock Overlay */}
-                      {!product.inStock && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                          <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                            Out of Stock
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                        {/* Out of Stock Overlay */}
+                        {!product.inStock && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                            <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                              Out of Stock
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </Link>
 
                     {/* Product Info */}
                     <div className="p-4">
@@ -391,50 +408,68 @@ export default function CategoryDetailPage() {
                         </p>
                       )}
 
-                      {/* Product Name */}
-                      <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 h-10">
-                        {product.name}
-                      </h3>
+                      {/* Product Name - Clickable to product details */}
+                      <Link href={`/products/${product.id}`}>
+                        <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 hover:text-[#00234E] transition-colors leading-tight">
+                          {product.name}
+                        </h3>
+                      </Link>
 
-                      {/* Brand */}
-                      <p className="text-gray-500 text-xs mb-2">{product.brand}</p>
-
-                      {/* Price */}
-                      <div className="flex items-center gap-2">
-                        {product.discountPercent > 0 ? (
-                          <>
+                      {/* Price and Stock Status in same row */}
+                      <div className="flex items-center justify-between">
+                        {/* Price */}
+                        <div className="flex items-center gap-2">
+                          {product.discountPercent > 0 ? (
+                            <>
+                              <span className="text-orange-500 font-bold text-lg">
+                                €{product.salePrice.toFixed(2)}
+                              </span>
+                              <span className="text-gray-400 line-through text-sm">
+                                €{product.price.toFixed(2)}
+                              </span>
+                            </>
+                          ) : (
                             <span className="text-orange-500 font-bold text-lg">
-                              €{product.salePrice.toFixed(2)}
-                            </span>
-                            <span className="text-gray-400 line-through text-sm">
                               €{product.price.toFixed(2)}
                             </span>
-                          </>
-                        ) : (
-                          <span className="text-orange-500 font-bold text-lg">
-                            €{product.price.toFixed(2)}
-                          </span>
-                        )}
+                          )}
+                        </div>
+
+                        {/* Stock Status */}
+                        <div>
+                          {!product.inStock ? (
+                            <span className="text-red-500 text-xs font-medium">Out of Stock</span>
+                          ) : product.lowStock ? (
+                            <span className="text-orange-500 text-xs font-medium">
+                              Only {product.stock} left
+                            </span>
+                          ) : (
+                            <span className="text-green-600 text-xs font-medium">In Stock</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Stock Status */}
-                      <div className="mt-2">
-                        {!product.inStock ? (
-                          <span className="text-red-500 text-xs font-medium">
-                            Out of Stock
-                          </span>
-                        ) : product.lowStock ? (
-                          <span className="text-orange-500 text-xs font-medium">
-                            Only {product.stock} left
-                          </span>
-                        ) : (
-                          <span className="text-green-600 text-xs font-medium">
-                            In Stock
-                          </span>
-                        )}
-                      </div>
+                      {/* Add to Cart Button */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Add to cart functionality here
+                          console.log('Add to cart:', product.id);
+                        }}
+                        disabled={!product.inStock}
+                        className={`w-full mt-3 py-2.5 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+                          product.inStock
+                            ? 'bg-[#00234E] hover:bg-[#001a3a] text-white hover:opacity-90'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                      </button>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}

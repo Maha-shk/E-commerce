@@ -1,21 +1,80 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { useResendOtp, useVerifyOtp } from "@/lib/hooks/use-auth";
+import { authApi } from "@/lib/api/services/auth";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api/client";
 
 function VerifyOtpForm() {
-  const email = useSearchParams().get("email") ?? "";
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const email = searchParams.get("email") ?? "";
   const [code, setCode] = useState("");
-  const verify = useVerifyOtp();
-  const resend = useResendOtp();
+  const [isPending, setIsPending] = useState(false);
+  const [redirectAfterVerification, setRedirectAfterVerification] = useState<string | null>(null);
 
-  const canSubmit = code.length === 6 && Boolean(email) && !verify.isPending;
+  useEffect(() => {
+    // Check if user was redirected from registration after checkout
+    const redirectTarget = sessionStorage.getItem('redirectAfterVerification');
+    if (redirectTarget === 'order-confirmation') {
+      setRedirectAfterVerification(redirectTarget);
+    }
+  }, []);
+
+  const canSubmit = code.length === 6 && Boolean(email) && !isPending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    setIsPending(true);
+
+    try {
+      await authApi.verifyOtp({ email, code });
+      toast.success("Account verified successfully!");
+
+      // Handle redirect after verification
+      if (redirectAfterVerification === 'order-confirmation') {
+        // Clear redirect flag
+        sessionStorage.removeItem('redirectAfterVerification');
+
+        // Check if there's a pending order
+        const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+
+        if (pendingOrderId) {
+          // Keep the pending order data intact for the login page to use
+          // Redirect to login to complete the session
+          router.push(`/login?redirect=order-confirmation`);
+        } else {
+          router.push("/login");
+        }
+      } else {
+        router.push("/verified");
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+
+    try {
+      await authApi.resendOtp({ email });
+      toast.success("Verification code resent!");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    }
+  };
 
   return (
     <AuthCard className="text-center">
@@ -36,6 +95,14 @@ function VerifyOtpForm() {
         to secure your CENTO profile.
       </p>
 
+      {redirectAfterVerification === 'order-confirmation' && (
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800">
+            🔔 Verify your account to track your recent order.
+          </p>
+        </div>
+      )}
+
       {!email ? (
         <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           Missing email address.{" "}
@@ -48,10 +115,7 @@ function VerifyOtpForm() {
 
       <form
         className="mt-6 space-y-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit) verify.mutate({ email, code });
-        }}
+        onSubmit={handleSubmit}
       >
         <InputOTP
           maxLength={6}
@@ -72,8 +136,8 @@ function VerifyOtpForm() {
           className="w-full uppercase tracking-wider"
           disabled={!canSubmit}
         >
-          {verify.isPending && <Loader2 className="animate-spin" />}
-          {verify.isPending ? "Verifying…" : "Verify Account"}
+          {isPending && <Loader2 className="animate-spin" />}
+          {isPending ? "Verifying…" : "Verify Account"}
         </Button>
       </form>
 
@@ -81,11 +145,11 @@ function VerifyOtpForm() {
         Didn&apos;t receive the code?{" "}
         <button
           type="button"
-          onClick={() => email && resend.mutate({ email })}
-          disabled={!email || resend.isPending}
+          onClick={handleResend}
+          disabled={!email || isPending}
           className="font-semibold text-primary hover:underline disabled:opacity-50"
         >
-          {resend.isPending ? "Sending…" : "Resend Code"}
+          {isPending ? "Sending…" : "Resend Code"}
         </button>
       </p>
     </AuthCard>

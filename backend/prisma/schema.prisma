@@ -151,6 +151,7 @@ model User {
   refreshTokens      RefreshToken[]
   verificationTokens VerificationToken[]
   addresses          Address[]
+  carts              Cart[]
   orders             Order[]
   conversations      Conversation[]
   notifications      Notification[]
@@ -243,6 +244,7 @@ model Product {
   images           ProductImage[]
   variants         ProductVariant[]
   orderItems       OrderItem[]
+  cartItems        CartItem[]
   inventoryLogs    InventoryAdjustment[]
   featuredProducts FeaturedProduct[]
   createdAt        DateTime              @default(now())
@@ -283,6 +285,40 @@ model InventoryAdjustment {
   byUser    User?    @relation(fields: [byUserId], references: [id])
   createdAt DateTime @default(now())
 
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Shopping Cart
+// ---------------------------------------------------------------------------
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String?    // Null for guest carts
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?    @unique // For guest cart tracking via cookie/localStorage
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(12, 2) // Price snapshot when added to cart
+  color     String?  // Variant selection
+  size      String?  // Variant selection
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cartId])
   @@index([productId])
 }
 

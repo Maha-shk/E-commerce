@@ -5,12 +5,16 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Field } from "@/components/ui/field";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useRegister } from "@/lib/hooks/use-auth";
+import { authApi } from "@/lib/api/services/auth";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { useEffect, useState } from "react";
 
 // Mirrors the backend RegisterDto so validation fails fast, client-side.
 const schema = z.object({
@@ -32,13 +36,55 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function RegisterPage() {
-  const registerUser = useRegister();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect');
+  const [isPending, setIsPending] = useState(false);
+  const [showOrderTrackingInfo, setShowOrderTrackingInfo] = useState(false);
+
   const {
     register,
     handleSubmit,
     control,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  useEffect(() => {
+    // Check if user was redirected from checkout after placing an order
+    const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+    if (pendingOrderId) {
+      setShowOrderTrackingInfo(true);
+    }
+  }, []);
+
+  const onSubmit = async (values: FormValues) => {
+    setIsPending(true);
+
+    try {
+      const result = await authApi.register(values);
+      toast.success(result.message);
+
+      // Check if there's a pending order from guest checkout
+      const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+
+      if (pendingOrderId && redirect === 'order-confirmation') {
+        // Store email for verification redirect
+        sessionStorage.setItem('registerEmail', values.email);
+        sessionStorage.setItem('redirectAfterVerification', 'order-confirmation');
+
+        // Keep the pending order data intact - don't clear it!
+        // It will be used after login to redirect to order confirmation
+
+        router.push(`/verify-otp?email=${encodeURIComponent(values.email)}`);
+      } else {
+        router.push(`/verify-otp?email=${encodeURIComponent(values.email)}`);
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   return (
     <AuthShell footer="Support · Accessibility · © 2024 CENTO Servizi">
@@ -48,11 +94,17 @@ export default function RegisterPage() {
           Join the membership to unlock your premium collection.
         </p>
 
+        {showOrderTrackingInfo && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              🔔 Create an account to track your recent order and get delivery updates.
+            </p>
+          </div>
+        )}
+
         <form
           className="mt-6 space-y-4"
-          onSubmit={handleSubmit(({ fullName, email, password }) =>
-            registerUser.mutate({ fullName, email, password }),
-          )}
+          onSubmit={handleSubmit(onSubmit)}
           noValidate
         >
           <Field
@@ -114,10 +166,10 @@ export default function RegisterPage() {
             type="submit"
             size="xl"
             className="w-full uppercase tracking-wider"
-            disabled={registerUser.isPending}
+            disabled={isPending}
           >
-            {registerUser.isPending && <Loader2 className="animate-spin" />}
-            {registerUser.isPending ? "Creating account…" : "Create Account"}
+            {isPending && <Loader2 className="animate-spin" />}
+            {isPending ? "Creating account…" : "Create Account"}
           </Button>
         </form>
 

@@ -8,6 +8,7 @@ import { RelatedProducts } from "@/components/customer/RelatedProducts";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useProduct } from "@/lib/hooks/use-customer";
+import { useCart } from "@/lib/hooks/use-cart";
 import { Loader2 } from "lucide-react";
 import { ErrorState } from "@/components/admin/QueryState";
 
@@ -22,6 +23,7 @@ export default function ProductDetailPage() {
   }, [params]);
 
   const { data: product, isLoading, isError, error } = useProduct(id ?? "");
+  const { totalItems } = useCart();
 
   if (!id) {
     return (
@@ -56,7 +58,11 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
 
       <main className="container mx-auto px-4 py-8">
         {/* Product Detail Section */}

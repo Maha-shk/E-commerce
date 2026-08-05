@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { MessagesModule } from './messages/messages.module';
 import { SettingsModule } from './settings/settings.module';
 import { PublicModule } from './public/public.module';
+import { CartModule } from './cart/cart.module';
 import { SupabaseModule } from './supabase/supabase.module';
 
 @Module({
@@ -49,6 +50,7 @@ import { SupabaseModule } from './supabase/supabase.module';
 
     // Public API
     PublicModule,
+    CartModule,
 
     // Admin dashboard features
     DashboardModule,

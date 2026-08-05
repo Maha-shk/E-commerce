@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { useCategories } from "@/lib/hooks/use-homepage";
+import { useCart } from "@/lib/hooks/use-cart";
 import { Loader2, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -13,6 +14,9 @@ export default function CategoriesPage() {
 
   // Fetch all categories
   const { data: categories, isLoading, isError } = useCategories(100);
+
+  // Cart count
+  const { totalItems } = useCart();
 
   // Filter categories based on search
   const filteredCategories = categories?.filter((category) => {
@@ -26,7 +30,11 @@ export default function CategoriesPage() {
 
   return (
     <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
 
       <main className="container mx-auto px-4 py-8">
         {/* Page Header with Search */}

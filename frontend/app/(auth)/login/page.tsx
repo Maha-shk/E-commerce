@@ -5,11 +5,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Field } from "@/components/ui/field";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
 import { useLogin } from "@/lib/hooks/use-auth";
+import { useEffect, useState } from "react";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { authApi } from "@/lib/api/services/auth";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { isAdminRole } from "@/lib/api/types";
 
 const schema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email address"),
@@ -19,12 +26,59 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
-  const login = useLogin();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect');
+  const setSession = useAuthStore((s) => s.setSession);
+  const [isPending, setIsPending] = useState(false);
+  const [showOrderTrackingInfo, setShowOrderTrackingInfo] = useState(false);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  useEffect(() => {
+    // Check if user was redirected from checkout after placing an order
+    const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+    if (pendingOrderId) {
+      setShowOrderTrackingInfo(true);
+    }
+  }, []);
+
+  const onSubmit = async (values: FormValues) => {
+    setIsPending(true);
+
+    try {
+      const data = await authApi.login(values);
+      setSession(data);
+
+      // Check if there's a pending order from guest checkout
+      const pendingOrderId = sessionStorage.getItem('pendingOrderId');
+
+      if (pendingOrderId && redirect === 'order-confirmation') {
+        // Clear the pending order data
+        sessionStorage.removeItem('pendingOrderId');
+        sessionStorage.removeItem('pendingOrderEmail');
+
+        toast.success(`Welcome back, ${data.user.fullName.split(' ')[0]}! Your order is ready for tracking.`);
+
+        // Redirect to order confirmation
+        router.push(`/order-confirmation/${pendingOrderId}`);
+      } else {
+        // Default behavior: redirect based on role
+        // NOTE: This is the ONLY place for role-based redirects
+        // Registration creates customers only, admins created separately
+        toast.success(`Welcome back, ${data.user.fullName.split(' ')[0]}!`);
+        router.push(isAdminRole(data.user.role) ? "/admin/dashboard" : "/account");
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   return (
     <AuthShell footer="Established 2024">
@@ -34,9 +88,17 @@ export default function LoginPage() {
           Sign in to access your bespoke hardware collection.
         </p>
 
+        {showOrderTrackingInfo && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              🔔 Sign in to track your recent order and get updates on delivery status.
+            </p>
+          </div>
+        )}
+
         <form
           className="mt-6 space-y-4"
-          onSubmit={handleSubmit((values) => login.mutate(values))}
+          onSubmit={handleSubmit(onSubmit)}
           noValidate
         >
           <Field
@@ -68,10 +130,10 @@ export default function LoginPage() {
             type="submit"
             size="xl"
             className="w-full uppercase tracking-wider"
-            disabled={login.isPending}
+            disabled={isPending}
           >
-            {login.isPending && <Loader2 className="animate-spin" />}
-            {login.isPending ? "Signing in…" : "Sign In"}
+            {isPending && <Loader2 className="animate-spin" />}
+            {isPending ? "Signing in…" : "Sign In"}
           </Button>
         </form>
 

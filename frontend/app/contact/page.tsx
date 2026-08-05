@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
 import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { useCart } from "@/lib/hooks/use-cart";
 
 export default function ContactPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -16,6 +17,7 @@ export default function ContactPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const { totalItems } = useCart();
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -98,7 +100,11 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HomePageHeader
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        cartCount={totalItems}
+      />
 
       <main className="container mx-auto px-4 py-16">
         {/* Page Header */}
