@@ -91,6 +91,19 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   ADMIN_NAME = 'Alessandro Cento';
+
+  // --- Supabase ---
+  @IsString()
+  @IsOptional()
+  SUPABASE_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPABASE_ANON_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPABASE_SERVICE_ROLE_KEY?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {

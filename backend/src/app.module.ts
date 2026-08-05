@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { MessagesModule } from './messages/messages.module';
 import { SettingsModule } from './settings/settings.module';
 import { PublicModule } from './public/public.module';
+import { SupabaseModule } from './supabase/supabase.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PublicModule } from './public/public.module';
     // Infrastructure
     PrismaModule,
     MailModule,
+    SupabaseModule,
 
     // Auth & identity
     AuthModule,
