@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Field } from "@/components/ui/field";
 import { PasswordField } from "@/components/auth/PasswordField";
@@ -14,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { authApi } from "@/lib/api/services/auth";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api/client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 // Mirrors the backend RegisterDto so validation fails fast, client-side.
 const schema = z.object({
@@ -35,7 +36,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
@@ -181,5 +182,18 @@ export default function RegisterPage() {
         </p>
       </AuthCard>
     </AuthShell>
+  );
+}
+
+// Wrap with Suspense boundary to handle useSearchParams
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FBF9F8] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }

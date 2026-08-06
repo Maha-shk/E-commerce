@@ -6,12 +6,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Field } from "@/components/ui/field";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
 import { useLogin } from "@/lib/hooks/use-auth";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { authApi } from "@/lib/api/services/auth";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
@@ -145,5 +146,18 @@ export default function LoginPage() {
         </p>
       </AuthCard>
     </AuthShell>
+  );
+}
+
+// Wrap with Suspense boundary to handle useSearchParams
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FBF9F8] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

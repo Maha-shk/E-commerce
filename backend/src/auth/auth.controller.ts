@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -126,5 +127,12 @@ export class AuthController {
   @ApiOperation({ summary: 'Return the currently authenticated user' })
   me(@CurrentUser('id') userId: string) {
     return this.auth.me(userId);
+  }
+
+  @ApiBearerAuth()
+  @Get('orders')
+  @ApiOperation({ summary: 'Get the authenticated customer\'s orders (paginated)' })
+  getCustomerOrders(@CurrentUser('id') userId: string, @Query() query: any) {
+    return this.auth.getCustomerOrders(userId, query);
   }
 }

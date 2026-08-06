@@ -1,5 +1,5 @@
 import { post, get } from "@/lib/api/request";
-import type { AuthUser, LoginResponse } from "@/lib/api/types";
+import type { AuthUser, LoginResponse, PaginatedResponse } from "@/lib/api/types";
 
 /** Thin, typed wrappers over the backend's /auth endpoints. */
 
@@ -10,6 +10,36 @@ export type RegisterPayload = {
 };
 
 export type MessageResponse = { message: string };
+
+export type Order = {
+  id: string;
+  orderNumber: string;
+  placedAt: string;
+  status: string;
+  paymentStatus: string;
+  shippingMethod: string;
+  shippingCost: number;
+  discount: number;
+  totals: {
+    subtotal: number;
+    shipping: number;
+    discount: number;
+    total: number;
+  };
+  items: Array<{
+    id: string;
+    name: string;
+    sku: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }>;
+  customer?: {
+    id: string;
+    fullName: string;
+    email: string;
+  };
+};
 
 export const authApi = {
   register: (payload: RegisterPayload) =>
@@ -42,4 +72,12 @@ export const authApi = {
     post<MessageResponse>("/auth/logout", { refreshToken }),
 
   me: () => get<AuthUser>("/auth/me"),
+
+  getOrders: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    from?: string;
+    to?: string;
+  }) => get<PaginatedResponse<Order>>("/auth/orders", params),
 };

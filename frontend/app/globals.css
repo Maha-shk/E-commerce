@@ -195,3 +195,18 @@
     scrollbar-color: color-mix(in srgb, var(--primary) 25%, transparent) transparent;
   }
 }
+
+/* Hide scrollbars for carousel containers while maintaining scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}

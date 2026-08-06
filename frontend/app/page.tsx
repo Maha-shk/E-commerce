@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useHomepageCategories, useBestSellers, useNewArrivals, useSaleProducts } from "@/lib/hooks/use-homepage";
 import { useCart } from "@/lib/hooks/use-cart";
+import { ProductCard } from "@/components/customer/ProductCard";
 import { Loader2 } from "lucide-react";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { HomePageFooter } from "@/components/customer/HomePageFooter";
@@ -183,139 +184,19 @@ export default function HomePage() {
             <div
               id="bestsellers-container"
               className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none'
-              } as any}
             >
               {bestSellersLoading ? (
                 <div className="w-full flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
                 </div>
               ) : bestSellers && bestSellers.length > 0 ? (
-                bestSellers.map((product) => (
-                  <div
-                    key={product.id}
-                    className="shrink-0 w-72 bg-white rounded-xl transition-all overflow-hidden group"
-                  >
-                    {/* Product Image - Clickable to product details */}
-                    <Link href={`/products/${product.id}`} className="block">
-                      <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
-                        {product.images && product.images.length > 0 ? (
-                          <Image
-                            src={product.images[0].url}
-                            alt={product.name}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="text-gray-300">
-                              <svg className="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                              </svg>
-                              <p className="text-xs text-center">No Image</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Sale Badge */}
-                        {product.discountPercent > 0 && (
-                          <div className="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md">
-                            -{product.discountPercent}%
-                          </div>
-                        )}
-
-                        {/* Low Stock Badge */}
-                        {product.lowStock && product.inStock && (
-                          <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                            Low Stock
-                          </div>
-                        )}
-
-                        {/* Out of Stock Overlay */}
-                        {!product.inStock && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                            <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                              Out of Stock
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-
-                    {/* Product Info */}
-                    <div className="p-4">
-                      {/* Category */}
-                      {product.category && (
-                        <p className="text-xs text-gray-500 mb-1">
-                          {product.category.name}
-                        </p>
-                      )}
-
-                      {/* Product Name - Clickable to product details */}
-                      <Link href={`/products/${product.id}`}>
-                        <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 hover:text-[#00234E] transition-colors leading-tight">
-                          {product.name}
-                        </h3>
-                      </Link>
-
-                      {/* Price and Stock Status in same row */}
-                      <div className="flex items-center justify-between">
-                        {/* Price */}
-                        <div className="flex items-center gap-2">
-                          {product.discountPercent > 0 ? (
-                            <>
-                              <span className="text-orange-500 font-bold text-lg">
-                                ${product.salePrice.toFixed(2)}
-                              </span>
-                              <span className="text-gray-400 line-through text-sm">
-                                ${product.price.toFixed(2)}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-orange-500 font-bold text-lg">
-                              ${product.price.toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Stock Status */}
-                        <div>
-                          {!product.inStock ? (
-                            <span className="text-red-500 text-xs font-medium">Out of Stock</span>
-                          ) : product.lowStock ? (
-                            <span className="text-orange-500 text-xs font-medium">
-                              Only {product.stock} left
-                            </span>
-                          ) : (
-                            <span className="text-green-600 text-xs font-medium">In Stock</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Add to Cart Button */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          // Add to cart functionality here
-                          console.log('Add to cart:', product.id);
-                        }}
-                        disabled={!product.inStock}
-                        className={`w-full mt-3 py-2.5 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
-                          product.inStock
-                            ? 'bg-[#00234E] hover:bg-[#001a3a] text-white hover:opacity-90'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-                      </button>
+                <div className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth">
+                  {bestSellers.map((product) => (
+                    <div key={product.id} className="shrink-0 w-72">
+                      <ProductCard product={product} />
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
                 <div className="w-full text-center py-8 text-gray-500">No products available</div>
               )}
@@ -534,139 +415,19 @@ export default function HomePage() {
             <div
               id="sales-container"
               className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none'
-              } as any}
             >
               {saleProductsLoading ? (
                 <div className="w-full flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
                 </div>
               ) : saleProducts && saleProducts.length > 0 ? (
-                saleProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    className="shrink-0 w-72 bg-white rounded-xl transition-all overflow-hidden group"
-                  >
-                    {/* Product Image - Clickable to product details */}
-                    <Link href={`/products/${product.id}`} className="block">
-                      <div className="relative h-56 overflow-hidden bg-[#E5E7EB] rounded-t-xl">
-                        {product.images && product.images.length > 0 ? (
-                          <Image
-                            src={product.images[0].url}
-                            alt={product.name}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="text-gray-300">
-                              <svg className="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                              </svg>
-                              <p className="text-xs text-center">No Image</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Sale Badge */}
-                        {product.discountPercent > 0 && (
-                          <div className="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md">
-                            -{product.discountPercent}%
-                          </div>
-                        )}
-
-                        {/* Low Stock Badge */}
-                        {product.lowStock && product.inStock && (
-                          <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                            Low Stock
-                          </div>
-                        )}
-
-                        {/* Out of Stock Overlay */}
-                        {!product.inStock && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                            <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                              Out of Stock
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-
-                    {/* Product Info */}
-                    <div className="p-4">
-                      {/* Category */}
-                      {product.category && (
-                        <p className="text-xs text-gray-500 mb-1">
-                          {product.category.name}
-                        </p>
-                      )}
-
-                      {/* Product Name - Clickable to product details */}
-                      <Link href={`/products/${product.id}`}>
-                        <h3 className="text-gray-900 font-semibold mb-2 line-clamp-2 hover:text-[#00234E] transition-colors leading-tight">
-                          {product.name}
-                        </h3>
-                      </Link>
-
-                      {/* Price and Stock Status in same row */}
-                      <div className="flex items-center justify-between">
-                        {/* Price */}
-                        <div className="flex items-center gap-2">
-                          {product.discountPercent > 0 ? (
-                            <>
-                              <span className="text-orange-500 font-bold text-lg">
-                                ${product.salePrice.toFixed(2)}
-                              </span>
-                              <span className="text-gray-400 line-through text-sm">
-                                ${product.price.toFixed(2)}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-orange-500 font-bold text-lg">
-                              ${product.price.toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Stock Status */}
-                        <div>
-                          {!product.inStock ? (
-                            <span className="text-red-500 text-xs font-medium">Out of Stock</span>
-                          ) : product.lowStock ? (
-                            <span className="text-orange-500 text-xs font-medium">
-                              Only {product.stock} left
-                            </span>
-                          ) : (
-                            <span className="text-green-600 text-xs font-medium">In Stock</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Add to Cart Button */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          // Add to cart functionality here
-                          console.log('Add to cart:', product.id);
-                        }}
-                        disabled={!product.inStock}
-                        className={`w-full mt-3 py-2.5 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
-                          product.inStock
-                            ? 'bg-[#00234E] hover:bg-[#001a3a] text-white hover:opacity-90'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-                      </button>
+                <div className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth">
+                  {saleProducts.map((product) => (
+                    <div key={product.id} className="shrink-0 w-72">
+                      <ProductCard product={product} />
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
                 <div className="w-full text-center py-8 text-gray-500">No sale products available</div>
               )}

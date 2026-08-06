@@ -8,17 +8,19 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { authApi } from "@/lib/api/services/auth";
+import { useVerifyOtp } from "@/lib/hooks/use-auth";
+import { useResendOtp } from "@/lib/hooks/use-auth";
 import { toast } from "sonner";
-import { getApiErrorMessage } from "@/lib/api/client";
 
 function VerifyOtpForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const email = searchParams.get("email") ?? "";
   const [code, setCode] = useState("");
-  const [isPending, setIsPending] = useState(false);
   const [redirectAfterVerification, setRedirectAfterVerification] = useState<string | null>(null);
+
+  const verifyOtp = useVerifyOtp();
+  const resendOtp = useResendOtp();
 
   useEffect(() => {
     // Check if user was redirected from registration after checkout
@@ -28,52 +30,37 @@ function VerifyOtpForm() {
     }
   }, []);
 
-  const canSubmit = code.length === 6 && Boolean(email) && !isPending;
+  const canSubmit = code.length === 6 && Boolean(email) && !verifyOtp.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
 
-    setIsPending(true);
+    // Handle redirect after verification
+    if (redirectAfterVerification === 'order-confirmation') {
+      // Clear redirect flag
+      sessionStorage.removeItem('redirectAfterVerification');
 
-    try {
-      await authApi.verifyOtp({ email, code });
-      toast.success("Account verified successfully!");
+      // Check if there's a pending order
+      const pendingOrderId = sessionStorage.getItem('pendingOrderId');
 
-      // Handle redirect after verification
-      if (redirectAfterVerification === 'order-confirmation') {
-        // Clear redirect flag
-        sessionStorage.removeItem('redirectAfterVerification');
-
-        // Check if there's a pending order
-        const pendingOrderId = sessionStorage.getItem('pendingOrderId');
-
-        if (pendingOrderId) {
-          // Keep the pending order data intact for the login page to use
-          // Redirect to login to complete the session
-          router.push(`/login?redirect=order-confirmation`);
-        } else {
-          router.push("/login");
-        }
+      if (pendingOrderId) {
+        // Keep the pending order data intact for the login page to use
+        // Redirect to login to complete the session
+        await verifyOtp.mutateAsync({ email, code });
+        router.push(`/login?redirect=order-confirmation`);
       } else {
-        router.push("/verified");
+        await verifyOtp.mutateAsync({ email, code });
+        router.push("/login");
       }
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsPending(false);
+    } else {
+      await verifyOtp.mutateAsync({ email, code });
     }
   };
 
   const handleResend = async () => {
     if (!email) return;
-
-    try {
-      await authApi.resendOtp({ email });
-      toast.success("Verification code resent!");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    }
+    resendOtp.mutate({ email });
   };
 
   return (
@@ -136,8 +123,8 @@ function VerifyOtpForm() {
           className="w-full uppercase tracking-wider"
           disabled={!canSubmit}
         >
-          {isPending && <Loader2 className="animate-spin" />}
-          {isPending ? "Verifying…" : "Verify Account"}
+          {verifyOtp.isPending && <Loader2 className="animate-spin" />}
+          {verifyOtp.isPending ? "Verifying…" : "Verify Account"}
         </Button>
       </form>
 
@@ -146,10 +133,10 @@ function VerifyOtpForm() {
         <button
           type="button"
           onClick={handleResend}
-          disabled={!email || isPending}
+          disabled={!email || resendOtp.isPending}
           className="font-semibold text-primary hover:underline disabled:opacity-50"
         >
-          {isPending ? "Sending…" : "Resend Code"}
+          {resendOtp.isPending ? "Sending…" : "Resend Code"}
         </button>
       </p>
     </AuthCard>

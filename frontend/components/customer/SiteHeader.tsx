@@ -4,14 +4,21 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Search, ShoppingCart, User, Heart, Menu, X } from "lucide-react";
+import { useSession } from "@/lib/hooks/use-auth";
+import { useWishlist } from "@/lib/hooks/use-wishlist";
 
 export function SiteHeader() {
+  const { isAuthenticated, isAdmin, hydrated } = useSession();
+  const { wishlistItemIds } = useWishlist();
+  const profileHref = hydrated && isAuthenticated
+    ? (isAdmin ? "/admin/dashboard" : "/account")
+    : "/login";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Mock cart count - replace with actual cart state
   const cartCount = 2;
-  const wishlistCount = 0;
+  const wishlistCount = wishlistItemIds.length;
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">
@@ -66,7 +73,7 @@ export function SiteHeader() {
             </button>
 
             {/* Wishlist */}
-            <Link href="/favorites" className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
+            <Link href="/account/wishlist" className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
               <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
               {wishlistCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
@@ -76,7 +83,11 @@ export function SiteHeader() {
             </Link>
 
             {/* User */}
-            <Link href="/login" className="p-2 hover:bg-gray-100 rounded-full transition-colors" aria-label="Login">
+            <Link 
+              href={profileHref} 
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors" 
+              aria-label={hydrated && isAuthenticated ? "Account" : "Login"}
+            >
               <User className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
             </Link>
 

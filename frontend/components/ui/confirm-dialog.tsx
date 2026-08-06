@@ -49,7 +49,15 @@ export function ConfirmDialog({
           <Button type="button" variant="outline" size="xl" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
-          <Button type="button" variant="destructive" size="xl" onClick={onConfirm}>
+          <Button
+            type="button"
+            variant="destructive"
+            size="xl"
+            onClick={() => {
+              onConfirm();
+              onOpenChange(false);
+            }}
+          >
             {confirmLabel}
           </Button>
         </div>

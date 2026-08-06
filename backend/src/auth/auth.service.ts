@@ -18,6 +18,7 @@ import * as bcrypt from 'bcryptjs';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { OrdersService } from '../orders/orders.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResendOtpDto, VerifyOtpDto } from './dto/verify-otp.dto';
@@ -59,6 +60,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly mail: MailService,
+    private readonly orders: OrdersService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -297,6 +299,23 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('User not found');
     return user;
+  }
+
+  /** Get orders for the authenticated customer */
+  async getCustomerOrders(userId: string, query: any) {
+    // Create a proper query object with customerId
+    const orderQuery = {
+      page: parseInt(query.page) || 1,
+      limit: parseInt(query.limit) || 20,
+      ...(query.status && { status: query.status }),
+      ...(query.paymentStatus && { paymentStatus: query.paymentStatus }),
+      ...(query.search && { search: query.search }),
+      ...(query.from && { from: query.from }),
+      ...(query.to && { to: query.to }),
+      customerId: userId,
+    };
+
+    return this.orders.findAll(orderQuery);
   }
 
   private async issueTokens(user: User, meta: { userAgent?: string; ip?: string }) {

@@ -144,4 +144,14 @@ export const publicService = {
     const { data } = await api.get<ApiResponse<string[]>>('/public/brands');
     return data;
   },
+
+  /**
+   * Get order details by order number
+   */
+  async getOrder(orderNumber: string): Promise<ApiResponse<any>> {
+    const { data } = await api.get<ApiResponse<any>>(
+      `/public/orders/${orderNumber}`
+    );
+    return data;
+  },
 };

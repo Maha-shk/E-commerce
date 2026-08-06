@@ -437,8 +437,14 @@ export class CartService {
    */
   private calculateTotals(cart: any): CartTotals {
     const totalItems = cart.items.reduce((sum: number, item: any) => sum + item.quantity, 0);
+
+    // Calculate subtotal using sale price (with discounts applied)
     const subtotal = cart.items.reduce(
-      (sum: number, item: any) => sum + Number(item.unitPrice) * item.quantity,
+      (sum: number, item: any) => {
+        const product = item.product;
+        const salePrice = this.calculateSalePrice(product);
+        return sum + salePrice * item.quantity;
+      },
       0,
     );
 

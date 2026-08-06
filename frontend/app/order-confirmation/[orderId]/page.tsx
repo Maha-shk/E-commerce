@@ -79,9 +79,9 @@ export default function OrderConfirmPage() {
     }
 
     // Case 3: Authenticated user - check if order belongs to them
-    if (isAuthenticated && user && order.userId) {
-      // Order has a userId, check if it matches current user
-      if (order.userId !== user.id) {
+    if (isAuthenticated && user && order.customerEmail) {
+      // Order has a customer email, check if it matches current user
+      if (order.customerEmail !== user.email) {
         // Order belongs to different user
         setError('Access denied - This order belongs to another user');
         setTimeout(() => {
@@ -109,7 +109,7 @@ export default function OrderConfirmPage() {
     }
 
     // Case 5: Authenticated user viewing guest order (converted after login)
-    if (isAuthenticated && user && !order.userId && recentOrderId === params.orderId) {
+    if (isAuthenticated && user && !order.customerEmail && recentOrderId === params.orderId) {
       // Guest order that user just logged in to view
       sessionStorage.removeItem('justCompletedCheckout');
       sessionStorage.removeItem('recentOrderId');

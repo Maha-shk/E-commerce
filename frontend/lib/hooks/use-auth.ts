@@ -32,14 +32,32 @@ export function useSession() {
 export function useCurrentUser() {
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const hydrated = useAuthStore((s) => s.hydrated);
+  const setSession = useAuthStore((s) => s.setSession);
   const setUser = useAuthStore((s) => s.setUser);
 
   return useQuery({
     queryKey: queryKeys.auth.me,
     queryFn: async () => {
-      const user = await authApi.me();
-      setUser(user);
-      return user;
+      // Use refresh endpoint to get both user AND new access token
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to refresh session');
+      }
+
+      const data = await response.json();
+
+      // Store the full session including new access token
+      if (data.success && data.data) {
+        setSession(data.data);
+        return data.data.user;
+      }
+
+      throw new Error('Invalid refresh response');
     },
     enabled: hydrated && Boolean(refreshToken),
     staleTime: 5 * 60_000,
@@ -65,10 +83,13 @@ export function useLogin() {
 
 export function useRegister() {
   const router = useRouter();
+  const clearSession = useAuthStore((s) => s.clearSession);
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
     onSuccess: (data, variables) => {
+      // Clear any existing session before starting registration flow
+      clearSession();
       toast.success(data.message);
       router.push(`/verify-otp?email=${encodeURIComponent(variables.email)}`);
     },
@@ -78,10 +99,12 @@ export function useRegister() {
 
 export function useVerifyOtp() {
   const router = useRouter();
+  const setSession = useAuthStore((s) => s.setSession);
 
   return useMutation({
     mutationFn: authApi.verifyOtp,
     onSuccess: (data) => {
+      setSession(data); // Store tokens and user data after verification
       toast.success(data.message);
       router.push("/verified");
     },

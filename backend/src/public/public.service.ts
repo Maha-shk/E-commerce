@@ -488,19 +488,22 @@ export class PublicService {
       data: {
         id: order.id,
         orderNumber: order.orderNumber,
-        orderDate: order.createdAt,
-        customerName: order.customer?.fullName || 'Guest',
-        customerEmail: order.customer?.email || '',
-        shippingAddress: {
-          fullName: order.shippingAddress[0] || '',
-          address: order.shippingAddress[1] || '',
-          apartment: order.shippingAddress[2] || '',
-          city: order.shippingAddress[3] || '',
-          state: '',
-          postalCode: '',
-          country: order.shippingAddress[4] || '',
-        },
-        paymentMethod: order.paymentMethod || 'Credit Card',
+        customerId: order.customerId,
+        customer: order.customer ? {
+          id: order.customer.id,
+          fullName: order.customer.fullName,
+          email: order.customer.email,
+          phone: order.customer.phone,
+        } : null,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod,
+        shippingMethod: order.shippingMethod,
+        shippingTracking: order.shippingTracking,
+        shippingAddress: order.shippingAddress,
+        shippingCost: order.shippingCost,
+        discount: order.discount,
+        placedAt: order.createdAt,
         items: order.items.map((item: any) => {
           // Get product image if available, otherwise use placeholder
           let imageUrl = `https://images.unsplash.com/photo-1598300042267-174c1e13cd2c?w=400&h=400&fit=crop`;
@@ -511,24 +514,23 @@ export class PublicService {
 
           return {
             id: item.id,
+            productId: item.productId,
             name: item.name,
-            price: Number(item.unitPrice),
-            salePrice: Number(item.unitPrice),
-            discount: 0,
+            sku: item.sku,
             quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            lineTotal: Number(item.unitPrice) * item.quantity,
             image: imageUrl,
-            color: '',
           };
         }),
-        subtotal,
-        shipping: shippingCost,
-        tax: 0,
-        total,
-        estimatedDelivery: estimatedDelivery.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
+        totals: {
+          subtotal,
+          shipping: shippingCost,
+          discount: discount,
+          total,
+        },
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
       },
     };
   }

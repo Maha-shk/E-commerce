@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSession } from "@/lib/hooks/use-auth";
+import { useWishlist } from "@/lib/hooks/use-wishlist";
 
 export function HomePageHeader({ mobileMenuOpen, setMobileMenuOpen, cartCount = 0 }: {
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
   cartCount?: number;
 }) {
-  // Use provided cart count or default to 0
+  const { isAuthenticated, isAdmin, hydrated } = useSession();
+  const { wishlistItemIds } = useWishlist();
+  const profileHref = hydrated && isAuthenticated
+    ? (isAdmin ? "/admin/dashboard" : "/account")
+    : "/login";
+
+  const wishlistCount = wishlistItemIds.length;
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">
@@ -56,15 +63,24 @@ export function HomePageHeader({ mobileMenuOpen, setMobileMenuOpen, cartCount = 
               />
             </div>
 
-            {/* Favorite/Heart Icon */}
-            <Link href="/favorites" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            {/* Wishlist/Heart Icon */}
+            <Link href="/account/wishlist" className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
               <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {wishlistCount}
+                </span>
+              )}
             </Link>
 
             {/* User Icon */}
-            <Link href="/login" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <Link 
+              href={profileHref} 
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label={hydrated && isAuthenticated ? "Account" : "Login"}
+            >
               <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>

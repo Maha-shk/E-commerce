@@ -152,6 +152,7 @@ model User {
   verificationTokens VerificationToken[]
   addresses          Address[]
   carts              Cart[]
+  wishlists          Wishlist[]
   orders             Order[]
   conversations      Conversation[]
   notifications      Notification[]
@@ -245,6 +246,7 @@ model Product {
   variants         ProductVariant[]
   orderItems       OrderItem[]
   cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
   inventoryLogs    InventoryAdjustment[]
   featuredProducts FeaturedProduct[]
   createdAt        DateTime              @default(now())
@@ -319,6 +321,34 @@ model CartItem {
   updatedAt DateTime @updatedAt
 
   @@index([cartId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Wishlist
+// ---------------------------------------------------------------------------
+
+model Wishlist {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model WishlistItem {
+  id         String   @id @default(cuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([wishlistId, productId]) // Prevent duplicate items
+  @@index([wishlistId])
   @@index([productId])
 }
 
