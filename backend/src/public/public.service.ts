@@ -406,7 +406,6 @@ export class PublicService {
           orderNumber,
           customerId: customer.id,
           status: OrderStatus.PENDING,
-          paymentStatus: PaymentStatus.PENDING,
           items: {
             create: orderItems,
           },
@@ -496,7 +495,6 @@ export class PublicService {
           phone: order.customer.phone,
         } : null,
         status: order.status,
-        paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
         shippingMethod: order.shippingMethod,
         shippingTracking: order.shippingTracking,

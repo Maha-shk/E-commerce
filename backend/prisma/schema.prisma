@@ -77,13 +77,6 @@ enum OrderStatus {
   RETURNED
 }
 
-enum PaymentStatus {
-  PAID
-  PENDING
-  REFUNDED
-  FAILED
-}
-
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
@@ -402,7 +395,6 @@ model Order {
   customerId       String?
   customer         User?         @relation(fields: [customerId], references: [id])
   status           OrderStatus   @default(PENDING)
-  paymentStatus    PaymentStatus @default(PENDING)
   paymentMethod    String?
   shippingMethod   String?
   shippingTracking String?
@@ -416,7 +408,6 @@ model Order {
 
   @@index([customerId])
   @@index([status])
-  @@index([paymentStatus])
 }
 
 model OrderItem {

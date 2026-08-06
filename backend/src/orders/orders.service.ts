@@ -39,7 +39,6 @@ export class OrdersService {
   async findAll(query: OrderQueryDto) {
     const where: Prisma.OrderWhereInput = {
       ...(query.status && { status: query.status }),
-      ...(query.paymentStatus && { paymentStatus: query.paymentStatus }),
       ...(query.customerId && { customerId: query.customerId }),
       ...((query.from || query.to) && {
         placedAt: {
@@ -82,19 +81,14 @@ export class OrdersService {
 
   /** Headline figures for the orders screen. */
   async stats() {
-    const [byStatus, byPayment, revenue, total] = await this.prisma.$transaction([
+    const [byStatus, revenue, total] = await this.prisma.$transaction([
       this.prisma.order.groupBy({
         by: ['status'],
         _count: true,
         orderBy: { status: 'asc' },
       }),
-      this.prisma.order.groupBy({
-        by: ['paymentStatus'],
-        _count: true,
-        orderBy: { paymentStatus: 'asc' },
-      }),
       this.prisma.order.aggregate({
-        where: { paymentStatus: PaymentStatus.PAID },
+        where: { status: 'DELIVERED' },
         _sum: { shippingCost: true, discount: true },
       }),
       this.prisma.order.count(),
@@ -102,7 +96,7 @@ export class OrdersService {
 
     // Line-item revenue has to be summed separately (no direct aggregate on a relation).
     const items = await this.prisma.orderItem.findMany({
-      where: { order: { paymentStatus: PaymentStatus.PAID } },
+      where: { order: { status: 'DELIVERED' } },
       select: { quantity: true, unitPrice: true },
     });
     const gross = items.reduce((s, i) => s + i.quantity * Number(i.unitPrice), 0);
@@ -112,9 +106,6 @@ export class OrdersService {
     return {
       total,
       byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
-      byPaymentStatus: Object.fromEntries(
-        byPayment.map((r) => [r.paymentStatus, r._count]),
-      ),
       revenue: Number(netRevenue.toFixed(2)),
       averageOrderValue: total > 0 ? Number((netRevenue / total).toFixed(2)) : 0,
     };
@@ -131,7 +122,6 @@ export class OrdersService {
         orderNumber: await this.nextOrderNumber(),
         customerId: dto.customerId,
         ...(dto.status && { status: dto.status }),
-        ...(dto.paymentStatus && { paymentStatus: dto.paymentStatus }),
         paymentMethod: dto.paymentMethod,
         shippingMethod: dto.shippingMethod,
         shippingTracking: dto.shippingTracking,
@@ -176,7 +166,6 @@ export class OrdersService {
       where: { id: order.id },
       data: {
         ...(dto.status && { status: dto.status }),
-        ...(dto.paymentStatus && { paymentStatus: dto.paymentStatus }),
         ...(dto.shippingTracking !== undefined && {
           shippingTracking: dto.shippingTracking,
         }),

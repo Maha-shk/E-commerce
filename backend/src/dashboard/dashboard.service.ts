@@ -28,7 +28,7 @@ export class DashboardService {
         this.prisma.order.count({ where: { status: OrderStatus.PENDING } }),
         this.prisma.user.count({ where: { role: Role.CUSTOMER } }),
         this.prisma.order.findMany({
-          where: { paymentStatus: PaymentStatus.PAID },
+          where: { status: OrderStatus.DELIVERED },
           select: {
             shippingCost: true,
             discount: true,

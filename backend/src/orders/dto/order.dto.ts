@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -20,11 +20,6 @@ export class OrderQueryDto extends PaginationQueryDto {
   @IsEnum(OrderStatus)
   @IsOptional()
   status?: OrderStatus;
-
-  @ApiPropertyOptional({ enum: PaymentStatus })
-  @IsEnum(PaymentStatus)
-  @IsOptional()
-  paymentStatus?: PaymentStatus;
 
   @ApiPropertyOptional({ description: 'Filter by customer id' })
   @IsString()
@@ -87,11 +82,6 @@ export class CreateOrderDto {
   @IsOptional()
   status?: OrderStatus;
 
-  @ApiPropertyOptional({ enum: PaymentStatus })
-  @IsEnum(PaymentStatus)
-  @IsOptional()
-  paymentStatus?: PaymentStatus;
-
   @ApiPropertyOptional({ example: 'Visa •••• 4242' })
   @IsString()
   @IsOptional()
@@ -133,11 +123,6 @@ export class UpdateOrderStatusDto {
   @IsEnum(OrderStatus)
   @IsOptional()
   status?: OrderStatus;
-
-  @ApiPropertyOptional({ enum: PaymentStatus })
-  @IsEnum(PaymentStatus)
-  @IsOptional()
-  paymentStatus?: PaymentStatus;
 
   @ApiPropertyOptional()
   @IsString()

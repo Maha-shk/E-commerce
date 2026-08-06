@@ -32,7 +32,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { addItem } = useCart();
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
-  const [loginRequiredAction, setLoginRequiredAction] = useState<"add to wishlist" | "add to cart" | null>(null);
+  const [loginRequiredAction, setLoginRequiredAction] = useState<"add to wishlist" | null>(null);
 
   const inWishlist = isInWishlist(product.id);
 
@@ -63,11 +63,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    if (!isAuthenticated) {
-      setLoginRequiredAction("add to cart");
-      return;
-    }
 
     try {
       await addItem(product.id, 1);

@@ -22,7 +22,6 @@ export type OrderStatus =
   | "DELIVERED"
   | "CANCELLED"
   | "RETURNED";
-export type PaymentStatus = "PAID" | "PENDING" | "REFUNDED" | "FAILED";
 export type DiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
 export type DiscountCategory = "ACTIVE" | "SCHEDULED" | "ARCHIVED";
 export type NotificationType = "SUCCESS" | "INFO" | "WARNING" | "ERROR";
@@ -59,13 +58,6 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
   RETURNED: "Returned",
-};
-
-export const paymentStatusLabel: Record<PaymentStatus, string> = {
-  PAID: "Paid",
-  PENDING: "Pending",
-  REFUNDED: "Refunded",
-  FAILED: "Failed",
 };
 
 export const userStatusLabel: Record<UserStatus, string> = {
@@ -168,7 +160,6 @@ export type Order = {
     phone: string | null;
   } | null;
   status: OrderStatus;
-  paymentStatus: PaymentStatus;
   paymentMethod: string | null;
   shippingMethod: string | null;
   shippingTracking: string | null;
@@ -190,7 +181,6 @@ export type Order = {
 export type OrderStats = {
   total: number;
   byStatus: Partial<Record<OrderStatus, number>>;
-  byPaymentStatus: Partial<Record<PaymentStatus, number>>;
   revenue: number;
   averageOrderValue: number;
 };

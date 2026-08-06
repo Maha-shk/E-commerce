@@ -26,6 +26,7 @@ import { PublicModule } from './public/public.module';
 import { CartModule } from './cart/cart.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { SupabaseModule } from './supabase/supabase.module';
+import { AddressesModule } from './addresses/addresses.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { SupabaseModule } from './supabase/supabase.module';
     PublicModule,
     CartModule,
     WishlistModule,
+    AddressesModule,
 
     // Admin dashboard features
     DashboardModule,

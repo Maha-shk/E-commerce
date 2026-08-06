@@ -8,7 +8,6 @@ interface OrderSummaryProps {
       discount: number;
       total: number;
     };
-    paymentMethod: string | null;
   };
 }
 
@@ -71,14 +70,6 @@ export function OrderSummary({ order }: OrderSummaryProps) {
             </span>
           </div>
         )}
-
-        {/* Payment Method */}
-        <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-200">
-          <span className="text-gray-600">Payment Method</span>
-          <span className="font-medium text-gray-900">
-            {order.paymentMethod || "N/A"}
-          </span>
-        </div>
 
         {/* Total */}
         <div className="flex items-center justify-between pt-4 border-t-2 border-gray-300 mt-4">

@@ -308,7 +308,6 @@ export class AuthService {
       page: parseInt(query.page) || 1,
       limit: parseInt(query.limit) || 20,
       ...(query.status && { status: query.status }),
-      ...(query.paymentStatus && { paymentStatus: query.paymentStatus }),
       ...(query.search && { search: query.search }),
       ...(query.from && { from: query.from }),
       ...(query.to && { to: query.to }),

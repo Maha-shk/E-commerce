@@ -6,8 +6,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HomePageHeader } from "@/components/customer/HomePageHeader";
 import { useCart } from "@/lib/hooks/use-cart";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronDown } from "lucide-react";
 import { useSession } from "@/lib/hooks/use-auth";
+import { addressesService, type Address } from "@/lib/api/services/addresses";
 
 interface FormErrors {
   email?: string;
@@ -27,6 +28,10 @@ export default function CheckoutPage() {
   const { cart, totalItems, subtotal, fetchCart, clearCart } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
   const { user, isAuthenticated } = useSession();
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   useEffect(() => {
     fetchCart();
@@ -70,11 +75,117 @@ export default function CheckoutPage() {
         ...prev,
         firstName,
         lastName,
-        // You could add saved address fields to user profile in future
-        country: prev.country || 'US' // Default to US if no saved address
+        country: prev.country || 'US'
       }));
+
+      // Fetch addresses for authenticated users
+      fetchAddresses();
     }
   }, [isAuthenticated, user]);
+
+  // Smart address line mapping (handles different storage scenarios)
+  const mapAddressLinesToForm = (storedLines: string[]) => {
+    const lines = storedLines || [];
+    let formLines = { address: '', apartment: '', city: '', state: '', postalCode: '' };
+
+    if (lines.length >= 5) {
+      // Standard case: all 5 fields present
+      formLines = {
+        address: lines[0] || '',
+        apartment: lines[1] || '',
+        city: lines[2] || '',
+        state: lines[3] || '',
+        postalCode: lines[4] || '',
+      };
+    } else if (lines.length === 4) {
+      // Apartment was likely empty, stored as [address, city, state, postalCode]
+      formLines = {
+        address: lines[0] || '',
+        apartment: '',
+        city: lines[1] || '',
+        state: lines[2] || '',
+        postalCode: lines[3] || '',
+      };
+    } else if (lines.length === 3) {
+      // Minimal address: [address, city, postalCode]
+      formLines = {
+        address: lines[0] || '',
+        apartment: '',
+        city: lines[1] || '',
+        state: '',
+        postalCode: lines[2] || '',
+      };
+    } else {
+      // Fallback: assign what we have
+      formLines = {
+        address: lines[0] || '',
+        apartment: lines[1] || '',
+        city: lines[2] || '',
+        state: lines[3] || '',
+        postalCode: lines[4] || '',
+      };
+    }
+
+    return formLines;
+  };
+
+  // Fetch addresses from backend
+  const fetchAddresses = async () => {
+    if (!isAuthenticated) return;
+
+    try {
+      setLoadingAddresses(true);
+      const response = await addressesService.getAddresses();
+      const userAddresses = response.data || [];
+
+      setAddresses(userAddresses);
+
+      // Auto-select default address or use first address
+      if (userAddresses.length > 0) {
+        const defaultAddress = userAddresses.find(addr => addr.isDefault) || userAddresses[0];
+        setSelectedAddress(defaultAddress);
+
+        // Pre-fill form with address data using smart mapping
+        const formFields = mapAddressLinesToForm(defaultAddress.lines);
+        setShippingAddress(prev => ({
+          ...prev,
+          ...formFields,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch addresses:', error);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  // Handle address selection
+  const handleAddressSelect = (address: Address) => {
+    setSelectedAddress(address);
+
+    // Pre-fill form with selected address data using smart mapping
+    const formFields = mapAddressLinesToForm(address.lines);
+    setShippingAddress(prev => ({
+      ...prev,
+      ...formFields,
+    }));
+
+    setShowAddressDropdown(false);
+  };
+
+  // Handle entering a new address manually
+  const handleEnterNewAddress = () => {
+    setSelectedAddress(null);
+    // Clear form fields for manual entry but keep user data
+    setShippingAddress(prev => ({
+      ...prev,
+      address: '',
+      apartment: '',
+      city: '',
+      state: '',
+      postalCode: '',
+    }));
+  };
 
   const [contactInfo, setContactInfo] = useState({
     email: "",
@@ -365,6 +476,8 @@ export default function CheckoutPage() {
               {/* Shipping Section */}
               <div>
                 <h3 className="text-base font-medium text-gray-900 mb-4">Shipping Address</h3>
+
+                {/* Manual Address Entry Form */}
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -418,21 +531,47 @@ export default function CheckoutPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Address
                     </label>
-                    <input
-                      type="text"
-                      value={shippingAddress.address}
-                      onChange={(e) => {
-                        setShippingAddress({ ...shippingAddress, address: e.target.value });
-                        if (touchedFields.has('address')) {
-                          handleFieldChange('address', e.target.value);
-                        }
-                      }}
-                      onBlur={() => handleFieldBlur('address', shippingAddress.address)}
-                      placeholder="Street address"
-                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#00234E] focus:border-transparent outline-none transition-all ${
-                        formErrors.address ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    />
+                    {isAuthenticated && addresses.length > 0 ? (
+                      <select
+                        value={selectedAddress?.id || 'manual'}
+                        onChange={(e) => {
+                          if (e.target.value === 'manual') {
+                            handleEnterNewAddress();
+                          } else {
+                            const address = addresses.find(a => a.id === e.target.value);
+                            if (address) {
+                              handleAddressSelect(address);
+                            }
+                          }
+                        }}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#00234E] focus:border-transparent outline-none transition-all bg-white ${
+                          formErrors.address ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      >
+                        <option value="manual">Enter new address...</option>
+                        {addresses.map((address) => (
+                          <option key={address.id} value={address.id}>
+                            {address.label || 'Address'} {address.isDefault ? '(Default)' : ''} - {address.lines[0]}, {address.lines[2]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={shippingAddress.address}
+                        onChange={(e) => {
+                          setShippingAddress({ ...shippingAddress, address: e.target.value });
+                          if (touchedFields.has('address')) {
+                            handleFieldChange('address', e.target.value);
+                          }
+                        }}
+                        onBlur={() => handleFieldBlur('address', shippingAddress.address)}
+                        placeholder="Street address"
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#00234E] focus:border-transparent outline-none transition-all ${
+                          formErrors.address ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                    )}
                     {formErrors.address && touchedFields.has('address') && (
                       <p className="mt-1 text-sm text-red-600">{formErrors.address}</p>
                     )}
