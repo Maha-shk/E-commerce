@@ -32,8 +32,14 @@ export class EnvironmentVariables {
   PORT = 4000;
 
   // --- Database ---
+  /** Transaction-mode pooler URL (port 6543). Used by PrismaClient at runtime. */
   @IsString()
   DATABASE_URL!: string;
+
+  /** Session-mode pooler URL (port 5432). Required by prisma migrate / db seed. */
+  @IsString()
+  @IsOptional()
+  DIRECT_URL?: string;
 
   // --- JWT ---
   @IsString()
@@ -97,6 +103,16 @@ export class EnvironmentVariables {
   @IsOptional()
   SUPABASE_URL?: string;
 
+  /** Current key names: sb_publishable_… / sb_secret_…  */
+  @IsString()
+  @IsOptional()
+  SUPABASE_PUBLISHABLE_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPABASE_SECRET_KEY?: string;
+
+  /** Legacy JWT key names, still accepted as a fallback. */
   @IsString()
   @IsOptional()
   SUPABASE_ANON_KEY?: string;

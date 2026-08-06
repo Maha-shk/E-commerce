@@ -14,7 +14,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Runtime queries go through Supabase's transaction pooler (port 6543), which
+  // is what makes this safe to run in serverless functions.
   url      = env("DATABASE_URL")
+  // Migrations and introspection need a session-mode connection (port 5432):
+  // DDL and advisory locks cannot cross a transaction pooler.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +80,14 @@ enum OrderStatus {
   DELIVERED
   CANCELLED
   RETURNED
+}
+
+/// Settlement state of an order, tracked independently of fulfilment status.
+enum PaymentStatus {
+  PAID
+  PENDING
+  REFUNDED
+  FAILED
 }
 
 enum DiscountType {
@@ -395,6 +408,7 @@ model Order {
   customerId       String?
   customer         User?         @relation(fields: [customerId], references: [id])
   status           OrderStatus   @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
   paymentMethod    String?
   shippingMethod   String?
   shippingTracking String?
@@ -408,6 +422,7 @@ model Order {
 
   @@index([customerId])
   @@index([status])
+  @@index([paymentStatus])
 }
 
 model OrderItem {

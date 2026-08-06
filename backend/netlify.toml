@@ -1,18 +1,44 @@
+# Netlify configuration for the CENTO NestJS backend.
+#
+# IMPORTANT: this file lives in `backend/`, not the repo root. In the Netlify UI
+# set **Base directory = backend** (Site configuration -> Build & deploy ->
+# Build settings). Every path below is then relative to `backend/`.
+
 [build]
   command = "bash netlify/build.sh"
-  functions = "netlify/functions"
-  publish = "dist"
+  # Must NOT be "dist": the publish directory is served publicly, and dist/ is
+  # the compiled server (including config and query logic). Publish a static
+  # placeholder instead — the real API is the function below.
+  publish = "netlify/public"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # NODE_ENV=production makes npm omit devDependencies, which would strip
+  # @nestjs/cli, typescript and the prisma CLI and fail the build with
+  # "nest: not found". --include=dev keeps them while the runtime still sees
+  # NODE_ENV=production.
+  NODE_ENV = "production"
+  NPM_FLAGS = "--include=dev"
 
 [functions]
-  node_bundler = "esbuild"
-  included_files = ["prisma/schema.prisma", "node_modules/.prisma/**"]
-  external_node_modules = [
-    "@prisma/client",
-    "@nestjs/microservices",
-    "@nestjs/websockets",
-    "class-transformer"
+  directory = "netlify/functions"
+  # "nft" traces and copies the require graph instead of bundling it. esbuild
+  # would strip the decorator metadata NestJS needs for dependency injection and
+  # break Prisma's dynamic engine resolution. Do not switch this to esbuild.
+  node_bundler = "nft"
+  # The Prisma query engine is loaded at runtime by path, so tracing can't see
+  # it — ship it (and the schema) explicitly. The negations matter: `prisma
+  # generate` also emits a ~20MB Windows engine (from the "native" target) that
+  # Lambda can never load, plus occasional .tmp artifacts from interrupted
+  # generates. Shipping those pushed the zip to 39MB of Lambda's 50MB ceiling.
+  included_files = [
+    "prisma/schema.prisma",
+    "node_modules/.prisma/client/**",
+    "!node_modules/.prisma/client/*windows*",
+    "!node_modules/.prisma/client/*.tmp*"
   ]
 
+# Every /api/* request is served by the single Nest function.
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
@@ -21,9 +47,8 @@
 
 [dev]
   command = "npm run start:dev"
-  port = 4000
+  # `port` is the Netlify Dev proxy; `targetPort` is where Nest actually listens.
+  # These must differ or Netlify Dev fails to bind.
+  port = 8888
   targetPort = 4000
-  publish = "dist"
-
-[environment]
-  NODE_ENV = "production"
+  publish = "netlify/public"

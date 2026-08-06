@@ -10,8 +10,18 @@ export class SupabaseConfig {
 
   constructor(private configService: ConfigService) {
     this.supabaseUrl = this.configService.get<string>('SUPABASE_URL') || '';
-    this.supabaseAnonKey = this.configService.get<string>('SUPABASE_ANON_KEY') || '';
-    this.supabaseServiceRoleKey = this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+    // Supabase renamed its API keys: `sb_publishable_…` replaces the anon JWT and
+    // `sb_secret_…` replaces the service-role JWT. Prefer the new names and fall
+    // back to the legacy ones so older projects keep working.
+    this.supabaseAnonKey =
+      this.configService.get<string>('SUPABASE_PUBLISHABLE_KEY') ||
+      this.configService.get<string>('SUPABASE_ANON_KEY') ||
+      '';
+    this.supabaseServiceRoleKey =
+      this.configService.get<string>('SUPABASE_SECRET_KEY') ||
+      this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY') ||
+      '';
   }
 
   /**

@@ -1,4 +1,15 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "prisma", "**/*spec.ts"]
+  "compilerOptions": {
+    // Pin rootDir to src so the emitted tree is dist/main.js (not dist/src/main.js).
+    // Without this, tsc infers rootDir from the widest common directory of all
+    // inputs, and any stray .ts file outside src/ silently nests the whole build.
+    "rootDir": "./src",
+    // Keep the incremental cache inside outDir. nest-cli's deleteOutDir wipes
+    // dist/ but not the project root, so a build-info left outside would tell
+    // tsc the outputs are still current and it would emit nothing at all —
+    // "Found 0 errors" followed by "Cannot find module dist/main".
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
+  },
+  "exclude": ["node_modules", "test", "dist", "prisma", "netlify", "**/*spec.ts"]
 }
