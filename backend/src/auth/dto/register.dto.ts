@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Matches, MaxLength, MinLength, IsBoolean } from 'class-validator';
+import {
+  Equals,
+  IsBoolean,
+  IsEmail,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'Arthur Morgan' })
@@ -22,7 +30,13 @@ export class RegisterDto {
   })
   password!: string;
 
-  @ApiProperty({ example: true })
+  @ApiProperty({
+    example: true,
+    description: 'Acceptance of the membership terms. Recorded as User.termsAcceptedAt.',
+  })
   @IsBoolean()
+  // @IsBoolean() alone would accept `false`, silently creating an account with
+  // no consent. Since the timestamp is now persisted, require actual acceptance.
+  @Equals(true, { message: 'You must accept the membership terms to create an account' })
   terms!: boolean;
 }

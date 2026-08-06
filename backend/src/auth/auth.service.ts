@@ -82,6 +82,9 @@ export class AuthService {
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
         role: Role.CUSTOMER,
         status: UserStatus.ACTIVE,
+        // dto.terms is validated as exactly `true`, so reaching here means the
+        // account holder accepted the terms at this moment.
+        termsAcceptedAt: new Date(),
       },
       select: USER_PUBLIC_SELECT,
     });

@@ -151,6 +151,10 @@ model User {
   status        UserStatus @default(ACTIVE)
   emailVerified Boolean    @default(false)
   avatarUrl     String?
+  /// When the account holder accepted the membership terms. Null for accounts
+  /// created before consent was recorded (e.g. seeded staff), so it is nullable
+  /// rather than defaulted — a synthetic timestamp would misrepresent consent.
+  termsAcceptedAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
