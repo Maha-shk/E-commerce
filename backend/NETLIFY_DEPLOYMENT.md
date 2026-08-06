@@ -43,7 +43,7 @@ SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / MAIL_FROM   (optional)
 | Variable | Why |
 | --- | --- |
 | `PORT` | Only `main.ts` reads it, and the serverless function never binds a port. Setting it also makes the secrets scanner search the build for the literal string `4000`, which matches unrelated code. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Read **only** by `prisma/seed.ts`, which does not run during a Netlify build. Leaving `ADMIN_PASSWORD` set — especially at the default `ChangeMe123!` — puts a well-known admin credential in the deploy environment for no benefit. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Read **only** by `prisma/seed.ts`, which does not run during a Netlify build. Setting `ADMIN_PASSWORD` here puts an admin credential in the deploy environment for no benefit. |
 | `NODE_ENV` | Already set in `netlify.toml`. A duplicate UI value adds nothing. |
 
 After this, deploying is just `git push`.

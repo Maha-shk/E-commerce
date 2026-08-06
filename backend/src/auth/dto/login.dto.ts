@@ -6,7 +6,7 @@ export class LoginDto {
   @IsEmail({}, { message: 'A valid email address is required' })
   email!: string;
 
-  @ApiProperty({ example: 'ChangeMe123!' })
+  @ApiProperty({ example: 'your-password' })
   @IsString()
   @MinLength(1, { message: 'Password is required' })
   password!: string;

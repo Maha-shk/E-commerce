@@ -43,11 +43,15 @@ export class EnvironmentVariables {
 
   // --- JWT ---
   @IsString()
-  @MinLength(16, { message: 'JWT_ACCESS_SECRET must be at least 16 characters' })
+  @MinLength(16, {
+    message: 'JWT_ACCESS_SECRET must be at least 16 characters',
+  })
   JWT_ACCESS_SECRET!: string;
 
   @IsString()
-  @MinLength(16, { message: 'JWT_REFRESH_SECRET must be at least 16 characters' })
+  @MinLength(16, {
+    message: 'JWT_REFRESH_SECRET must be at least 16 characters',
+  })
   JWT_REFRESH_SECRET!: string;
 
   @IsString()
@@ -86,17 +90,19 @@ export class EnvironmentVariables {
   MAIL_FROM = 'CENTO Admin <no-reply@cento.local>';
 
   // --- Bootstrap: the initial super-admin created by the seed script ---
+  // Consumed only by prisma/seed.ts. No defaults here on purpose — a hardcoded
+  // fallback password would ship inside the build output.
   @IsString()
   @IsOptional()
-  ADMIN_EMAIL = 'admin@cento.local';
+  ADMIN_EMAIL?: string;
 
   @IsString()
   @IsOptional()
-  ADMIN_PASSWORD = 'ChangeMe123!';
+  ADMIN_PASSWORD?: string;
 
   @IsString()
   @IsOptional()
-  ADMIN_NAME = 'Alessandro Cento';
+  ADMIN_NAME?: string;
 
   // --- Supabase ---
   @IsString()
@@ -122,7 +128,9 @@ export class EnvironmentVariables {
   SUPABASE_SERVICE_ROLE_KEY?: string;
 }
 
-export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
+export function validateEnv(
+  config: Record<string, unknown>,
+): EnvironmentVariables {
   const validated = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });
