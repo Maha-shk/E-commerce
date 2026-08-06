@@ -7,6 +7,13 @@ export type RegisterPayload = {
   fullName: string;
   email: string;
   password: string;
+  /**
+   * Terms acceptance. The backend's RegisterDto validates this with @IsBoolean(),
+   * so omitting it fails validation. The register form already sends it — this
+   * field was missing from the type only because the form passes a variable
+   * (not an object literal), which skips excess-property checking.
+   */
+  terms: boolean;
 };
 
 export type MessageResponse = { message: string };

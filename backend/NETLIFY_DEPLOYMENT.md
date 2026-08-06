@@ -80,6 +80,31 @@ API applies the identical validation pipe, exception filter and
 `{ success, data }` response envelope as `npm run start:dev`. Editing bootstrap
 behaviour in only one entrypoint is what previously let the two diverge.
 
+### Request bodies in the serverless path
+
+`netlify/functions/api.js` parses the request body itself, in
+`parseServerlessBody`, before Nest's own parser. This is not redundant.
+
+`serverless-http` fabricates an `IncomingMessage` with `complete: true` and
+assigns the raw body directly onto `req.body` as a Buffer. body-parser 2.x — the
+version Express 5 / Nest 11 depend on — begins with:
+
+```js
+if (onFinished.isFinished(req)) { next(); return }
+```
+
+and `isFinished` is true precisely *because* `complete` is set. So Nest's JSON
+parser returns without doing anything, the untouched Buffer reaches the
+`ValidationPipe`, and class-transformer indexes the Buffer's bytes — surfacing as
+`"property 0 should not exist", "property 1 should not exist", …` on every POST.
+body-parser 1.x guarded on `req._body` instead, which is why this pairing worked
+before Express 5.
+
+The middleware handles `application/json` and `application/x-www-form-urlencoded`.
+For any other content type it clears `req.body` (keeping the bytes on
+`req.rawBody`) so behaviour matches a normal Express server rather than leaking a
+Buffer into validation.
+
 `netlify/build.sh` runs `prisma generate` → `nest build` → `prisma migrate
 deploy`. Netlify installs dependencies before this runs, so there is no install
 step. Migrations use `DIRECT_URL`; the build fails fast if it is unset rather
@@ -189,4 +214,5 @@ port 8888 with Nest on 4000.
 | `P1000 Authentication failed` | wrong database password, or the username is missing the `.{project-ref}` suffix the pooler requires |
 | `Module '"@prisma/client"' has no exported member ...` | generated client is stale — run `npx prisma generate` (now automatic via `postinstall`) |
 | Responses missing `{ success, data }` | `configureApp()` did not run in the function |
+| `400` with `"property 0 should not exist", "property 1 …"` on every POST | the request body reached the ValidationPipe as a raw Buffer, so class-transformer indexed its bytes. `parseServerlessBody` in `netlify/functions/api.js` exists to prevent this — see the note below. |
 | Config changes appear ignored | **Base directory** is not set to `backend`, so `netlify.toml` was never read |
