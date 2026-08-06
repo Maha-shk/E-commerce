@@ -27,18 +27,24 @@ Site configuration → Environment variables. Use the same values as
 pointing at the deployed frontend.
 
 ```
-DATABASE_URL       postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require&connect_timeout=30
-DIRECT_URL         postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=30
-SUPABASE_URL       https://<ref>.supabase.co
-SUPABASE_ANON_KEY  ...
-SUPABASE_SERVICE_ROLE_KEY  ...
-JWT_ACCESS_SECRET  ...
-JWT_REFRESH_SECRET ...
-CORS_ORIGIN        http://localhost:3000,https://pr-e-commerce-seven.vercel.app
-ADMIN_EMAIL        admin@cento.local
-ADMIN_PASSWORD     <something strong>
-ADMIN_NAME         Super Admin
+DATABASE_URL              postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require&connect_timeout=30
+DIRECT_URL                postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=30
+SUPABASE_URL              https://<ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY  sb_publishable_...
+SUPABASE_SECRET_KEY       sb_secret_...
+JWT_ACCESS_SECRET         <long random string, min 16 chars>
+JWT_REFRESH_SECRET        <a different long random string>
+CORS_ORIGIN               http://localhost:3000,https://pr-e-commerce-seven.vercel.app
+SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / MAIL_FROM   (optional)
 ```
+
+### Do NOT set these on Netlify
+
+| Variable | Why |
+| --- | --- |
+| `PORT` | Only `main.ts` reads it, and the serverless function never binds a port. Setting it also makes the secrets scanner search the build for the literal string `4000`, which matches unrelated code. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Read **only** by `prisma/seed.ts`, which does not run during a Netlify build. Leaving `ADMIN_PASSWORD` set — especially at the default `ChangeMe123!` — puts a well-known admin credential in the deploy environment for no benefit. |
+| `NODE_ENV` | Already set in `netlify.toml`. A duplicate UI value adds nothing. |
 
 After this, deploying is just `git push`.
 
@@ -78,6 +84,28 @@ behaviour in only one entrypoint is what previously let the two diverge.
 deploy`. Netlify installs dependencies before this runs, so there is no install
 step. Migrations use `DIRECT_URL`; the build fails fast if it is unset rather
 than shipping code whose schema was never applied.
+
+## Secrets scanning
+
+After a successful build, Netlify greps the repo **and** the build output for the
+literal value of every configured environment variable, failing the deploy on a
+match. Low-entropy values trigger this constantly: with `PORT=4000` set, the
+string `4000` matches phone-number examples and `maxLength` validators; with
+`NODE_ENV=production`, the word `production` matches this very document.
+
+`netlify.toml` handles it with two narrow settings:
+
+- `SECRETS_SCAN_OMIT_KEYS` — keys whose values are non-secret or deliberately
+  public (`NODE_ENV`, `PORT`, `CORS_ORIGIN`, the Supabase *publishable* key, …).
+- `SECRETS_SCAN_OMIT_PATHS` — `.env.example` and `*.md`, which contain example
+  values on purpose.
+
+The real credentials are **not** on either list and stay scanned: `DATABASE_URL`,
+`DIRECT_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `SMTP_PASSWORD`,
+`SUPABASE_SECRET_KEY`, `ADMIN_PASSWORD`. If the scanner flags one of those, it
+found a genuine leak — remove the value from the repo rather than adding the key
+to the omit list. Never reach for `SECRETS_SCAN_ENABLED=false`; that disables the
+protection wholesale.
 
 ## Database connection strings
 

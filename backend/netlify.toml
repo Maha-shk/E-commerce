@@ -20,6 +20,20 @@
   NODE_ENV = "production"
   NPM_FLAGS = "--include=dev"
 
+  # Netlify's secrets scanner searches the repo and build output for the literal
+  # VALUE of every configured environment variable. The keys below hold
+  # low-entropy or deliberately public values — "production", "4000", "587", an
+  # email address, the browser-safe publishable key — which legitimately appear
+  # in source, docs and templates, so scanning them yields only false positives.
+  #
+  # The actual credentials are deliberately NOT listed and remain scanned:
+  # DATABASE_URL, DIRECT_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+  # SMTP_PASSWORD, SUPABASE_SECRET_KEY, ADMIN_PASSWORD. If the scanner ever
+  # flags one of those, it is a real leak — fix the leak, don't add the key here.
+  SECRETS_SCAN_OMIT_KEYS = "NODE_ENV,PORT,CORS_ORIGIN,MAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_USER,ADMIN_EMAIL,ADMIN_NAME,JWT_ACCESS_EXPIRES_IN,JWT_REFRESH_EXPIRES_IN,SUPABASE_URL,SUPABASE_JWKS_URL,SUPABASE_PUBLISHABLE_KEY"
+  # Documentation and the env template contain example values by design.
+  SECRETS_SCAN_OMIT_PATHS = ".env.example,*.md"
+
 [functions]
   directory = "netlify/functions"
   # "nft" traces and copies the require graph instead of bundling it. esbuild
