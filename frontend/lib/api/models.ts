@@ -22,6 +22,8 @@ export type OrderStatus =
   | "DELIVERED"
   | "CANCELLED"
   | "RETURNED";
+/** Settlement state, tracked independently of fulfilment status. */
+export type PaymentStatus = "PAID" | "PENDING" | "REFUNDED" | "FAILED";
 export type DiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
 export type DiscountCategory = "ACTIVE" | "SCHEDULED" | "ARCHIVED";
 export type NotificationType = "SUCCESS" | "INFO" | "WARNING" | "ERROR";
@@ -58,6 +60,13 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
   RETURNED: "Returned",
+};
+
+export const paymentStatusLabel: Record<PaymentStatus, string> = {
+  PAID: "Paid",
+  PENDING: "Pending",
+  REFUNDED: "Refunded",
+  FAILED: "Failed",
 };
 
 export const userStatusLabel: Record<UserStatus, string> = {

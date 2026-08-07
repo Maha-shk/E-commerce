@@ -2,12 +2,21 @@ import { Receipt } from "lucide-react";
 
 interface OrderSummaryProps {
   order: {
-    totals: {
+    // Optional because the component below falls back to deriving the figures
+    // from the line items when a response omits the totals block.
+    totals?: {
       subtotal: number;
       shipping: number;
       discount: number;
       total: number;
     };
+    items?: Array<{
+      quantity: number;
+      unitPrice: number;
+      lineTotal?: number;
+    }>;
+    shippingCost?: number;
+    discount?: number;
   };
 }
 
