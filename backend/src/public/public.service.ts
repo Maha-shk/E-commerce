@@ -3,7 +3,14 @@ import { ProductsService } from '../products/products.service';
 import { CategoriesService } from '../categories/categories.service';
 import { MessagesService } from '../messages/messages.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { MessageDirection, Role, OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  BannerType,
+  MessageDirection,
+  Role,
+  OrderStatus,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 import { ContactFormDto } from './dto/contact.dto';
 
 @Injectable()
@@ -15,11 +22,47 @@ export class PublicService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async getBanners(params?: any) {
-    // Return empty array for now - this was used for homepage
+  /**
+   * Active storefront banners for a given slot (HERO / PROMOTIONAL / SIDEBAR).
+   *
+   * Honours the `startDate`/`endDate` scheduling window: a banner with no dates
+   * runs indefinitely, otherwise it only appears inside its window. Ordering is
+   * `displayOrder` first — the homepage takes `[0]` as the hero, so that column
+   * is what decides which one wins.
+   */
+  async getBanners(params?: {
+    type?: string;
+    isActive?: boolean;
+    limit?: number;
+  }) {
+    const now = new Date();
+
+    const banners = await this.prisma.banner.findMany({
+      where: {
+        ...(params?.type && { type: params.type as BannerType }),
+        ...(params?.isActive !== undefined && { isActive: params.isActive }),
+        // `null` means "no bound", so each side is an OR against null.
+        AND: [
+          { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+        ],
+      },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'desc' }],
+      ...(params?.limit && { take: Number(params.limit) }),
+    });
+
     return {
       success: true,
-      data: [],
+      data: banners.map((banner) => ({
+        id: banner.id,
+        type: banner.type,
+        title: banner.title,
+        description: banner.description ?? undefined,
+        imageUrl: banner.imageUrl,
+        mobileImageUrl: banner.mobileImageUrl ?? undefined,
+        linkUrl: banner.linkUrl ?? undefined,
+        linkText: banner.linkText ?? undefined,
+      })),
     };
   }
 

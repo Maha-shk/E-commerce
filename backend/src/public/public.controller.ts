@@ -13,10 +13,16 @@ export class PublicController {
   @Get('banners')
   async getBanners(
     @Query('type') type?: string,
-    @Query('isActive') isActive?: boolean,
+    // Taken as a string on purpose: query params always arrive as text, and a
+    // naive Boolean() cast turns the string "false" into `true`.
+    @Query('isActive') isActive?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.publicService.getBanners({ type, isActive, limit });
+    return this.publicService.getBanners({
+      type,
+      isActive: isActive === undefined ? undefined : isActive !== 'false',
+      limit,
+    });
   }
 
   @Get('categories')

@@ -7,6 +7,7 @@ import { authApi, type RegisterPayload } from "@/lib/api/services/auth";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { cartStorage } from "@/lib/stores/cart-store";
 import { isAdminRole } from "@/lib/api/types";
 
 /** Reactive view of the current session. */
@@ -73,6 +74,9 @@ export function useLogin() {
     mutationFn: authApi.login,
     onSuccess: (data) => {
       setSession(data);
+      // Fold anything added while logged out into the account cart. Must run
+      // after setSession so the request carries the new access token.
+      void cartStorage.mergeGuestCart();
       toast.success(`Welcome back, ${data.user.fullName.split(" ")[0]}!`);
       // Staff land in the admin console, customers in their portal.
       router.push(isAdminRole(data.user.role) ? "/admin/dashboard" : "/account");
@@ -105,6 +109,9 @@ export function useVerifyOtp() {
     mutationFn: authApi.verifyOtp,
     onSuccess: (data) => {
       setSession(data); // Store tokens and user data after verification
+      // Verification also establishes a session, so the guest cart built up
+      // before signing up has to follow the shopper here too.
+      void cartStorage.mergeGuestCart();
       toast.success(data.message);
       router.push("/verified");
     },
@@ -146,6 +153,26 @@ export function useResetPassword() {
   });
 }
 
+/**
+ * Self-service profile update. Writes the server's response back into the auth
+ * store so the sidebar, avatar and header pick up the new name without a
+ * reload, and invalidates the cached session query.
+ */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  const setUser = useAuthStore((s) => s.setUser);
+
+  return useMutation({
+    mutationFn: authApi.updateProfile,
+    onSuccess: (user) => {
+      setUser(user);
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      toast.success("Profile updated");
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
 export function useChangePassword() {
   return useMutation({
     mutationFn: authApi.changePassword,
@@ -173,6 +200,9 @@ export function useLogout() {
     },
     onSettled: () => {
       clearSession();
+      // The cart is persisted to localStorage, so without this the next person
+      // to use the browser would see the previous user's items.
+      cartStorage.reset();
       queryClient.clear();
       router.push("/login");
     },

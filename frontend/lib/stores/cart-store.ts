@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { cartApi, clearCartSessionId, getCartSessionId } from "@/lib/api/services/cart";
+import { getApiErrorMessage } from "@/lib/api/client";
 
 // Cart types matching the backend DTOs
 export interface CartItem {
@@ -33,6 +35,36 @@ export interface Cart {
   updatedAt: string;
 }
 
+/**
+ * Pricing rules, mirrored from `CartService.toCartResponse` in the backend.
+ *
+ * The server is the source of truth — every mutation returns a freshly priced
+ * cart and we overwrite with it. These exist only so the optimistic render
+ * between click and response shows the same numbers the server will return.
+ * If the backend rules change, change them here too or the UI will flicker to
+ * a different total.
+ */
+const FREE_SHIPPING_THRESHOLD = 100;
+const FLAT_SHIPPING_RATE = 10;
+const TAX_RATE = 0.085;
+
+/** Recomputes totals for an optimistic item list, matching the server formula. */
+function priceCart(cart: Cart, items: CartItem[]): Cart {
+  const subtotal = items.reduce((sum, item) => sum + item.salePrice * item.quantity, 0);
+  const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_RATE;
+  const tax = subtotal * TAX_RATE;
+
+  return {
+    ...cart,
+    items,
+    totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
+    subtotal,
+    shipping,
+    tax,
+    total: subtotal + shipping + tax,
+  };
+}
+
 interface CartState {
   cart: Cart | null;
   isLoading: boolean;
@@ -45,6 +77,8 @@ interface CartState {
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
   getCartCount: () => Promise<number>;
+  mergeGuestCart: () => Promise<void>;
+  reset: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -59,230 +93,113 @@ export const useCartStore = create<CartState>()(
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
 
+      /** Clears local cart state without touching the server (used on logout). */
+      reset: () => set({ cart: null, error: null, isLoading: false }),
+
       fetchCart: async () => {
         set({ isLoading: true, error: null });
         try {
-          const sessionId = localStorage.getItem('cart_session_id') ||
-                           generateSessionId();
-          localStorage.setItem('cart_session_id', sessionId);
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart`, {
-            headers: {
-              'x-session-id': sessionId,
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to fetch cart');
-          }
-
-          const result = await response.json();
-          set({ cart: result.data, isLoading: false });
+          const cart = await cartApi.getCart();
+          set({ cart, isLoading: false });
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch cart',
-            isLoading: false
-          });
+          set({ error: getApiErrorMessage(error), isLoading: false });
         }
       },
 
       addItem: async (productId, quantity, color, size) => {
         set({ isLoading: true, error: null });
         try {
-          const sessionId = localStorage.getItem('cart_session_id') ||
-                           generateSessionId();
-          localStorage.setItem('cart_session_id', sessionId);
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/items`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-session-id': sessionId,
-            },
-            body: JSON.stringify({
-              productId,
-              quantity,
-              color,
-              size,
-            }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to add item to cart');
-          }
-
-          const result = await response.json();
-          set({ cart: result.data, isLoading: false });
+          const cart = await cartApi.addItem({ productId, quantity, color, size });
+          set({ cart, isLoading: false });
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to add item to cart',
-            isLoading: false
-          });
+          set({ error: getApiErrorMessage(error), isLoading: false });
           throw error;
         }
       },
 
       updateItem: async (itemId, quantity) => {
-        // Optimistic update - update UI immediately
         const currentCart = get().cart;
         if (!currentCart) return;
 
-        const previousCart = { ...currentCart };
-        const itemToUpdate = currentCart.items.find(item => item.id === itemId);
-        if (!itemToUpdate) return;
+        const item = currentCart.items.find((i) => i.id === itemId);
+        if (!item) return;
 
-        // Calculate new cart state optimistically
-        const updatedItems = currentCart.items.map(item =>
-          item.id === itemId
-            ? { ...item, quantity }
-            : item
-        );
-
-        const updatedCart = {
-          ...currentCart,
-          items: updatedItems,
-          totalItems: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-          subtotal: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
-          tax: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0) * 0.085,
-          shipping: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0) >= 100 ? 0 : 10,
-          total: 0,
-        };
-        updatedCart.total = updatedCart.subtotal + updatedCart.shipping + updatedCart.tax;
-
-        // Update UI immediately
-        set({ cart: updatedCart });
+        // Optimistic: repaint immediately, then reconcile with the server.
+        const previousCart = currentCart;
+        set({
+          cart: priceCart(
+            currentCart,
+            currentCart.items.map((i) => (i.id === itemId ? { ...i, quantity } : i)),
+          ),
+        });
 
         try {
-          const sessionId = localStorage.getItem('cart_session_id');
-          if (!sessionId) throw new Error('No session found');
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/items/${itemId}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-session-id': sessionId,
-            },
-            body: JSON.stringify({ quantity }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to update item');
-          }
-
-          const result = await response.json();
-          // Update with server response to ensure consistency
-          set({ cart: result.data });
+          set({ cart: await cartApi.updateItem(itemId, quantity), error: null });
         } catch (error) {
-          // Revert to previous state on error
-          set({ cart: previousCart });
-          set({
-            error: error instanceof Error ? error.message : 'Failed to update item'
-          });
+          set({ cart: previousCart, error: getApiErrorMessage(error) });
           throw error;
         }
       },
 
       removeItem: async (itemId) => {
-        // Optimistic update - update UI immediately
         const currentCart = get().cart;
         if (!currentCart) return;
 
-        const previousCart = { ...currentCart };
+        const previousCart = currentCart;
+        const remaining = currentCart.items.filter((i) => i.id !== itemId);
 
-        // Remove item from cart optimistically
-        const updatedItems = currentCart.items.filter(item => item.id !== itemId);
-
-        const updatedCart = {
-          ...currentCart,
-          items: updatedItems,
-          totalItems: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-          subtotal: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
-          tax: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0) * 0.085,
-          shipping: updatedItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0) >= 100 ? 0 : 10,
-          total: 0,
-        };
-        updatedCart.total = updatedCart.subtotal + updatedCart.shipping + updatedCart.tax;
-
-        // Update UI immediately
-        set({ cart: updatedItems.length > 0 ? updatedCart : null });
+        // Keep the (now empty) cart object rather than nulling it — null is the
+        // "not loaded yet" state and would flip the page back to a spinner.
+        set({ cart: priceCart(currentCart, remaining) });
 
         try {
-          const sessionId = localStorage.getItem('cart_session_id');
-          if (!sessionId) throw new Error('No session found');
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/items/${itemId}`, {
-            method: 'DELETE',
-            headers: {
-              'x-session-id': sessionId,
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to remove item');
-          }
-
-          const result = await response.json();
-          // Update with server response to ensure consistency
-          set({ cart: result.data });
+          set({ cart: await cartApi.removeItem(itemId), error: null });
         } catch (error) {
-          // Revert to previous state on error
-          set({ cart: previousCart });
-          set({
-            error: error instanceof Error ? error.message : 'Failed to remove item'
-          });
+          set({ cart: previousCart, error: getApiErrorMessage(error) });
           throw error;
         }
       },
 
       clearCart: async () => {
+        const previousCart = get().cart;
         set({ isLoading: true, error: null });
         try {
-          const sessionId = localStorage.getItem('cart_session_id');
-          if (!sessionId) throw new Error('No session found');
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart`, {
-            method: 'DELETE',
-            headers: {
-              'x-session-id': sessionId,
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to clear cart');
-          }
-
-          set({ cart: null, isLoading: false });
+          await cartApi.clearCart();
+          // Re-read rather than assuming: the server returns the emptied cart
+          // shell, which the page needs in order to render its empty state.
+          const cart = await cartApi.getCart();
+          set({ cart, isLoading: false });
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to clear cart',
-            isLoading: false
-          });
+          set({ cart: previousCart, error: getApiErrorMessage(error), isLoading: false });
           throw error;
         }
       },
 
       getCartCount: async () => {
         try {
-          const sessionId = localStorage.getItem('cart_session_id') ||
-                           generateSessionId();
-          localStorage.setItem('cart_session_id', sessionId);
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cart/count`, {
-            headers: {
-              'x-session-id': sessionId,
-            },
-          });
-
-          if (!response.ok) {
-            return 0;
-          }
-
-          const result = await response.json();
-          return result.data.count;
+          return await cartApi.getCount();
         } catch {
           return 0;
+        }
+      },
+
+      /**
+       * Folds the guest cart into the user's cart after login. Without this a
+       * shopper who fills a cart while logged out loses it the moment they sign
+       * in, because the server switches them to their (empty) account cart.
+       */
+      mergeGuestCart: async () => {
+        const sessionId = getCartSessionId();
+        if (!sessionId) return;
+
+        try {
+          const cart = await cartApi.mergeGuestCart(sessionId);
+          // The guest cart is consumed; a fresh id is minted on next guest use.
+          clearCartSessionId();
+          set({ cart, error: null });
+        } catch {
+          // A merge failure must not block login — fall back to the user cart.
+          await get().fetchCart();
         }
       },
     }),
@@ -296,19 +213,17 @@ export const useCartStore = create<CartState>()(
   ),
 );
 
-// Helper function to generate a session ID for guest carts
-function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
-
 // Non-reactive accessors
 export const cartStorage = {
   getCart: () => useCartStore.getState().cart,
-  getCartCount: () => useCartStore.getState().getCartCount,
+  // Was returning the function itself rather than invoking it.
+  getCartCount: () => useCartStore.getState().getCartCount(),
   addItem: (productId: string, quantity: number, color?: string, size?: string) =>
     useCartStore.getState().addItem(productId, quantity, color, size),
   updateItem: (itemId: string, quantity: number) =>
     useCartStore.getState().updateItem(itemId, quantity),
   removeItem: (itemId: string) => useCartStore.getState().removeItem(itemId),
   clearCart: () => useCartStore.getState().clearCart(),
+  mergeGuestCart: () => useCartStore.getState().mergeGuestCart(),
+  reset: () => useCartStore.getState().reset(),
 };

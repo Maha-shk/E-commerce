@@ -1,486 +1,298 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { HomePageHeader } from "@/components/customer/HomePageHeader";
-import { useSession, useLogout } from "@/lib/hooks/use-auth";
-import { authApi, type Order } from "@/lib/api/services/auth";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Loader2,
-  ShoppingBag,
-  User,
-  LogOut,
-  ChevronRight,
-  Heart,
-  Book,
-  ArrowRight,
-  Search,
   ChevronLeft,
-  Home,
+  ChevronRight,
+  Loader2,
+  RotateCw,
+  Search,
+  ShoppingBag,
+  TriangleAlert,
+  X,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { AccountShell } from "@/components/account/AccountShell";
+import { AccountPageHeader } from "@/components/account/AccountPageHeader";
+import { SectionCard } from "@/components/account/SectionCard";
+import { AccountEmptyState } from "@/components/account/AccountEmptyState";
+import { OrderStatusBadge } from "@/components/account/OrderStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useMyOrders } from "@/lib/hooks/use-account";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { formatMoney, formatShortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 
-interface MenuItem {
-  icon: typeof User;
-  title: string;
-  path: string;
-}
-
-const statusOptions = [
-  { value: "All", label: "All Orders" },
+const STATUS_OPTIONS = [
+  { value: "All", label: "All" },
   { value: "PENDING", label: "Pending" },
   { value: "PROCESSING", label: "Processing" },
   { value: "SHIPPED", label: "Shipped" },
   { value: "DELIVERED", label: "Delivered" },
   { value: "CANCELLED", label: "Cancelled" },
   { value: "RETURNED", label: "Returned" },
-];
+] as const;
+
+const PAGE_SIZE = 10;
+
+/** Window of page numbers to render, centred on the current page. */
+function pageWindow(page: number, totalPages: number, size = 5) {
+  const count = Math.min(size, totalPages);
+  const start = Math.min(
+    Math.max(1, page - Math.floor(count / 2)),
+    Math.max(1, totalPages - count + 1),
+  );
+  return Array.from({ length: count }, (_, i) => start + i);
+}
 
 export default function OrdersPage() {
   const router = useRouter();
-  const pathname = usePathname();
-  const { user, isAuthenticated, isAdmin, hydrated } = useSession();
-  const logout = useLogout();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Orders state
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalOrders, setTotalOrders] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
+  const search = useDebounce(searchQuery, 200);
 
-  // Fetch orders
-  useEffect(() => {
-    async function fetchOrders() {
-      if (!isAuthenticated || !hydrated) return;
-
-      setIsLoading(true);
-      setIsError(false);
-
-      try {
-        console.log('Fetching orders with params:', { page, limit, statusFilter });
-        const response = await authApi.getOrders({
-          page,
-          limit,
-          status: statusFilter === "All" ? undefined : statusFilter,
-        });
-
-        console.log('Orders response:', response);
-
-        // Handle both array and PaginatedResponse formats
-        const ordersData = Array.isArray(response) ? response : (response.data || []);
-        const meta = (!Array.isArray(response) && response.meta) ? response.meta : null;
-
-        console.log('Orders data:', ordersData);
-        console.log('Orders meta:', meta);
-        console.log('Orders count:', ordersData.length);
-
-        setOrders(ordersData);
-        setTotalPages(meta?.totalPages || 1);
-        setTotalOrders(meta?.total || ordersData.length);
-      } catch (error) {
-        console.error('Failed to fetch orders:', error);
-        console.error('Error details:', error instanceof Error ? error.message : error);
-        setIsError(true);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchOrders();
-  }, [page, statusFilter, isAuthenticated, hydrated]);
-
-  // Client-side search filtering
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = orders.filter((order) =>
-        order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredOrders(filtered);
-    } else {
-      setFilteredOrders(orders);
-    }
-  }, [searchQuery, orders]);
-
-  // Authentication guards
-  useEffect(() => {
-    if (!hydrated) return;
-
-    if (isAuthenticated && isAdmin) {
-      router.push('/admin/dashboard');
-    }
-
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isAdmin, hydrated, router]);
-
-  // Show loading while hydrating
-  if (!hydrated || !isAuthenticated || !user) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-          <p className="mt-4 text-muted-foreground">Loading your orders...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const menuItems: MenuItem[] = [
-    { icon: Home, title: "Overview", path: "/account" },
-    { icon: ShoppingBag, title: "My Orders", path: "/account/orders" },
-    { icon: Heart, title: "My Wishlist", path: "/account/wishlist" },
-    { icon: Book, title: "Address Book", path: "/account/addresses" },
-    { icon: User, title: "Profile", path: "/account/profile" },
-  ];
-
-  const memberSince = new Date(user.createdAt).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric'
+  const { data, isPending, isFetching, isError, refetch } = useMyOrders({
+    page,
+    limit: PAGE_SIZE,
+    status: statusFilter === "All" ? undefined : statusFilter,
   });
 
-  const userInitials = user.fullName
-    .split(' ')
-    .map((n: string) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const orders = useMemo(() => data?.orders ?? [], [data]);
+  const meta = data?.meta ?? null;
+  const totalPages = meta?.totalPages ?? 1;
+  const totalOrders = meta?.total ?? orders.length;
 
-  const getStatusColor = (status: string) => {
-    switch (status.toUpperCase()) {
-      case 'DELIVERED':
-        return 'bg-success-muted text-success';
-      case 'SHIPPED':
-        return 'bg-info-muted text-info';
-      case 'PROCESSING':
-      case 'PENDING':
-        return 'bg-warning-muted text-warning';
-      case 'CANCELLED':
-      case 'RETURNED':
-        return 'bg-destructive-muted text-destructive';
-      default:
-        return 'bg-muted-foreground/10 text-muted-foreground';
-    }
-  };
+  // Search filters the page currently in hand, so paging alongside it would be
+  // misleading — the pager is hidden while a query is active.
+  const visibleOrders = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return orders;
+    return orders.filter((order) => order.orderNumber.toLowerCase().includes(query));
+  }, [orders, search]);
 
-  const displayedOrders = searchQuery ? filteredOrders : orders;
-  const displayedCount = displayedOrders.length;
+  const isSearching = search.trim().length > 0;
+  const showPager = !isSearching && !isError && totalPages > 1;
 
   return (
-    <div className="min-h-screen bg-[#FBF9F8]">
-      {/* Header */}
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={0}
+    <AccountShell loadingLabel="Loading your orders…">
+      <AccountPageHeader
+        title="My Orders"
+        description="View and track everything you've ordered."
       />
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-          {/* Left Sidebar - Single Card with Profile + Navigation */}
-          <div className="lg:col-span-4 xl:col-span-3">
-            <div className="lg:sticky lg:top-6">
-              <div className="bg-white rounded-xl border border-gray-200">
-                <div className="p-0">
-                  {/* Profile Avatar Section */}
-                  <div className="p-6 text-center border-b border-gray-200">
-                    <Avatar className="w-20 h-20 mx-auto mb-3">
-                      <AvatarFallback className="bg-gray-100 text-[#00234E] text-xl font-bold">
-                        {userInitials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <h3 className="font-semibold text-lg text-gray-900">{user.fullName}</h3>
-                    <p className="text-sm text-gray-600 truncate">{user.email}</p>
-                  </div>
-
-                  {/* Simple Navigation Menu */}
-                  <div className="p-2">
-                    <ul className="space-y-0.5">
-                      {menuItems.map((item, index) => {
-                        const Icon = item.icon;
-                        const isActive = pathname === item.path ||
-                                         (item.path === '/account' && pathname === '/account') ||
-                                         (item.path !== '/account' && pathname.startsWith(item.path));
-
-                        return (
-                          <li key={index}>
-                            <button
-                              onClick={() => router.push(item.path)}
-                              className={cn(
-                                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
-                                "text-sm",
-                                isActive
-                                  ? "bg-[#00234E] text-white font-medium"
-                                  : "text-gray-600 hover:bg-gray-100 hover:text-[#00234E]"
-                              )}
-                            >
-                              <Icon className="w-4 h-4 shrink-0" />
-                              <span>{item.title}</span>
-                              {isActive && (
-                                <ChevronRight className="w-4 h-4 ml-auto shrink-0" />
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-gray-200 mx-2" />
-
-                  {/* Logout Button */}
-                  <div className="p-2">
-                    <button
-                      onClick={() => logout.mutate()}
-                      disabled={logout.isPending}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
-                        "text-sm text-red-600 hover:bg-red-50",
-                        "disabled:opacity-50 disabled:cursor-not-allowed"
-                      )}
-                    >
-                      {logout.isPending ? (
-                        <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                      ) : (
-                        <LogOut className="w-4 h-4 shrink-0" />
-                      )}
-                      <span>{logout.isPending ? 'Signing out...' : 'Sign Out'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+      {/* Filters */}
+      <SectionCard bodyClassName="p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Filter orders by status"
+          >
+            {STATUS_OPTIONS.map((option) => {
+              const isSelected = statusFilter === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    setStatusFilter(option.value);
+                    setPage(1);
+                  }}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
           </div>
 
-          {/* Right Content Area - Wider */}
-          <div className="lg:col-span-8 xl:col-span-9 space-y-6">
-
-            {/* Page Header */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-[#00234E] mb-2">My Orders</h1>
-                  <p className="text-gray-600">
-                    View and track all your orders
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Filters and Search */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                {/* Status Filters */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {statusOptions.map((option) => (
-                    <Button
-                      key={option.value}
-                      size="sm"
-                      variant={statusFilter === option.value ? "default" : "outline"}
-                      onClick={() => {
-                        setStatusFilter(option.value);
-                        setPage(1); // Reset to page 1
-                      }}
-                      className={cn(
-                        "transition-colors",
-                        statusFilter === option.value
-                          ? "bg-[#00234E] text-white hover:bg-[#00234E]/90"
-                          : "hover:bg-gray-100"
-                      )}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Search */}
-                <div className="relative w-full md:w-64">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input
-                    type="search"
-                    placeholder="Search by order ID…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Orders Table */}
-            <div className="bg-white rounded-xl border border-gray-200">
-              <div className="p-5">
-                {/* Error State */}
-                {isError && (
-                  <div className="text-center py-8">
-                    <p className="text-red-600 mb-3">Failed to load orders. Please try again.</p>
-                    <Button size="sm" onClick={() => window.location.reload()}>
-                      Retry
-                    </Button>
-                  </div>
-                )}
-
-                {/* Loading State */}
-                {isLoading && !isError && (
-                  <div className="text-center py-8">
-                    <Loader2 className="w-8 h-8 text-[#00234E] mx-auto mb-3 animate-spin" />
-                    <p className="text-gray-600">Loading orders...</p>
-                  </div>
-                )}
-
-                {/* Table */}
-                {!isLoading && !isError && (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Order ID</th>
-                            <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Date</th>
-                            <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Status</th>
-                            <th className="text-right py-3 px-2 text-sm font-medium text-gray-600">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {displayedOrders.map((order) => (
-                            <tr
-                              key={order.id}
-                              className="border-b border-gray-200 last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
-                              onClick={() => router.push(`/orders/${order.orderNumber}`)}
-                            >
-                              <td className="py-3 px-2 text-sm font-medium text-[#00234E]">{order.orderNumber}</td>
-                              <td className="py-3 px-2 text-sm text-gray-600">
-                                {new Date(order.placedAt).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
-                              </td>
-                              <td className="py-3 px-2">
-                                <Badge className={cn("text-xs", getStatusColor(order.status))}>
-                                  {order.status}
-                                </Badge>
-                              </td>
-                              <td className="py-3 px-2 text-sm font-medium text-right text-[#00234E]">
-                                €{order.totals.total.toFixed(2)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Empty State */}
-                    {displayedOrders.length === 0 && (
-                      <div className="text-center py-8">
-                        <ShoppingBag className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                        <p className="text-gray-600 mb-2">
-                          {searchQuery ? "No orders found matching your search." : "No orders yet."}
-                        </p>
-                        {!searchQuery && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-3"
-                            onClick={() => router.push('/products')}
-                          >
-                            Start Shopping
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Pagination */}
-              {!isLoading && !isError && !searchQuery && (
-                <div className="border-t border-gray-200 px-5 py-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
-                      Showing {displayedOrders.length} out of {totalOrders} orders
-                      {totalOrders > limit && ` (page ${page} of ${totalPages})`}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page === 1 || totalPages === 1}
-                      >
-                        <ChevronLeft className="w-4 h-4 mr-1" />
-                        Previous
-                      </Button>
-
-                      {/* Page numbers */}
-                      {totalPages > 1 && (
-                        <div className="flex items-center gap-1">
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            let pageNum;
-                            if (totalPages <= 5) {
-                              pageNum = i + 1;
-                            } else if (page <= 3) {
-                              pageNum = i + 1;
-                            } else if (page >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i;
-                            } else {
-                              pageNum = page - 2 + i;
-                            }
-
-                            return (
-                              <Button
-                                key={pageNum}
-                                size="sm"
-                                variant={page === pageNum ? "default" : "outline"}
-                                onClick={() => setPage(pageNum)}
-                                className={cn(
-                                  "w-8 h-8",
-                                  page === pageNum
-                                    ? "bg-[#00234E] text-white hover:bg-[#00234E]/90"
-                                    : "hover:bg-gray-100"
-                                )}
-                              >
-                                {pageNum}
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                        disabled={page === totalPages || totalPages === 1}
-                      >
-                        Next
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
+          <div className="relative w-full lg:w-64">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="text"
+              inputMode="search"
+              placeholder="Search order number…"
+              aria-label="Search by order number"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={cn("h-10 pl-9", searchQuery && "pr-9")}
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            ) : null}
           </div>
         </div>
-      </div>
+      </SectionCard>
 
-    </div>
+      {/* Table */}
+      <SectionCard bodyClassName="p-0">
+        {isError ? (
+          <AccountEmptyState
+            icon={TriangleAlert}
+            title="Couldn't load your orders"
+            description="Something went wrong on our side. Please try again."
+            action={
+              <Button variant="outline" onClick={() => refetch()}>
+                <RotateCw className="size-4" aria-hidden />
+                Retry
+              </Button>
+            }
+          />
+        ) : isPending ? (
+          <div className="flex flex-col items-center gap-3 py-16">
+            <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+            <p className="text-sm text-muted-foreground">Loading orders…</p>
+          </div>
+        ) : visibleOrders.length === 0 ? (
+          <AccountEmptyState
+            icon={ShoppingBag}
+            title={isSearching ? "No matching orders" : "No orders yet"}
+            description={
+              isSearching
+                ? `Nothing matches “${search.trim()}”. Try a different order number.`
+                : "When you place an order it will appear here."
+            }
+            action={
+              isSearching ? (
+                <Button variant="outline" onClick={() => setSearchQuery("")}>
+                  Clear search
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => router.push("/products")}>
+                  Start Shopping
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div
+            // Dims (but keeps) the current rows while the next page loads,
+            // instead of flashing a spinner and collapsing the layout.
+            className={cn(
+              "overflow-x-auto transition-opacity duration-150",
+              isFetching && "opacity-60",
+            )}
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-5 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Order
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Date
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Status
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleOrders.map((order) => (
+                  <tr
+                    key={order.id}
+                    tabIndex={0}
+                    role="link"
+                    onClick={() => router.push(`/orders/${order.orderNumber}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(`/orders/${order.orderNumber}`);
+                      }
+                    }}
+                    className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <td className="px-5 py-3.5 font-medium whitespace-nowrap">
+                      {order.orderNumber}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                      {formatShortDate(order.placedAt)}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <OrderStatusBadge status={order.status} />
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-medium tabular-nums whitespace-nowrap">
+                      {formatMoney(order.totals.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {showPager ? (
+          <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{visibleOrders.length}</span>{" "}
+              of <span className="font-medium text-foreground">{totalOrders}</span> orders
+              <span className="text-muted-foreground/80">
+                {" "}
+                · page {page} of {totalPages}
+              </span>
+            </p>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Previous page"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Previous</span>
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {pageWindow(page, totalPages).map((pageNum) => (
+                  <Button
+                    key={pageNum}
+                    size="sm"
+                    variant={page === pageNum ? "default" : "outline"}
+                    aria-label={`Page ${pageNum}`}
+                    aria-current={page === pageNum ? "page" : undefined}
+                    onClick={() => setPage(pageNum)}
+                    // Square, and the same 32px height as the prev/next buttons.
+                    className="w-8 px-0 tabular-nums"
+                  >
+                    {pageNum}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Next page"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </SectionCard>
+    </AccountShell>
   );
 }

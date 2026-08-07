@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
@@ -176,21 +175,27 @@ export class AddressesService {
       throw new ForbiddenException('Access denied to this address');
     }
 
-    // Prevent deleting the default address if it's the only one
-    if (existing.isDefault) {
-      const addressCount = await this.prisma.address.count({
+    // Deleting the default would otherwise leave the account with addresses but
+    // no default at all — `getDefaultAddress` returns null, the account overview
+    // reads "No address set", and checkout has nothing to preselect. Promote the
+    // most recently added survivor in the same transaction so that can't happen.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.address.delete({ where: { id } });
+
+      if (!existing.isDefault) return;
+
+      const next = await tx.address.findFirst({
         where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
       });
 
-      if (addressCount === 1) {
-        throw new BadRequestException(
-          'Cannot delete your only address. Please add a new address first.',
-        );
+      if (next) {
+        await tx.address.update({
+          where: { id: next.id },
+          data: { isDefault: true },
+        });
       }
-    }
-
-    await this.prisma.address.delete({
-      where: { id },
     });
 
     return {

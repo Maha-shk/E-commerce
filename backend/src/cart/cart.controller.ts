@@ -7,18 +7,37 @@ import {
   Body,
   Param,
   Headers,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { CartService } from './cart.service';
 import {
   CreateCartItemDto,
   UpdateCartItemDto,
   CartResponseDto,
 } from './dto/cart-item.dto';
-import { CartCountResponseDto } from './dto/cart.dto';
+import { CartCountResponseDto, MergeCartDto } from './dto/cart.dto';
+
+/**
+ * The cart serves guests and signed-in users from the same routes.
+ *
+ * `@Public()` keeps the global JwtAuthGuard from rejecting anonymous callers,
+ * and `OptionalJwtAuthGuard` attaches `req.user` when a token *is* present.
+ * Passing that id down is what binds a cart to an account: without it every
+ * request falls back to the `x-session-id` guest cart, so a signed-in user's
+ * cart would live only in their current browser and vanish on logout or on a
+ * second device.
+ *
+ * `userId` deliberately wins over `sessionId` in the service, so a signed-in
+ * caller always operates on their own cart even if a stale guest session id is
+ * still being sent by the client.
+ */
 @ApiTags('cart')
 @Controller('cart')
+@UseGuards(OptionalJwtAuthGuard)
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
@@ -29,11 +48,26 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Get user cart or guest cart' })
   async getCart(
+    @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    // In a real implementation, you'd get userId from JWT token
-    // For now, we'll support guest carts via sessionId
-    return this.cartService.getCart(undefined, sessionId);
+    return this.cartService.getCart(userId, sessionId);
+  }
+
+  /**
+   * Get cart item count
+   *
+   * Declared before `@Get(':id')`-style routes would be — Nest matches in
+   * declaration order, so a literal path must precede any parameterised one.
+   */
+  @Get('count')
+  @Public()
+  @ApiOperation({ summary: 'Get cart item count' })
+  async getCartCount(
+    @CurrentUser('id') userId?: string,
+    @Headers('x-session-id') sessionId?: string,
+  ): Promise<CartCountResponseDto> {
+    return this.cartService.getCartCount(userId, sessionId);
   }
 
   /**
@@ -44,9 +78,10 @@ export class CartController {
   @ApiOperation({ summary: 'Add item to cart' })
   async addItem(
     @Body() dto: CreateCartItemDto,
+    @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.addItem(dto, undefined, sessionId);
+    return this.cartService.addItem(dto, userId, sessionId);
   }
 
   /**
@@ -58,9 +93,10 @@ export class CartController {
   async updateItem(
     @Param('id') id: string,
     @Body() dto: UpdateCartItemDto,
+    @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.updateItem(id, dto, undefined, sessionId);
+    return this.cartService.updateItem(id, dto, userId, sessionId);
   }
 
   /**
@@ -71,9 +107,10 @@ export class CartController {
   @ApiOperation({ summary: 'Remove item from cart' })
   async removeItem(
     @Param('id') id: string,
+    @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.removeItem(id, undefined, sessionId);
+    return this.cartService.removeItem(id, userId, sessionId);
   }
 
   /**
@@ -83,38 +120,27 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Clear cart' })
   async clearCart(
+    @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<{ message: string }> {
-    await this.cartService.clearCart(undefined, sessionId);
+    await this.cartService.clearCart(userId, sessionId);
     return { message: 'Cart cleared successfully' };
   }
 
   /**
-   * Get cart item count
-   */
-  @Get('count')
-  @Public()
-  @ApiOperation({ summary: 'Get cart item count' })
-  async getCartCount(
-    @Headers('x-session-id') sessionId?: string,
-  ): Promise<CartCountResponseDto> {
-    return this.cartService.getCartCount(undefined, sessionId);
-  }
-
-  /**
-   * Merge guest cart into user cart after login
+   * Merge a guest cart into the signed-in user's cart after login.
+   *
+   * NOT `@Public()`: the target account is taken from the verified access token.
+   * It used to be read from an `x-user-id` header, which let any caller merge a
+   * cart into an arbitrary account.
    */
   @Post('merge')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Merge guest cart into user cart' })
   async mergeGuestCart(
-    @Body() dto: { sessionId: string },
-    // In real implementation, userId would come from JWT
-    @Headers('x-user-id') userId?: string,
+    @Body() dto: MergeCartDto,
+    @CurrentUser('id') userId: string,
   ): Promise<CartResponseDto> {
-    if (!userId) {
-      throw new Error('User authentication required');
-    }
     return this.cartService.mergeGuestCart(userId, dto.sessionId);
   }
 }

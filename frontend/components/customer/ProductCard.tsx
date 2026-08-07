@@ -1,14 +1,16 @@
 "use client";
 
-import { Heart, ShoppingCart } from "lucide-react";
+import { useState } from "react";
+import Link from "next/link";
+import { Heart, Loader2, ShoppingCart } from "lucide-react";
 import { useSession } from "@/lib/hooks/use-auth";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { useState } from "react";
+import { ProductImage } from "@/components/customer/ProductImage";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoginRequiredDialog } from "@/components/ui/login-required-dialog";
+import { Button } from "@/components/ui/button";
+import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface ProductCardProps {
@@ -27,14 +29,18 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const router = useRouter();
   const { isAuthenticated } = useSession();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { addItem } = useCart();
+
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
-  const [loginRequiredAction, setLoginRequiredAction] = useState<"add to wishlist" | null>(null);
+  const [loginRequiredAction, setLoginRequiredAction] = useState<"add to wishlist" | null>(
+    null,
+  );
+  const [isAdding, setIsAdding] = useState(false);
 
   const inWishlist = isInWishlist(product.id);
+  const href = `/products/${product.id}`;
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -53,182 +59,166 @@ export function ProductCard({ product }: ProductCardProps) {
     }
   };
 
-  const handleRemoveConfirm = () => {
-    if (pendingRemove) {
-      removeFromWishlist(pendingRemove);
-      setPendingRemove(null);
-    }
-  };
-
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
+    setIsAdding(true);
     try {
       await addItem(product.id, 1);
-    } catch (error) {
-      console.error('Failed to add to cart:', error);
+    } catch {
+      // useCart already surfaced the reason as a toast.
+    } finally {
+      setIsAdding(false);
     }
   };
 
   return (
     <>
-      <div className="bg-card rounded-xl border border-border hover:shadow-lg transition-all overflow-hidden group">
-        {/* Product Image */}
-        <div className="relative h-56 overflow-hidden bg-muted rounded-t-xl">
-          <button
-            onClick={() => router.push(`/products/${product.id}`)}
-            className="w-full h-full"
-          >
-            {product.images && product.images.length > 0 ? (
-              <Image
-                src={product.images[0].url}
-                alt={product.name}
-                fill
-                className="object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-muted-foreground">
-                  <svg className="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                  <p className="text-xs text-center">No Image</p>
-                </div>
-              </div>
-            )}
-          </button>
+      {/*
+       * `isolate` + a stretched link. The image and title used to be two
+       * separate <button>s calling router.push, which meant no middle-click,
+       * no "open in new tab" and no href for crawlers. One <Link> now covers
+       * the card, with the wishlist/cart controls raised above it.
+       */}
+      <div className="group/card relative isolate flex h-full flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-shadow duration-150 hover:shadow-card-hover">
+        {/* Image */}
+        <div className="relative aspect-square overflow-hidden bg-muted">
+          <ProductImage
+            src={product.images?.[0]?.url}
+            // Without this Next serves a full-viewport-width source for a
+            // ~270px card, which is most of the homepage's image weight.
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 280px"
+            className="transition-transform duration-300 group-hover/card:scale-105"
+          />
 
-          {/* Sale Badge */}
-          {product.discountPercent > 0 && (
-            <div className="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md z-10">
-              -{product.discountPercent}%
-            </div>
-          )}
+          {/* Badges. Deliberately NOT z-raised: they paint above the image by
+              source order, but stay below the stretched title link so they
+              never eat a click meant for the product page. */}
+          {product.discountPercent > 0 ? (
+            <span className="absolute top-3 left-3 rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
+              −{product.discountPercent}%
+            </span>
+          ) : null}
 
-          {/* Low Stock Badge */}
-          {product.lowStock && product.inStock && (
-            <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold z-10">
-              Low Stock
-            </div>
-          )}
+          {product.lowStock && product.inStock ? (
+            <span className="absolute top-3 right-3 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
+              Low stock
+            </span>
+          ) : null}
 
-          {/* Out of Stock Overlay */}
-          {!product.inStock && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-              <span className="bg-destructive text-white px-3 py-1 rounded-full text-sm font-bold">
-                Out of Stock
+          {!product.inStock ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <span className="rounded-full bg-card px-3 py-1 text-sm font-semibold text-foreground">
+                Out of stock
               </span>
             </div>
-          )}
+          ) : null}
         </div>
 
-        {/* Product Info */}
-        <div className="p-4">
-          {/* Category and Wishlist Heart */}
-          <div className="flex items-center justify-between mb-1">
-            {product.category && (
-              <p className="text-xs text-muted-foreground">
-                {product.category.name}
-              </p>
-            )}
+        {/* Info */}
+        <div className="flex flex-1 flex-col p-4">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 truncate text-xs text-muted-foreground">
+              {product.category?.name ?? " "}
+            </p>
+
             <button
+              type="button"
               onClick={handleWishlistClick}
+              aria-pressed={inWishlist}
+              aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
               className={cn(
-                "hover:scale-110 transition-transform",
-                inWishlist ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                "relative z-20 -mt-1 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                inWishlist
+                  ? "text-red-500 hover:bg-red-500/10"
+                  : "text-muted-foreground hover:bg-muted hover:text-red-500",
               )}
             >
-              <Heart className={cn("w-5 h-5", inWishlist && "fill-current")} />
+              <Heart className={cn("size-4.5", inWishlist && "fill-current")} aria-hidden />
             </button>
           </div>
 
-          {/* Product Name */}
-          <button
-            onClick={() => router.push(`/products/${product.id}`)}
-            className="text-left w-full"
-          >
-            <h3 className="font-semibold mb-2 line-clamp-2 hover:text-primary transition-colors leading-tight">
+          <h3 className="mt-1 line-clamp-2 text-sm leading-snug font-semibold tracking-tight">
+            <Link
+              href={href}
+              className="after:absolute after:inset-0 after:z-10 after:content-[''] hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {product.name}
-            </h3>
-          </button>
+            </Link>
+          </h3>
 
-          {/* Price and Stock Status */}
-          <div className="flex items-center justify-between mb-3">
-            {/* Price */}
-            <div className="flex items-center gap-2">
-              {product.discountPercent > 0 ? (
-                <>
-                  <span className="text-orange-500 font-bold text-lg">
-                    €{product.salePrice.toFixed(2)}
-                  </span>
-                  <span className="text-muted-foreground/50 line-through text-sm">
-                    €{product.price.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <span className="text-orange-500 font-bold text-lg">
-                  €{product.salePrice.toFixed(2)}
+          {/* Price + stock, pushed to the bottom so cards with 1- and 2-line
+              titles still align their price rows across the grid. */}
+          <div className="mt-auto pt-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-base font-semibold tabular-nums text-orange-600">
+                  {formatMoney(product.salePrice)}
                 </span>
-              )}
+                {product.discountPercent > 0 ? (
+                  <span className="text-xs tabular-nums text-muted-foreground line-through">
+                    {formatMoney(product.price)}
+                  </span>
+                ) : null}
+              </div>
+
+              {product.inStock && !product.lowStock ? (
+                <span className="text-xs font-medium text-success">In stock</span>
+              ) : product.inStock ? (
+                <span className="text-xs font-medium text-warning">
+                  {product.stock} left
+                </span>
+              ) : null}
             </div>
 
-            {/* Stock Status */}
-            <div>
-              {!product.inStock ? (
-                <span className="text-destructive text-xs font-medium">Out of Stock</span>
-              ) : product.lowStock ? (
-                <span className="text-orange-500 text-xs font-medium">
-                  Only {product.stock} left
-                </span>
+            <Button
+              className="relative z-20 mt-3 w-full"
+              disabled={!product.inStock || isAdding}
+              onClick={handleAddToCart}
+            >
+              {isAdding ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
               ) : (
-                <span className="text-success text-xs font-medium">In Stock</span>
+                <ShoppingCart className="size-4" aria-hidden />
               )}
-            </div>
+              {product.inStock ? "Add to Cart" : "Out of Stock"}
+            </Button>
           </div>
-
-          {/* Add to Cart Button */}
-          <button
-            onClick={handleAddToCart}
-            disabled={!product.inStock}
-            className={cn(
-              "w-full py-2.5 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all",
-              product.inStock
-                ? 'bg-primary hover:bg-primary/90 text-white'
-                : 'bg-muted text-muted-foreground cursor-not-allowed'
-            )}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-          </button>
         </div>
       </div>
 
       {/* Confirm Remove from Wishlist Dialog */}
-      {pendingRemove && (
+      {pendingRemove ? (
         <ConfirmDialog
           open={pendingRemove !== null}
           onOpenChange={(open) => !open && setPendingRemove(null)}
           title="Remove from Wishlist?"
           description={
             <span>
-              Are you sure you want to remove <span className="font-semibold">{product.name}</span> from your wishlist? This action cannot be undone.
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-foreground">{product.name}</span> from your
+              wishlist?
             </span>
           }
           confirmLabel="Remove"
           cancelLabel="Cancel"
-          onConfirm={handleRemoveConfirm}
+          onConfirm={() => {
+            removeFromWishlist(pendingRemove);
+            setPendingRemove(null);
+          }}
         />
-      )}
+      ) : null}
 
       {/* Login Required Dialog */}
-      {loginRequiredAction && (
+      {loginRequiredAction ? (
         <LoginRequiredDialog
           open={loginRequiredAction !== null}
           onOpenChange={(open) => !open && setLoginRequiredAction(null)}
           action={loginRequiredAction}
         />
-      )}
+      ) : null}
     </>
   );
 }

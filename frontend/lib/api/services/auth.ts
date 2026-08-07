@@ -1,4 +1,4 @@
-import { post, get } from "@/lib/api/request";
+import { post, get, patch } from "@/lib/api/request";
 import type { AuthUser, LoginResponse, PaginatedResponse } from "@/lib/api/types";
 
 /** Thin, typed wrappers over the backend's /auth endpoints. */
@@ -17,6 +17,17 @@ export type RegisterPayload = {
 };
 
 export type MessageResponse = { message: string };
+
+/**
+ * Mirrors the backend `UpdateMeDto`. Every field is optional so a form can
+ * PATCH only what changed; `email` is absent by design because changing it
+ * has to re-run the OTP verification flow.
+ */
+export type UpdateProfilePayload = {
+  fullName?: string;
+  phone?: string;
+  avatarUrl?: string;
+};
 
 export type Order = {
   id: string;
@@ -79,6 +90,10 @@ export const authApi = {
     post<MessageResponse>("/auth/logout", { refreshToken }),
 
   me: () => get<AuthUser>("/auth/me"),
+
+  /** Self-service profile update. Returns the same shape as `me()`. */
+  updateProfile: (payload: UpdateProfilePayload) =>
+    patch<AuthUser>("/auth/me", payload),
 
   getOrders: (params?: {
     page?: number;

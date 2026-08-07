@@ -1,456 +1,354 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { useHomepageCategories, useBestSellers, useNewArrivals, useSaleProducts } from "@/lib/hooks/use-homepage";
-import { useCart } from "@/lib/hooks/use-cart";
-import { ProductCard } from "@/components/customer/ProductCard";
 import { Loader2 } from "lucide-react";
-import { HomePageHeader } from "@/components/customer/HomePageHeader";
-import { HomePageFooter } from "@/components/customer/HomePageFooter";
+import {
+  useHomepageCategories,
+  useBestSellers,
+  useNewArrivals,
+  useSaleProducts,
+  useHeroBanners,
+} from "@/lib/hooks/use-homepage";
+import { useCart } from "@/lib/hooks/use-cart";
+import type { Product } from "@/lib/api/services/public";
+import { ProductCard } from "@/components/customer/ProductCard";
+import { ProductImage } from "@/components/customer/ProductImage";
+import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
+import { Container } from "@/components/customer/Container";
+import { SectionHeading } from "@/components/customer/SectionHeading";
+import { CarouselItem, ProductCarousel } from "@/components/customer/ProductCarousel";
+import { Button } from "@/components/ui/button";
+import { formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+/** Consistent vertical rhythm for every homepage band. */
+const SECTION = "py-14 md:py-18";
+
+function SectionSpinner() {
+  return (
+    <div className="col-span-full flex justify-center py-12">
+      <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden />
+    </div>
+  );
+}
+
+/** Stock pill overlaid on the New Arrivals tiles. */
+function StockPill({ product }: { product: Product }) {
+  if (!product.inStock) {
+    return <span className="text-xs font-medium text-red-300">Out of stock</span>;
+  }
+  if (product.lowStock) {
+    return (
+      <span className="text-xs font-medium text-orange-300">
+        Only {product.stock} left
+      </span>
+    );
+  }
+  return <span className="text-xs font-medium text-green-300">In stock</span>;
+}
 
 export default function HomePage() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [bestSellersScrollIndex, setBestSellersScrollIndex] = useState(0);
-  const [salesScrollIndex, setSalesScrollIndex] = useState(0);
+  // Tracked per product: a single shared flag disabled every Add to Cart
+  // button on the page while any one of them was in flight.
+  const [addingId, setAddingId] = useState<string | null>(null);
 
-  // API hooks for fetching data
-  const { data: categories, isLoading: categoriesLoading } = useHomepageCategories(6);
-  const { data: bestSellers, isLoading: bestSellersLoading } = useBestSellers(10);
-  const { data: newArrivals, isLoading: newArrivalsLoading } = useNewArrivals(3);
-  const { data: saleProducts, isLoading: saleProductsLoading } = useSaleProducts(10);
+  const { data: categories, isPending: categoriesPending } = useHomepageCategories(6);
+  const { data: bestSellers, isPending: bestSellersPending } = useBestSellers(10);
+  const { data: newArrivals, isPending: newArrivalsPending } = useNewArrivals(3);
+  const { data: saleProducts, isPending: saleProductsPending } = useSaleProducts(10);
+  // Highest-priority active HERO banner, if the admin has published one.
+  const { data: heroBanners } = useHeroBanners();
+  const heroBanner = heroBanners?.[0];
 
-  // Cart hook
-  const { totalItems } = useCart();
+  const { addItem } = useCart();
 
-  const scrollBestSellers = (direction: 'left' | 'right') => {
-    const container = document.getElementById('bestsellers-container');
-    if (container) {
-      const cardWidth = 288 + 24; // w-72 (288px) + gap-6 (24px)
-      const scrollAmount = cardWidth * 2; // Scroll 2 cards at a time
-      const maxScrollIndex = Math.max(0, (bestSellers?.length || 0) - 5);
+  const handleAddToCart = async (e: React.MouseEvent, productId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-      if (direction === 'left') {
-        container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-        setBestSellersScrollIndex(Math.max(0, bestSellersScrollIndex - 2));
-      } else {
-        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-        setBestSellersScrollIndex(Math.min(maxScrollIndex, bestSellersScrollIndex + 2));
-      }
+    setAddingId(productId);
+    try {
+      await addItem(productId, 1);
+    } catch {
+      // useCart already surfaced the reason as a toast.
+    } finally {
+      setAddingId(null);
     }
   };
 
-  const scrollSales = (direction: 'left' | 'right') => {
-    const container = document.getElementById('sales-container');
-    if (container) {
-      const cardWidth = 288 + 24; // w-72 (288px) + gap-6 (24px)
-      const scrollAmount = cardWidth * 2; // Scroll 2 cards at a time
-      const maxScrollIndex = Math.max(0, (saleProducts?.length || 0) - 5);
-
-      if (direction === 'left') {
-        container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-        setSalesScrollIndex(Math.max(0, salesScrollIndex - 2));
-      } else {
-        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-        setSalesScrollIndex(Math.min(maxScrollIndex, salesScrollIndex + 2));
-      }
-    }
-  };
+  const [featured, ...secondary] = newArrivals ?? [];
 
   return (
-    <div className="min-h-screen bg-[#FBF9F8]">
-      {/* Header/Navigation */}
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
-      />
-
-      {/* Hero Section */}
-      <section className="pt-16 md:pt-20 pb-8 md:pb-12 bg-[#FBF9F8]">
-        <div className="container mx-auto px-4">
-          <div className="relative h-120 md:h-140 rounded-3xl overflow-hidden">
+    // `bleed` because the homepage lays out its own full-width bands; each
+    // band uses <Container> internally so they still line up with the header.
+    <CustomerPageShell bleed>
+      {/* Hero — driven by the active HERO banner, with the built-in artwork as
+          the fallback so the page never renders an empty slot. */}
+      <section className="pt-8 pb-4 md:pt-10 md:pb-6">
+        <Container>
+          <div className="relative h-96 overflow-hidden rounded-3xl md:h-120">
             <Image
-              src="/images/homepage/hero-image.png"
-              alt="Hero Banner with headphones"
+              src={heroBanner?.imageUrl || "/images/homepage/hero-image.png"}
+              alt=""
               fill
-              className="object-cover"
               priority
+              sizes="(max-width: 1280px) 100vw, 1280px"
+              className="object-cover"
+              // Remote banner URLs can't be optimised without a configured
+              // loader domain; the bundled fallback still goes through it.
+              unoptimized={Boolean(heroBanner?.imageUrl)}
             />
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, rgba(6, 161, 94, 0.85), rgba(6, 161, 94, 0.4), transparent)' }}></div>
+            {/* Brand-navy scrim (was a hardcoded green that clashed with the
+                rest of the palette), heavier on the left so the copy stays
+                legible over any artwork. */}
+            <div className="absolute inset-0 bg-linear-to-r from-primary/90 via-primary/60 to-transparent" />
+
             <div className="absolute inset-0 flex items-center">
-              <div className="container mx-auto px-4">
-                <div className="max-w-2xl" style={{ marginLeft: '3rem' }}>
-                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-4 leading-tight">
-                    Experience the Future of Audio Engineering
-                  </h1>
-                  <Link
-                    href="/products"
-                    className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-3xl font-semibold text-sm transition-colors"
-                  >
-                    Shop Now
+              <div className="max-w-xl px-6 sm:px-10 md:px-14">
+                <h1 className="text-3xl leading-tight font-semibold tracking-tight text-white text-balance md:text-4xl lg:text-5xl">
+                  {heroBanner?.title || "Experience the Future of Audio Engineering"}
+                </h1>
+                {heroBanner?.description ? (
+                  <p className="mt-3 max-w-lg text-sm text-white/85 text-pretty md:text-base">
+                    {heroBanner.description}
+                  </p>
+                ) : null}
+                <Button
+                  asChild
+                  size="xl"
+                  className="mt-6 rounded-full bg-orange-500 text-white hover:bg-orange-600"
+                >
+                  <Link href={heroBanner?.linkUrl || "/products"}>
+                    {heroBanner?.linkText || "Shop Now"}
                   </Link>
-                </div>
+                </Button>
               </div>
             </div>
           </div>
-        </div>
+        </Container>
       </section>
 
-      {/* Explore Categories */}
-      <section className="py-16 md:py-20 bg-[#FBF9F8]">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Explore Categories
-            </h2>
-            <Link href="/categories" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
-              View All
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {categoriesLoading ? (
-              <div className="col-span-full flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-              </div>
+      {/* Categories */}
+      <section className={SECTION}>
+        <Container>
+          <SectionHeading title="Explore Categories" href="/categories" />
+
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+            {categoriesPending ? (
+              <SectionSpinner />
             ) : categories && categories.length > 0 ? (
               categories.map((category) => (
                 <Link
                   key={category.id}
                   href={`/categories/${category.slug}`}
-                  className="relative overflow-hidden rounded-xl hover:shadow-lg transition-all group"
+                  className="group relative aspect-square overflow-hidden rounded-xl bg-muted transition-shadow duration-150 hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  <div className="aspect-square bg-gray-200">
-                    {category.thumbnailName ? (
-                      <img
-                        src={category.thumbnailName}
-                        alt={category.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                        <div className="text-gray-400 text-xs">No image</div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4">
-                    <div className="text-white text-center">
-                      <h3 className="font-semibold text-white text-base drop-shadow-md">{category.name}</h3>
-                    </div>
-                  </div>
+                  <ProductImage
+                    src={category.thumbnailName}
+                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 200px"
+                    className="transition-transform duration-300 group-hover:scale-105"
+                  />
+
+                  <div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/20 to-transparent" />
+                  <h3 className="absolute inset-x-0 bottom-0 truncate p-3 text-center text-sm font-semibold text-white">
+                    {category.name}
+                  </h3>
                 </Link>
               ))
-            ) : null}
+            ) : (
+              <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                No categories available.
+              </p>
+            )}
           </div>
-        </div>
+        </Container>
       </section>
 
-      {/* Best Sellers */}
-      <section className="py-16 md:py-20 bg-[#FBF9F8]">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Best Sellers
-            </h2>
-            <Link href="/best-sellers" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
-              View All
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
+      {/* Best sellers */}
+      <section className={SECTION}>
+        <Container>
+          <SectionHeading title="Best Sellers" href="/best-sellers" />
 
-          {/* Carousel Container */}
-          <div className="relative">
-            {/* Left Navigation Arrow - Positioned in middle */}
-            <button
-              onClick={() => scrollBestSellers('left')}
-              disabled={bestSellersScrollIndex === 0}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              aria-label="Previous products"
-              style={{ transform: 'translateY(-50%)' }}
-            >
-              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+          {bestSellersPending ? (
+            <SectionSpinner />
+          ) : bestSellers && bestSellers.length > 0 ? (
+            <ProductCarousel label="Best sellers" itemCount={bestSellers.length}>
+              {bestSellers.map((product) => (
+                <CarouselItem key={product.id}>
+                  <ProductCard product={product} />
+                </CarouselItem>
+              ))}
+            </ProductCarousel>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No products available.
+            </p>
+          )}
+        </Container>
+      </section>
 
-            {/* Products Carousel */}
-            <div
-              id="bestsellers-container"
-              className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
-            >
-              {bestSellersLoading ? (
-                <div className="w-full flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-                </div>
-              ) : bestSellers && bestSellers.length > 0 ? (
-                <div className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth">
-                  {bestSellers.map((product) => (
-                    <div key={product.id} className="shrink-0 w-72">
-                      <ProductCard product={product} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="w-full text-center py-8 text-gray-500">No products available</div>
-              )}
+      {/* New arrivals */}
+      <section className={SECTION}>
+        <Container>
+          <SectionHeading title="New Arrivals" href="/new-arrivals" />
+
+          {newArrivalsPending ? (
+            <SectionSpinner />
+          ) : featured ? (
+            // Two grid rows, with the featured tile spanning both. The grid
+            // resolves the heights, so the featured tile and the stacked pair
+            // always end on the same baseline — previously the featured card
+            // had a hardcoded 512px min-height while the stack next to it
+            // measured 536px (2 × h-64 + a 24px gap), so they never lined up.
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:grid-rows-2">
+              <NewArrivalTile
+                product={featured}
+                featured
+                isAdding={addingId === featured.id}
+                onAddToCart={handleAddToCart}
+                className="lg:col-span-2 lg:row-span-2"
+              />
+              {secondary.slice(0, 2).map((product) => (
+                <NewArrivalTile
+                  key={product.id}
+                  product={product}
+                  isAdding={addingId === product.id}
+                  onAddToCart={handleAddToCart}
+                />
+              ))}
             </div>
-
-            {/* Right Navigation Arrow - Positioned in middle */}
-            <button
-              onClick={() => scrollBestSellers('right')}
-              disabled={bestSellersScrollIndex >= Math.max(0, (bestSellers?.length || 0) - 5)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              aria-label="Next products"
-              style={{ transform: 'translateY(-50%)' }}
-            >
-              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No new arrivals right now.
+            </p>
+          )}
+        </Container>
       </section>
 
-      {/* New Arrivals */}
-      <section className="pt-16 md:pt-20 pb-4 md:pb-8 bg-[#FBF9F8]">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              New Arrivals
-            </h2>
-            <Link href="/new-arrivals" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
-              View All
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {newArrivalsLoading ? (
-              <div className="col-span-full flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-              </div>
-            ) : newArrivals && newArrivals.length > 0 ? (
-              <>
-                {/* Featured Product - Larger Card */}
-                {newArrivals[0] && (
-                  <Link
-                    key={newArrivals[0].id}
-                    href={`/products/${newArrivals[0].id}`}
-                    className="lg:col-span-2 bg-white rounded-2xl overflow-hidden group"
-                  >
-                    <div className="relative h-full rounded-2xl" style={{ minHeight: '512px' }}>
-                      {newArrivals[0].images && newArrivals[0].images.length > 0 ? (
-                        <Image
-                          src={newArrivals[0].images[0].url}
-                          alt={newArrivals[0].name}
-                          fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-400">No image</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                      <div className="absolute bottom-0 left-0 right-0 p-8">
-                        <h3 className="text-white text-2xl font-bold mb-2">{newArrivals[0].name}</h3>
-                        <div className="flex items-center gap-3 mb-4">
-                          <span className="text-orange-500 font-bold text-xl">
-                            ${newArrivals[0].salePrice.toFixed(2)}
-                          </span>
-                          {newArrivals[0].discountPercent > 0 && (
-                            <span className="text-white/70 line-through">
-                              ${newArrivals[0].price.toFixed(2)}
-                            </span>
-                          )}
-                          {/* Stock Status */}
-                          <span className="text-white text-sm">
-                            {!newArrivals[0].inStock ? (
-                              <span className="text-red-300">Out of Stock</span>
-                            ) : newArrivals[0].lowStock ? (
-                              <span className="text-orange-300">Only {newArrivals[0].stock} left</span>
-                            ) : (
-                              <span className="text-green-300">In Stock</span>
-                            )}
-                          </span>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            // Add to cart functionality here
-                            console.log('Add to cart:', newArrivals[0].id);
-                          }}
-                          disabled={!newArrivals[0].inStock}
-                          className={`bg-[#00234E] hover:bg-[#001a3a] text-white py-2 px-6 rounded-lg font-semibold transition-all ${
-                            !newArrivals[0].inStock ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {newArrivals[0].inStock ? 'Add to Cart' : 'Out of Stock'}
-                        </button>
-                      </div>
-                    </div>
-                  </Link>
-                )}
+      {/* Sales */}
+      <section className={SECTION}>
+        <Container>
+          <SectionHeading title="Sales" href="/sales" />
 
-                {/* Two Smaller Products */}
-                <div className="space-y-6">
-                  {newArrivals.slice(1, 3).map((product) => (
-                    <div
-                      key={product.id}
-                      className="bg-white rounded-xl overflow-hidden group h-64"
-                    >
-                      <div className="relative h-full rounded-xl">
-                        {/* Product Image - Clickable to product details */}
-                        <Link href={`/products/${product.id}`} className="block h-full">
-                          {product.images && product.images.length > 0 ? (
-                            <Image
-                              src={product.images[0].url}
-                              alt={product.name}
-                              fill
-                              className="object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                              <span className="text-gray-400">No image</span>
-                            </div>
-                          )}
-                        </Link>
-
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                        <div className="absolute bottom-0 left-0 right-0 p-4">
-                          <h3 className="text-white font-semibold mb-1 text-sm line-clamp-1">{product.name}</h3>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              {product.discountPercent > 0 ? (
-                                <>
-                                  <span className="text-white font-bold text-sm">
-                                    ${product.salePrice.toFixed(2)}
-                                  </span>
-                                  <span className="text-white/70 line-through text-xs">
-                                    ${product.price.toFixed(2)}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-white font-bold text-sm">
-                                  ${product.price.toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                            {/* Stock Status */}
-                            <span className="text-white text-xs">
-                              {!product.inStock ? (
-                                <span className="text-red-300">Out of Stock</span>
-                              ) : product.lowStock ? (
-                                <span className="text-orange-300">Low Stock</span>
-                              ) : (
-                                <span className="text-green-300">In Stock</span>
-                              )}
-                            </span>
-                          </div>
-
-                          {/* Add to Cart Button */}
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              // Add to cart functionality here
-                              console.log('Add to cart:', product.id);
-                            }}
-                            disabled={!product.inStock}
-                            className={`bg-[#00234E] hover:bg-[#001a3a] text-white py-2 px-6 rounded-lg font-semibold transition-all ${
-                              !product.inStock ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                          >
-                            {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
+          {saleProductsPending ? (
+            <SectionSpinner />
+          ) : saleProducts && saleProducts.length > 0 ? (
+            <ProductCarousel label="Sale products" itemCount={saleProducts.length}>
+              {saleProducts.map((product) => (
+                <CarouselItem key={product.id}>
+                  <ProductCard product={product} />
+                </CarouselItem>
+              ))}
+            </ProductCarousel>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No sale products available.
+            </p>
+          )}
+        </Container>
       </section>
 
-      {/* Sales Section */}
-      <section className="py-16 md:py-20 bg-[#FBF9F8]">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Sales
-            </h2>
-            <Link href="/sales" className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
-              View All
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
+    </CustomerPageShell>
+  );
+}
 
-          {/* Carousel Container */}
-          <div className="relative">
-            {/* Left Navigation Arrow - Positioned in middle */}
-            <button
-              onClick={() => scrollSales('left')}
-              disabled={salesScrollIndex === 0}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              aria-label="Previous products"
-              style={{ transform: 'translateY(-50%)' }}
-            >
-              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+/**
+ * One New Arrivals tile.
+ *
+ * The whole tile used to be wrapped in a <Link> with the Add to Cart <button>
+ * nested inside it — invalid HTML (interactive content inside an anchor) and a
+ * click-target trap. The link now covers only the image via a stretched
+ * overlay, leaving the button as a real sibling.
+ */
+function NewArrivalTile({
+  product,
+  featured = false,
+  isAdding,
+  onAddToCart,
+  className,
+}: {
+  product: Product;
+  featured?: boolean;
+  isAdding: boolean;
+  onAddToCart: (e: React.MouseEvent, productId: string) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "group relative isolate overflow-hidden rounded-2xl bg-muted",
+        featured ? "min-h-80 lg:min-h-0" : "min-h-56",
+        className,
+      )}
+    >
+      <ProductImage
+        src={product.images?.[0]?.url}
+        sizes={featured ? "(max-width: 1024px) 100vw, 840px" : "(max-width: 1024px) 100vw, 420px"}
+        className="transition-transform duration-300 group-hover:scale-105"
+      />
 
-            {/* Products Carousel */}
-            <div
-              id="sales-container"
-              className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth mx-12 py-2"
-            >
-              {saleProductsLoading ? (
-                <div className="w-full flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-                </div>
-              ) : saleProducts && saleProducts.length > 0 ? (
-                <div className="flex overflow-x-auto gap-6 scrollbar-hide scroll-smooth">
-                  {saleProducts.map((product) => (
-                    <div key={product.id} className="shrink-0 w-72">
-                      <ProductCard product={product} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="w-full text-center py-8 text-gray-500">No sale products available</div>
+      <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/25 to-transparent" />
+
+      {/* Stretched link: covers the tile for navigation, but sits below the
+          button in the stacking order so the button stays clickable. */}
+      <Link
+        href={`/products/${product.id}`}
+        className="absolute inset-0 z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+      >
+        <span className="sr-only">View {product.name}</span>
+      </Link>
+
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-20",
+          featured ? "p-6 sm:p-8" : "p-4",
+        )}
+      >
+        <h3
+          className={cn(
+            "font-semibold tracking-tight text-white",
+            featured ? "text-xl sm:text-2xl" : "line-clamp-1 text-sm",
+          )}
+        >
+          {product.name}
+        </h3>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span
+            className={cn(
+              "font-semibold tabular-nums text-orange-400",
+              featured ? "text-xl" : "text-sm",
+            )}
+          >
+            {formatMoney(product.salePrice)}
+          </span>
+          {product.discountPercent > 0 ? (
+            <span
+              className={cn(
+                "text-white/70 line-through tabular-nums",
+                featured ? "text-sm" : "text-xs",
               )}
-            </div>
-
-            {/* Right Navigation Arrow - Positioned in middle */}
-            <button
-              onClick={() => scrollSales('right')}
-              disabled={salesScrollIndex >= Math.max(0, (saleProducts?.length || 0) - 5)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              aria-label="Next products"
-              style={{ transform: 'translateY(-50%)' }}
             >
-              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+              {formatMoney(product.price)}
+            </span>
+          ) : null}
+          <StockPill product={product} />
         </div>
-      </section>
 
-      {/* Footer */}
-      <HomePageFooter />
+        <Button
+          // Re-enable clicks on the button itself; the wrapper is
+          // pointer-events-none so the stretched link stays reachable.
+          className="pointer-events-auto mt-4"
+          size={featured ? "lg" : "sm"}
+          disabled={!product.inStock || isAdding}
+          onClick={(e) => onAddToCart(e, product.id)}
+        >
+          {isAdding ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+          {product.inStock ? "Add to Cart" : "Out of Stock"}
+        </Button>
+      </div>
     </div>
   );
 }

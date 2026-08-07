@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Query,
   Req,
@@ -23,6 +24,7 @@ import {
   RefreshTokenDto,
   ResetPasswordDto,
 } from './dto/password.dto';
+import { UpdateMeDto } from './dto/update-profile.dto';
 
 /** Extracts client metadata stored alongside each refresh-token session. */
 function requestMeta(req: Request) {
@@ -127,6 +129,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Return the currently authenticated user' })
   me(@CurrentUser('id') userId: string) {
     return this.auth.me(userId);
+  }
+
+  @ApiBearerAuth()
+  @Patch('me')
+  @ApiOperation({ summary: 'Update the signed-in user profile (name/phone/avatar)' })
+  updateMe(@CurrentUser('id') userId: string, @Body() dto: UpdateMeDto) {
+    return this.auth.updateMe(userId, dto);
   }
 
   @ApiBearerAuth()

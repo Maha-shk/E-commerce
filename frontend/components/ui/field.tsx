@@ -33,16 +33,18 @@ export function Field({
   ...props
 }: FieldProps) {
   return (
-    <div className={cn("space-y-2", wrapperClassName)}>
-      <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-subtle">
+    <div className={cn("space-y-1.5", wrapperClassName)}>
+      <div className="flex min-h-5 items-center justify-between gap-2">
+        <Label htmlFor={id} className="eyebrow">
           {label}
         </Label>
         {labelAddon}
       </div>
       <div className="relative">
         {icon ? (
-          <span className="pointer-events-none absolute left-3.5 top-1/2 flex -translate-y-1/2 text-subtle [&_svg]:size-4">
+          // `left-3` matches the input's own px-3, so the icon and a plain
+          // (icon-less) field start their content on the same optical column.
+          <span className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 text-subtle [&_svg]:size-4">
             {icon}
           </span>
         ) : null}

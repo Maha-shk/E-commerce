@@ -27,6 +27,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/password.dto';
+import { UpdateMeDto } from './dto/update-profile.dto';
 import { JwtRefreshPayload, JwtPayload } from './types/jwt-payload.interface';
 
 const BCRYPT_ROUNDS = 12;
@@ -302,6 +303,32 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('User not found');
     return user;
+  }
+
+  /**
+   * Self-service profile update. Returns the same shape as `me()` so the
+   * frontend can write the response straight back into its session store.
+   */
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const exists = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!exists) throw new UnauthorizedException('User not found');
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
+        // An empty string is how the client clears an optional field; storing
+        // "" instead of null would make `user.phone && ...` checks render blanks.
+        ...(dto.phone !== undefined && { phone: dto.phone.trim() || null }),
+        ...(dto.avatarUrl !== undefined && {
+          avatarUrl: dto.avatarUrl.trim() || null,
+        }),
+      },
+      select: USER_PUBLIC_SELECT,
+    });
   }
 
   /** Get orders for the authenticated customer */

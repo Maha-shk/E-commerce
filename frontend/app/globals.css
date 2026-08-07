@@ -22,18 +22,33 @@
   --color-warning-muted: #fbf1da;
   --color-info: #2f6fb0;
   --color-info-muted: #e6f0f9;
+  /* `bg-destructive-muted` was used in the order/status badges but never
+     defined, so those badges rendered with no background at all. */
+  --color-destructive: #cf4257;
+  --color-destructive-muted: #fdecef;
 
-  --font-display: var(--font-poppins), var(--font-inter), ui-sans-serif, sans-serif;
+  /*
+   * Font stacks.
+   *
+   * `--font-inter` / `--font-poppins` are only defined when the app loads them
+   * through next/font. That is currently disabled (Docker builds can't reach
+   * Google Fonts), so BOTH names must carry a full fallback list inline —
+   * otherwise `font-family: var(--font-inter)` is invalid at computed-value
+   * time and every element silently falls back to the browser default serif.
+   */
+  --font-display: var(--font-poppins, var(--font-fallback-sans));
 
   --shadow-soft: 0 1px 2px rgba(10, 37, 64, 0.04), 0 18px 44px -22px rgba(10, 37, 64, 0.22);
+  --shadow-card: 0 1px 2px rgba(10, 37, 64, 0.04), 0 1px 3px rgba(10, 37, 64, 0.03);
+  --shadow-card-hover: 0 2px 4px rgba(10, 37, 64, 0.05), 0 12px 28px -12px rgba(10, 37, 64, 0.18);
 }
 
 /* ============================================================
    shadcn semantic token mapping
    ============================================================ */
 @theme inline {
-  --font-sans: var(--font-inter);
-  --font-heading: var(--font-poppins);
+  --font-sans: var(--font-inter, var(--font-fallback-sans));
+  --font-heading: var(--font-poppins, var(--font-fallback-sans));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -80,6 +95,12 @@
    ============================================================ */
 :root {
   --radius: 0.75rem;
+
+  /* Declared as a plain custom property (not a @theme token) so it is always
+     emitted — the font stacks above resolve against it. */
+  --font-fallback-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
 
   --background: #fafaf8;
   --foreground: #0a2540;
@@ -158,11 +179,14 @@
   html {
     scroll-behavior: smooth;
     color-scheme: light;
+    /* Keeps the sticky site header from covering anchored targets. */
+    scroll-padding-top: 6rem;
   }
 
   body {
     @apply bg-background font-sans text-foreground antialiased;
     text-rendering: optimizeLegibility;
+    font-synthesis-weight: none;
   }
 
   h1,
@@ -171,11 +195,53 @@
   h4,
   h5 {
     @apply font-display tracking-tight text-foreground;
+    text-wrap: pretty;
+  }
+
+  /* ---- Pointer affordances -------------------------------------------
+     Browsers (and Tailwind v4's preflight) leave <button> on the default
+     arrow cursor. Every clickable thing should read as clickable, and every
+     disabled thing should read as blocked. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='range']:not(:disabled),
+  ::file-selector-button {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  textarea:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  /* Money, counts and dates line up column-to-column in tables. */
+  table {
+    font-variant-numeric: tabular-nums;
   }
 
   ::selection {
     background-color: color-mix(in srgb, var(--primary) 18%, transparent);
     color: var(--primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -186,6 +252,21 @@
   /* Uppercase, letter-spaced field label (matches auth screens) */
   .eyebrow {
     @apply text-xs font-semibold uppercase tracking-wider text-subtle;
+  }
+
+  /* Page title used at the top of every account/dashboard screen. */
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-foreground;
+  }
+
+  /* Card / panel section heading — one step below .page-title. */
+  .section-title {
+    @apply text-base font-semibold tracking-tight text-foreground;
+  }
+
+  /* Small caption above a value in a summary row. */
+  .field-label {
+    @apply text-xs font-medium text-muted-foreground;
   }
 }
 
