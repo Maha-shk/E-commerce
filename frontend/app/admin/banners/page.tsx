@@ -5,44 +5,64 @@ import {
   ArrowDown,
   ArrowUp,
   ExternalLink,
+  ImageOff,
   Image as ImageIcon,
-  Loader2,
   Pencil,
   Plus,
   Trash2,
-  TriangleAlert,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/select-native";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BannerModal } from "@/components/admin/BannerModal";
+import { ErrorState, LoadingState } from "@/components/admin/QueryState";
 import {
   useBanners,
   useDeleteBanner,
   useReorderBanners,
   useSetBannerActive,
 } from "@/lib/hooks/use-admin";
+import { formatDate } from "@/lib/admin/format";
 import type { Banner } from "@/lib/api/services/admin";
 import { cn } from "@/lib/utils";
 
-const SLOTS = ["HERO", "PROMOTIONAL", "SIDEBAR"] as const;
+/**
+ * Storefront slots, with a plain-English note about where each one shows.
+ * The picker used to be a `<select>` listing raw enum values ("HERO",
+ * "PROMOTIONAL") with no indication of what they controlled.
+ */
+const SLOTS = [
+  {
+    value: "HERO" as const,
+    label: "Hero",
+    hint: "The large rotating banner at the top of the homepage.",
+  },
+  {
+    value: "PROMOTIONAL" as const,
+    label: "Promotional",
+    hint: "Secondary promo placements across the storefront.",
+  },
+  {
+    value: "SIDEBAR" as const,
+    label: "Sidebar",
+    hint: "Narrow placements beside listing pages.",
+  },
+];
+
+type Slot = (typeof SLOTS)[number]["value"];
 
 /** Formats a scheduling window into a short human phrase. */
 function scheduleLabel(banner: Banner): string | null {
-  const start = banner.startDate ? new Date(banner.startDate) : null;
-  const end = banner.endDate ? new Date(banner.endDate) : null;
+  const start = banner.startDate ? formatDate(banner.startDate) : null;
+  const end = banner.endDate ? formatDate(banner.endDate) : null;
   if (!start && !end) return null;
 
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
-  if (start) return `From ${fmt(start)}`;
-  return `Until ${fmt(end!)}`;
+  if (start && end) return `${start} – ${end}`;
+  if (start) return `From ${start}`;
+  return `Until ${end}`;
 }
 
 /** True when a banner is published but outside its scheduled window. */
@@ -54,19 +74,50 @@ function isDormant(banner: Banner): boolean {
   return false;
 }
 
+/** Banner artwork, with a real placeholder when the URL is broken. */
+function BannerThumb({ src, title }: { src: string; title: string }) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="flex h-20 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-muted-foreground">
+      {src && !failed ? (
+        /* eslint-disable-next-line @next/next/no-img-element -- banner art lives
+           on arbitrary hosts, which next/image can't take without allow-listing
+           each one. */
+        <img
+          src={src}
+          alt=""
+          className="size-full object-cover"
+          // Was `e.currentTarget.style.visibility = "hidden"` — a direct DOM
+          // mutation that left an unexplained empty box.
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="flex flex-col items-center gap-1 px-2 text-center">
+          <ImageOff className="size-5" aria-hidden />
+          <span className="text-[10px] leading-tight">Image unavailable</span>
+        </span>
+      )}
+      <span className="sr-only">{title}</span>
+    </div>
+  );
+}
+
 export default function BannersPage() {
-  const [slot, setSlot] = useState<(typeof SLOTS)[number]>("HERO");
+  const [slot, setSlot] = useState<Slot>("HERO");
   const [modalTarget, setModalTarget] = useState<Banner | "new" | null>(null);
   const [toDelete, setToDelete] = useState<Banner | null>(null);
 
   // Filtered by slot: display order is per-slot, so reordering only makes
   // sense within one.
-  const { data, isPending, isError } = useBanners({ type: slot, limit: 100 });
+  const { data, isPending, isError, error, refetch } = useBanners({ type: slot, limit: 100 });
   const setActive = useSetBannerActive();
   const reorder = useReorderBanners();
   const remove = useDeleteBanner();
 
   const banners = useMemo(() => data?.data ?? [], [data]);
+  const activeSlot = SLOTS.find((s) => s.value === slot)!;
+  const liveCount = banners.filter((b) => b.isActive && !isDormant(b)).length;
 
   /** Moves a banner one place and persists the whole new sequence. */
   const move = (index: number, direction: -1 | 1) => {
@@ -83,7 +134,7 @@ export default function BannersPage() {
         title="Banners"
         subtitle="Artwork shown on the storefront hero and promotional slots."
         action={
-          <Button onClick={() => setModalTarget("new")}>
+          <Button size="lg" onClick={() => setModalTarget("new")}>
             <Plus className="size-4" aria-hidden />
             New banner
           </Button>
@@ -91,74 +142,99 @@ export default function BannersPage() {
       />
 
       {/* Slot picker */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <label htmlFor="slot" className="text-sm font-medium">
-            Slot
-          </label>
-          <NativeSelect
-            id="slot"
-            value={slot}
-            onChange={(e) => setSlot(e.target.value as (typeof SLOTS)[number])}
-            className="w-48"
+      <Card className="gap-0 py-0">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            role="tablist"
+            aria-label="Banner slot"
+            className="inline-flex rounded-lg bg-muted p-1"
           >
-            {SLOTS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </NativeSelect>
-          <p className="text-sm text-muted-foreground">
-            The storefront rotates through every published banner in this slot, in this order.
-          </p>
-        </CardContent>
+            {SLOTS.map((option) => {
+              const isSelected = slot === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => setSlot(option.value)}
+                  className={cn(
+                    "rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    isSelected
+                      ? "bg-card text-foreground shadow-card"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-sm text-muted-foreground">{activeSlot.hint}</p>
+        </div>
+
+        {!isPending && !isError && banners.length > 0 ? (
+          <div className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+            {/* The storefront rotates through every live banner in this slot —
+                this used to claim only the first one was ever shown. */}
+            <span className="font-medium text-foreground tabular-nums">{liveCount}</span> of{" "}
+            <span className="font-medium text-foreground tabular-nums">{banners.length}</span>{" "}
+            live. The storefront rotates through them in this order.
+          </div>
+        ) : null}
       </Card>
 
       {/* List */}
       {isPending ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16">
-            <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
-            <p className="text-sm text-muted-foreground">Loading banners…</p>
-          </CardContent>
+        <Card className="gap-0 py-0">
+          <LoadingState label="Loading banners…" />
         </Card>
       ) : isError ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <TriangleAlert className="size-6 text-warning" aria-hidden />
-            <p className="text-sm font-medium">Couldn&apos;t load banners</p>
-          </CardContent>
+        <Card className="gap-0 py-0">
+          <div className="p-5">
+            {/* The error card had no way to recover — just a warning icon. */}
+            <ErrorState error={error} onRetry={() => refetch()} />
+          </div>
         </Card>
       ) : banners.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <ImageIcon className="size-8 text-muted-foreground" aria-hidden />
-            <p className="text-sm font-medium">No {slot} banners yet</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              The storefront falls back to its built-in artwork until you publish
-              one here.
+        <Card className="gap-0 py-0">
+          <div className="flex flex-col items-center px-6 py-16 text-center">
+            <span className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <ImageIcon className="size-6" aria-hidden />
+            </span>
+            <p className="text-base font-semibold tracking-tight">
+              No {activeSlot.label.toLowerCase()} banners yet
             </p>
-            <Button className="mt-3" variant="outline" onClick={() => setModalTarget("new")}>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              The storefront falls back to its built-in artwork until you publish one here.
+            </p>
+            <Button className="mt-5" variant="outline" onClick={() => setModalTarget("new")}>
               <Plus className="size-4" aria-hidden />
               Create the first one
             </Button>
-          </CardContent>
+          </div>
         </Card>
       ) : (
         <div className="space-y-3">
           {banners.map((banner, index) => {
             const dormant = isDormant(banner);
             const schedule = scheduleLabel(banner);
+            const isLive = banner.isActive && !dormant;
 
             return (
-              <Card key={banner.id}>
-                <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+              <Card
+                key={banner.id}
+                className={cn("gap-0 py-0", !banner.isActive && "opacity-70")}
+              >
+                <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
                   {/* Reorder */}
                   <div className="flex shrink-0 flex-row gap-1 sm:flex-col">
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label="Move up"
+                      aria-label={`Move ${banner.title} up`}
                       disabled={index === 0 || reorder.isPending}
                       onClick={() => move(index, -1)}
                     >
@@ -167,7 +243,7 @@ export default function BannersPage() {
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label="Move down"
+                      aria-label={`Move ${banner.title} down`}
                       disabled={index === banners.length - 1 || reorder.isPending}
                       onClick={() => move(index, 1)}
                     >
@@ -175,35 +251,29 @@ export default function BannersPage() {
                     </Button>
                   </div>
 
-                  {/* Thumbnail */}
-                  <div className="h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- banner
-                        art lives on arbitrary hosts, which next/image can't take
-                        without allow-listing each one. */}
-                    <img
-                      src={banner.imageUrl}
-                      alt=""
-                      className="size-full object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                      }}
-                    />
-                  </div>
+                  <BannerThumb src={banner.imageUrl} title={banner.title} />
 
                   {/* Detail */}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-semibold">{banner.title}</p>
-                      {index === 0 && banner.isActive && !dormant ? (
+                      <p className="truncate font-semibold tracking-tight">{banner.title}</p>
+
+                      {/* Every live banner is live — the badge used to be
+                          pinned to `index === 0`, from when the storefront
+                          only rendered the first one. */}
+                      {isLive ? (
                         <Badge variant="success" className="h-5 px-2 text-xs">
                           Live
                         </Badge>
-                      ) : null}
-                      {dormant ? (
+                      ) : dormant ? (
                         <Badge variant="warning" className="h-5 px-2 text-xs">
-                          Scheduled
+                          Out of schedule
                         </Badge>
-                      ) : null}
+                      ) : (
+                        <Badge variant="secondary" className="h-5 px-2 text-xs">
+                          Draft
+                        </Badge>
+                      )}
                     </div>
 
                     {banner.description ? (
@@ -213,11 +283,14 @@ export default function BannersPage() {
                     ) : null}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span>Order {banner.displayOrder}</span>
+                      <span className="tabular-nums">Position {index + 1}</span>
+                      {banner.mobileImageUrl ? <span>Has mobile crop</span> : null}
                       {banner.linkUrl ? (
-                        <span className="inline-flex items-center gap-1">
-                          <ExternalLink className="size-3" aria-hidden />
-                          {banner.linkText || "Link"} → {banner.linkUrl}
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <ExternalLink className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">
+                            {banner.linkText || "Link"} → {banner.linkUrl}
+                          </span>
                         </span>
                       ) : null}
                       {schedule ? <span>{schedule}</span> : null}
@@ -246,13 +319,13 @@ export default function BannersPage() {
                       size="icon-sm"
                       variant="ghost"
                       aria-label={`Delete ${banner.title}`}
-                      className={cn("text-muted-foreground hover:text-destructive")}
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => setToDelete(banner)}
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </Button>
                   </div>
-                </CardContent>
+                </div>
               </Card>
             );
           })}
@@ -268,9 +341,14 @@ export default function BannersPage() {
         }}
         title="Delete this banner?"
         description={
-          toDelete
-            ? `"${toDelete.title}" will be removed from the storefront. This cannot be undone.`
-            : ""
+          toDelete ? (
+            <>
+              <strong className="font-semibold text-foreground">{toDelete.title}</strong> will be
+              removed from the storefront. This cannot be undone.
+            </>
+          ) : (
+            ""
+          )
         }
         confirmLabel="Delete"
         onConfirm={() => {

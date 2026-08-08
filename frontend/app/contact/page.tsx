@@ -8,6 +8,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { LucideProps } from "lucide-react";
 import { CheckCircle2, Loader2, Mail, MapPin, Phone, Send } from "lucide-react";
+import { publicService } from "@/lib/api/services/public";
+import { getApiErrorMessage } from "@/lib/api/client";
 import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
 import { PageIntro } from "@/components/customer/PageIntro";
 import { SocialLinks } from "@/components/customer/SocialLinks";
@@ -101,25 +103,18 @@ export default function ContactPage() {
 
   const onSubmit = async (values: ContactValues) => {
     try {
-      // Was hardcoded to http://localhost:4000/api, so the contact form was
-      // broken in every deployed environment.
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/contact`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) throw new Error("Failed to send message");
-
-      const result = await response.json();
-      if (!result.success) throw new Error("Failed to send message");
-
+      // Goes through the shared axios client rather than a bare fetch: it owns
+      // the base URL and normalises errors. The previous version collapsed
+      // every failure into one generic toast, so a misconfigured API URL, a
+      // stopped backend and a validation rejection were indistinguishable —
+      // which is exactly why "not submitting" couldn't be diagnosed.
+      await publicService.submitContact(values);
       toast.success("Thanks — we'll get back to you shortly.");
       reset();
-    } catch {
-      toast.error("Couldn't send your message. Please try again.");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
       // Rethrow so react-hook-form doesn't mark the submit as successful.
-      throw new Error("submit failed");
+      throw error;
     }
   };
 

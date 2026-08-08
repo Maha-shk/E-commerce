@@ -28,9 +28,14 @@
   #
   # The actual credentials are deliberately NOT listed and remain scanned:
   # DATABASE_URL, DIRECT_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
-  # SMTP_PASSWORD, SUPABASE_SECRET_KEY, ADMIN_PASSWORD. If the scanner ever
-  # flags one of those, it is a real leak — fix the leak, don't add the key here.
-  SECRETS_SCAN_OMIT_KEYS = "NODE_ENV,PORT,CORS_ORIGIN,MAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_USER,ADMIN_EMAIL,ADMIN_NAME,JWT_ACCESS_EXPIRES_IN,JWT_REFRESH_EXPIRES_IN,SUPABASE_URL,SUPABASE_JWKS_URL,SUPABASE_PUBLISHABLE_KEY"
+  # SMTP_PASSWORD, SUPABASE_SECRET_KEY, ADMIN_PASSWORD, CLOUDINARY_API_SECRET.
+  # If the scanner ever flags one of those, it is a real leak — fix the leak,
+  # don't add the key here.
+  #
+  # CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY are omitted below because both
+  # are public by design (the cloud name appears in every delivery URL); only
+  # the API secret authorises uploads, and it stays scanned.
+  SECRETS_SCAN_OMIT_KEYS = "NODE_ENV,PORT,CORS_ORIGIN,MAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_USER,ADMIN_EMAIL,ADMIN_NAME,JWT_ACCESS_EXPIRES_IN,JWT_REFRESH_EXPIRES_IN,SUPABASE_URL,SUPABASE_JWKS_URL,SUPABASE_PUBLISHABLE_KEY,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY"
   # Documentation and the env template contain example values by design.
   SECRETS_SCAN_OMIT_PATHS = ".env.example,*.md"
 

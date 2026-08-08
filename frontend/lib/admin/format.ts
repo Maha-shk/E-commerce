@@ -59,3 +59,15 @@ export function initialsOf(name: string): string {
     .map((part) => part[0]!.toUpperCase())
     .join("");
 }
+
+/**
+ * Renders a SCREAMING_SNAKE enum value as readable text, e.g.
+ * "FIXED_AMOUNT" -> "Fixed amount". Admin dropdowns were showing the raw
+ * database values.
+ */
+export function titleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/^./, (c) => c.toUpperCase());
+}

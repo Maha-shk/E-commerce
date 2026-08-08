@@ -5,9 +5,20 @@ import { Camera, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { initialsOf } from "@/components/account/AccountSidebar";
 import { useRemoveAvatar, useUploadAvatar } from "@/lib/hooks/use-auth";
 import { cn } from "@/lib/utils";
+
+/** "Arthur Morgan" -> "AM". Local so this component can be used from the
+ *  admin console without importing a customer component. */
+function initialsOf(fullName: string) {
+  return fullName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
 
 /** Kept in step with the server's own limits, which are authoritative. */
 const MAX_BYTES = 5 * 1024 * 1024;

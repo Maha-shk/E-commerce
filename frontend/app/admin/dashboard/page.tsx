@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import {
+  ArrowRight,
   Download,
   Pencil,
   Trash2,
-  Package,
   Wallet,
   ShoppingBag,
   TrendingUp,
   Receipt,
   Truck,
-  BadgeEuro,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
+import { MiniBarChart } from "@/components/admin/MiniBarChart";
+import { ProductThumb } from "@/components/admin/ProductThumb";
 import { ErrorState, LoadingState, Skeleton, TableSkeleton } from "@/components/admin/QueryState";
 import {
   useDashboardStats,
@@ -28,7 +30,17 @@ import {
   useRecentOrders,
 } from "@/lib/hooks/use-admin";
 import { formatCompact, formatEuro } from "@/lib/admin/format";
-import { orderStatusLabel, stockStatusLabel, type OrderStatus, type StockStatus } from "@/lib/api/models";
+import { downloadCsv } from "@/lib/admin/csv";
+import { cn } from "@/lib/utils";
+import {
+  orderStatusLabel,
+  stockStatusLabel,
+  type OrderStatus,
+  type StockStatus,
+} from "@/lib/api/models";
+
+const RECENT_ORDER_COUNT = 5;
+const INVENTORY_PREVIEW_COUNT = 5;
 
 const orderStatusVariant: Record<OrderStatus, "secondary" | "success" | "info" | "destructive"> = {
   PENDING: "secondary",
@@ -45,6 +57,38 @@ const stockStatusVariant: Record<StockStatus, "success" | "warning" | "destructi
   OUT_OF_STOCK: "destructive",
 };
 
+/** Section shell so every panel on the page shares one header treatment. */
+function Panel({
+  title,
+  description,
+  action,
+  children,
+  bodyClassName,
+  className,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  bodyClassName?: string;
+  className?: string;
+}) {
+  return (
+    <Card className={cn("gap-0 py-0", className)}>
+      <div className="flex items-start justify-between gap-3 border-b border-border px-5 pt-5 pb-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+          {description ? (
+            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className={bodyClassName ?? "px-5 py-5"}>{children}</div>
+    </Card>
+  );
+}
+
 function StatCards() {
   const { data, isLoading, isError, error, refetch } = useDashboardStats();
 
@@ -52,13 +96,13 @@ function StatCards() {
 
   const cards: { label: string; value: string; icon: LucideIcon; chip: string }[] = [
     {
-      label: "Total Sales",
+      label: "Total sales",
       value: data ? formatEuro(data.totalSales) : "—",
       icon: Wallet,
       chip: "bg-accent text-primary",
     },
     {
-      label: "Active Orders",
+      label: "Active orders",
       value: data ? String(data.activeOrders) : "—",
       icon: ShoppingBag,
       chip: "bg-info-muted text-info",
@@ -67,10 +111,10 @@ function StatCards() {
       label: "Conversion",
       value: data ? `${data.conversionRate}%` : "—",
       icon: TrendingUp,
-      chip: "bg-[#efe9fb] text-[#6d55d6] dark:bg-[#6d55d6]/20",
+      chip: "bg-green-muted text-green",
     },
     {
-      label: "Avg. Order",
+      label: "Avg. order",
       value: data ? formatEuro(data.averageOrderValue) : "—",
       icon: Receipt,
       chip: "bg-warning-muted text-warning",
@@ -84,7 +128,7 @@ function StatCards() {
     {
       label: "Customers",
       value: data ? formatCompact(data.totalCustomers) : "—",
-      icon: BadgeEuro,
+      icon: Users,
       chip: "bg-success-muted text-success",
     },
   ];
@@ -92,193 +136,238 @@ function StatCards() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
       {cards.map(({ label, value, icon: Icon, chip }) => (
-        <Card key={label}>
-          <CardContent className="flex flex-col items-center gap-2 text-center">
-            <span className={`flex size-11 items-center justify-center rounded-full ${chip}`}>
-              <Icon className="size-5" />
+        <Card key={label} className="gap-0 py-0">
+          {/* Left-aligned: six centred cards were slower to scan, and the
+              number is the thing being compared across the row. */}
+          <div className="flex items-start justify-between gap-2 p-4">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-subtle">{label}</p>
+              {isLoading ? (
+                <Skeleton className="mt-2 h-7 w-20" />
+              ) : (
+                <p className="mt-1.5 text-xl font-semibold tracking-tight tabular-nums text-foreground">
+                  {value}
+                </p>
+              )}
+            </div>
+            <span
+              className={`flex size-9 shrink-0 items-center justify-center rounded-full ${chip}`}
+            >
+              <Icon className="size-4" aria-hidden />
             </span>
-            <p className="text-xs font-medium text-subtle">{label}</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <p className="font-display text-2xl font-semibold text-foreground">{value}</p>
-            )}
-          </CardContent>
+          </div>
         </Card>
       ))}
     </div>
   );
 }
 
-function MonthlyPerformanceChart() {
+function MonthlyPerformance() {
   const { data, isLoading, isError, error, refetch } = useMonthlyPerformance(6);
+  const months = data ?? [];
 
-  // Bars are drawn as a percentage of the largest value in the window.
-  const maxRevenue = Math.max(1, ...(data ?? []).map((m) => m.revenue));
-  const maxOrders = Math.max(1, ...(data ?? []).map((m) => m.orders));
+  const totalRevenue = months.reduce((sum, m) => sum + m.revenue, 0);
+  const totalOrders = months.reduce((sum, m) => sum + m.orders, 0);
 
   return (
-    <Card className="lg:col-span-2">
-      <CardContent className="flex h-full flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-foreground">Monthly Performance</h2>
-          <div className="flex items-center gap-4 text-xs font-medium text-subtle">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-primary" />
-              Revenue
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-              Orders
-            </span>
-          </div>
+    <Panel
+      className="lg:col-span-2"
+      title="Monthly Performance"
+      description="Last 6 months"
+      action={
+        months.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              downloadCsv("monthly-performance.csv", ["Month", "Revenue", "Orders"], months.map(
+                (m) => [m.month, m.revenue.toFixed(2), String(m.orders)],
+              ))
+            }
+          >
+            <Download className="size-4" aria-hidden />
+            Export
+          </Button>
+        ) : null
+      }
+    >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <LoadingState label="Loading performance…" />
+      ) : months.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No performance data yet.
+        </p>
+      ) : (
+        /*
+         * Small multiples, not a dual-axis plot. Revenue (€) and orders (a
+         * count) have no common scale, so drawing them as adjacent bars in one
+         * plot made their relative heights meaningless.
+         */
+        <div className="grid gap-6 sm:grid-cols-2">
+          <MiniBarChart
+            title="Revenue"
+            data={months.map((m) => ({ label: m.month, value: m.revenue }))}
+            formatValue={formatEuro}
+            summary={`${formatEuro(totalRevenue)} total`}
+          />
+          <MiniBarChart
+            title="Orders"
+            data={months.map((m) => ({ label: m.month, value: m.orders }))}
+            formatValue={(v) => v.toLocaleString()}
+            summary={`${totalOrders.toLocaleString()} total`}
+          />
         </div>
-
-        {isError ? (
-          <ErrorState error={error} onRetry={() => refetch()} />
-        ) : isLoading ? (
-          <LoadingState label="Loading performance…" />
-        ) : (
-          <div className="flex h-60 items-end gap-3 sm:gap-6">
-            {(data ?? []).map((m) => (
-              <div
-                key={m.month}
-                className="flex h-full flex-1 flex-col items-center justify-end gap-3"
-              >
-                <div className="flex w-full flex-1 items-end justify-center gap-1.5">
-                  <div
-                    className="w-4 rounded-t-md bg-primary transition-all sm:w-5"
-                    style={{ height: `${(m.revenue / maxRevenue) * 100}%` }}
-                    title={`Revenue: ${formatEuro(m.revenue)}`}
-                  />
-                  <div
-                    className="w-4 rounded-t-md bg-slate-300 transition-all sm:w-5 dark:bg-slate-600"
-                    style={{ height: `${(m.orders / maxOrders) * 100}%` }}
-                    title={`Orders: ${m.orders}`}
-                  />
-                </div>
-                <span className="text-xs font-medium uppercase tracking-wide text-subtle">
-                  {m.month}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </Panel>
   );
 }
 
-function RecentOrdersCard() {
-  const { data, isLoading, isError, error, refetch } = useRecentOrders(4);
+function RecentOrders() {
+  const { data, isLoading, isError, error, refetch } = useRecentOrders(RECENT_ORDER_COUNT);
+  const orders = data ?? [];
 
   return (
-    <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between border-b p-4">
-        <h2 className="font-display text-lg font-semibold text-foreground">Recent Orders</h2>
-        {data?.length ? <Badge variant="navy">{data.length} NEW</Badge> : null}
+    <Card className="flex flex-col gap-0 py-0">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-5 pt-5 pb-4">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">Recent Orders</h2>
+        {/* Was `{data.length} NEW` — the count of rows fetched, not new orders. */}
+        <Badge variant="secondary" className="h-6 px-2.5 tabular-nums">
+          Latest {orders.length}
+        </Badge>
       </div>
 
-      <div className="flex-1 divide-y px-4">
+      <div className="flex-1">
         {isError ? (
-          <ErrorState error={error} onRetry={() => refetch()} />
+          <div className="px-5 py-5">
+            <ErrorState error={error} onRetry={() => refetch()} />
+          </div>
         ) : isLoading ? (
-          <LoadingState label="Loading orders…" />
-        ) : data?.length ? (
-          data.slice(0, 3).map((order) => (
-            <div key={order.id} className="flex items-center gap-3 py-3.5">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
-                <Package className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">{order.orderNumber}</p>
-                <p className="truncate text-xs text-subtle">{order.customer}</p>
-              </div>
-              <Badge variant={orderStatusVariant[order.status]}>
-                {orderStatusLabel[order.status]}
-              </Badge>
-            </div>
-          ))
+          <div className="px-5 py-5">
+            <LoadingState label="Loading orders…" />
+          </div>
+        ) : orders.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-muted-foreground">No orders yet.</p>
         ) : (
-          <p className="py-10 text-center text-sm text-muted-foreground">No orders yet.</p>
+          <ul className="divide-y divide-border">
+            {orders.map((order) => (
+              <li key={order.id}>
+                <Link
+                  href="/admin/orders"
+                  className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground tabular-nums">
+                      {order.orderNumber}
+                    </p>
+                    <p className="truncate text-xs text-subtle">{order.customer}</p>
+                  </div>
+                  <Badge variant={orderStatusVariant[order.status]} className="h-6 shrink-0 px-2.5">
+                    {orderStatusLabel[order.status]}
+                  </Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      <div className="border-t p-3">
-        <Button asChild variant="ghost" className="w-full font-semibold text-primary">
-          <Link href="/admin/orders">View All Orders</Link>
+      <div className="border-t border-border p-3">
+        <Button asChild variant="ghost" className="w-full">
+          <Link href="/admin/orders">
+            View all orders
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
         </Button>
       </div>
     </Card>
   );
 }
 
-function ProductInventoryCard() {
-  const { data, isLoading, isError, error, refetch } = useProducts({ limit: 5 });
+function ProductInventory() {
+  const { data, isLoading, isError, error, refetch } = useProducts({
+    limit: INVENTORY_PREVIEW_COUNT,
+  });
   const deleteProduct = useDeleteProduct();
-
   const products = data?.data ?? [];
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <div className="p-5">
-        <h2 className="font-display text-lg font-semibold text-foreground">Product Inventory</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Manage your product catalog and stock levels.
-        </p>
-      </div>
-
+    <Panel
+      title="Product Inventory"
+      description="Your most recently updated products."
+      bodyClassName="p-0"
+      action={
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin/products">
+            View all
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </Button>
+      }
+    >
       {isError ? (
-        <ErrorState error={error} onRetry={() => refetch()} />
+        <div className="px-5 py-5">
+          <ErrorState error={error} onRetry={() => refetch()} />
+        </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-190 text-sm">
-            <thead className="border-y bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
+          <table className="w-full min-w-3xl text-sm">
+            <thead className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wider text-subtle uppercase">
               <tr>
-                <th className="px-5 py-3 text-left">Product Name</th>
-                <th className="px-2 py-3 text-left">SKU</th>
-                <th className="px-2 py-3 text-left">Category</th>
-                <th className="px-2 py-3 text-left">Stock Status</th>
-                <th className="px-2 py-3 text-left">Price</th>
+                <th className="px-5 py-3 text-left">Product</th>
+                <th className="px-3 py-3 text-left">SKU</th>
+                <th className="px-3 py-3 text-left">Category</th>
+                <th className="px-3 py-3 text-left">Stock</th>
+                <th className="px-3 py-3 text-right">Price</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {isLoading ? (
-                <TableSkeleton rows={3} columns={6} />
+                <TableSkeleton rows={INVENTORY_PREVIEW_COUNT} columns={6} />
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
                     No products yet.
                   </td>
                 </tr>
               ) : (
                 products.map((product) => (
-                  <tr key={product.id} className="hover:bg-muted/30">
-                    <td className="px-5 py-3.5">
+                  <tr key={product.id} className="transition-colors hover:bg-muted/40">
+                    <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                          <Package className="size-4" />
+                        {/* Real product image — every row used to show the same
+                            generic package icon. */}
+                        <ProductThumb src={product.images?.[0]} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-foreground">
+                            {product.name}
+                          </span>
+                          {product.brand ? (
+                            <span className="block truncate text-xs text-subtle">
+                              {product.brand}
+                            </span>
+                          ) : null}
                         </span>
-                        <span className="font-semibold text-foreground">{product.name}</span>
                       </div>
                     </td>
-                    <td className="px-2 py-3.5 whitespace-nowrap text-muted-foreground">
+                    <td className="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
                       {product.sku}
                     </td>
-                    <td className="px-2 py-3.5 whitespace-nowrap text-muted-foreground">
+                    <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
                       {product.category?.name ?? "—"}
                     </td>
-                    <td className="px-2 py-3.5">
-                      <Badge variant={stockStatusVariant[product.status]}>
+                    <td className="px-3 py-3">
+                      <Badge variant={stockStatusVariant[product.status]} className="h-6 px-2.5">
                         <span className="size-1.5 rounded-full bg-current" />
                         {stockStatusLabel[product.status]}
                       </Badge>
                     </td>
-                    <td className="px-2 py-3.5 font-semibold whitespace-nowrap text-foreground">
+                    <td className="px-3 py-3 text-right font-medium whitespace-nowrap tabular-nums text-foreground">
                       {formatEuro(product.price)}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           asChild
@@ -286,7 +375,7 @@ function ProductInventoryCard() {
                           size="icon-sm"
                           aria-label={`Edit ${product.name}`}
                         >
-                          <Link href={`/products/${product.id}/edit`}>
+                          <Link href={`/admin/products/${product.id}/edit`}>
                             <Pencil />
                           </Link>
                         </Button>
@@ -319,42 +408,36 @@ function ProductInventoryCard() {
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t px-5 py-3">
+      <div className="border-t border-border px-5 py-3">
         <p className="text-sm text-subtle">
-          Showing {products.length} of {data?.meta.total ?? 0} products
+          Showing <span className="font-medium text-foreground tabular-nums">{products.length}</span>{" "}
+          of <span className="font-medium text-foreground tabular-nums">{data?.meta.total ?? 0}</span>{" "}
+          products
         </p>
-        <Button asChild variant="ghost" size="sm" className="font-semibold text-primary">
-          <Link href="/products">View all</Link>
-        </Button>
       </div>
-    </Card>
+    </Panel>
   );
 }
 
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
+      {/* The old header carried an "Export Data" button with no onClick — it
+          did nothing at all. Export now lives on the panel whose data it
+          actually exports. */}
       <PageHeader
-        title="Admin Dashboard"
+        title="Dashboard"
         subtitle="Monitor sales performance and inventory health."
-        action={
-          <div className="flex items-center gap-2">
-            <Button size="xl">
-              <Download />
-              Export Data
-            </Button>
-          </div>
-        }
       />
 
       <StatCards />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <MonthlyPerformanceChart />
-        <RecentOrdersCard />
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <MonthlyPerformance />
+        <RecentOrders />
       </div>
 
-      <ProductInventoryCard />
+      <ProductInventory />
     </div>
   );
 }

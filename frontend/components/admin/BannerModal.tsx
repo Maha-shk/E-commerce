@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Switch } from "@/components/ui/switch";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { useCreateBanner, useUpdateBanner } from "@/lib/hooks/use-admin";
 import type { Banner } from "@/lib/api/services/admin";
 
@@ -156,37 +157,22 @@ function BannerFields({ banner, onClose }: { banner?: Banner; onClose: () => voi
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="imageUrl">Image URL</Label>
-          <Input
-            id="imageUrl"
-            value={form.imageUrl}
-            onChange={(e) => set("imageUrl", e.target.value)}
-            placeholder="https://…/hero.jpg"
-          />
-          {form.imageUrl ? (
-            /* Arbitrary remote host; next/image would need it allow-listed. */
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={form.imageUrl}
-              alt=""
-              className="mt-2 h-28 w-full rounded-lg border border-border object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : null}
-        </div>
+        <ImageUploadField
+          label="Banner image"
+          required
+          value={form.imageUrl}
+          onChange={(url) => set("imageUrl", url)}
+          folder="banners"
+          hint="Shown across the full width of the hero. Wide artwork works best."
+        />
 
-        <div className="space-y-2">
-          <Label htmlFor="mobileImageUrl">Mobile image URL (optional)</Label>
-          <Input
-            id="mobileImageUrl"
-            value={form.mobileImageUrl}
-            onChange={(e) => set("mobileImageUrl", e.target.value)}
-            placeholder="https://…/hero-mobile.jpg"
-          />
-        </div>
+        <ImageUploadField
+          label="Mobile image (optional)"
+          value={form.mobileImageUrl}
+          onChange={(url) => set("mobileImageUrl", url)}
+          folder="banners"
+          hint="A narrower crop for small screens. Falls back to the main image."
+        />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">

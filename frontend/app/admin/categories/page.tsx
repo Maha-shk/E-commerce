@@ -1,58 +1,62 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Search,
   Download,
   Plus,
   Pencil,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
   FolderTree,
-  Layers,
   Boxes,
-  TriangleAlert,
-  type LucideIcon,
+  PackageOpen,
+  Archive,
+  ArchiveRestore,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CategoryModal } from "@/components/admin/CategoryModal";
+import { AdminStatCard, StatChip } from "@/components/admin/AdminStatCard";
+import { TablePagination } from "@/components/admin/TablePagination";
+import { TableEmptyState } from "@/components/admin/TableEmptyState";
+import { ErrorState, TableSkeleton } from "@/components/admin/QueryState";
 import {
   useCategories,
-  useCreateCategory,
   useUpdateCategory,
   useDeleteCategory,
 } from "@/lib/hooks/use-admin";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { categoryStatusLabel, type Category, type CategoryStatus, type CategoryVisibility } from "@/lib/api/models";
+import { downloadCsv } from "@/lib/admin/csv";
+import {
+  categoryStatusLabel,
+  type Category,
+  type CategoryStatus,
+} from "@/lib/api/models";
+import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 5;
-
-const categoryIcons: Record<string, LucideIcon> = {
-  fashion: FolderTree,
-  electronics: Boxes,
-  home: Layers,
-  health: TriangleAlert,
-  sports: TriangleAlert,
-  toys: TriangleAlert,
-  books: TriangleAlert,
-  automotive: TriangleAlert,
-  grocery: TriangleAlert,
-  pets: TriangleAlert,
-};
+const PAGE_SIZE = 10;
 
 const statusOptions: CategoryStatus[] = ["ACTIVE", "ARCHIVED"];
 
-const visibilityOptions: CategoryVisibility[] = ["VISIBLE", "HIDDEN"];
-
-function getIconForKey(iconKey: string | null): LucideIcon {
-  return (iconKey && categoryIcons[iconKey]) || FolderTree;
+/** Category thumbnail, falling back to a folder glyph. */
+function CategoryThumb({ src, name }: { src: string | null; name: string }) {
+  return (
+    <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground ring-1 ring-foreground/5">
+      {src ? (
+        <Image src={src} alt="" fill sizes="44px" unoptimized className="object-cover" />
+      ) : (
+        <FolderTree className="size-5" aria-hidden />
+      )}
+      <span className="sr-only">{name}</span>
+    </span>
+  );
 }
 
 export default function CategoriesPage() {
@@ -64,19 +68,21 @@ export default function CategoriesPage() {
 
   const debouncedSearch = useDebounce(search);
 
-  const { data, isLoading, isError, error, refetch } = useCategories({
+  const { data, isPending, isFetching, isError, error, refetch } = useCategories({
     page,
     limit: PAGE_SIZE,
     search: debouncedSearch || undefined,
     status: status === "All" ? undefined : status,
   });
 
-  const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
 
   const categories = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
   const totalPages = data?.meta.totalPages ?? 1;
+
+  const hasFilters = Boolean(search) || status !== "All";
 
   function withPageReset<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -85,118 +91,120 @@ export default function CategoriesPage() {
     };
   }
 
+  function clearFilters() {
+    setSearch("");
+    setStatus("All");
+    setPage(1);
+  }
+
   function handleToggleArchive(category: Category) {
     const newStatus: CategoryStatus = category.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE";
-    updateCategory.mutate({
-      id: category.id,
-      body: { ...category, status: newStatus },
-    });
+    // Send only the field that changed. Spreading the whole category also sent
+    // `id`, `createdAt`, `updatedAt` and `products`, and the API rejects
+    // unknown properties — so archiving always failed with a 400.
+    updateCategory.mutate({ id: category.id, body: { status: newStatus } });
     setModalTarget(null);
   }
 
-  function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    deleteCategory.mutate(pendingDelete.id);
-    setPendingDelete(null);
+  function handleExport() {
+    downloadCsv(
+      "categories.csv",
+      ["ID", "Name", "Slug", "Products", "Status", "Visibility"],
+      categories.map((c) => [
+        c.id,
+        c.name,
+        c.slug,
+        String(c.products),
+        categoryStatusLabel[c.status],
+        c.visibility,
+      ]),
+    );
   }
 
-  function handleExport() {
-    const header = ["ID", "Name", "Slug", "Products", "Status", "Visibility"];
-    const rows = categories.map((c) => [
-      c.id,
-      c.name,
-      c.slug,
-      String(c.products),
-      c.status,
-      c.visibility,
-    ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "categories.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  // Scoped to the page in view — labelled as such, rather than sitting next to
+  // an all-pages total as if the two were comparable.
+  const productsOnPage = categories.reduce((sum, c) => sum + c.products, 0);
+  const emptyOnPage = categories.filter((c) => c.products === 0).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Category Management"
-        subtitle="Organize and manage your store's hierarchical structure."
+        title="Categories"
+        subtitle="Organise your catalogue and control what shoppers can browse."
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="xl" onClick={handleExport}>
-              <Download />
-              Export Data
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleExport}
+              disabled={categories.length === 0}
+              title="Download the categories on this page as CSV"
+            >
+              <Download className="size-4" aria-hidden />
+              Export page
             </Button>
-            <Button size="xl" onClick={() => setModalTarget("new")}>
-              <Plus />
+            <Button size="lg" onClick={() => setModalTarget("new")}>
+              <Plus className="size-4" aria-hidden />
               Add Category
             </Button>
           </div>
         }
       />
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <FolderTree className="size-4" />
-              Total Categories
-            </p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-foreground">
-                {data?.meta.total ?? 0}
-              </p>
-              <span className="text-xs font-medium text-subtle">Across all pages</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <Boxes className="size-4" />
-              Active Products
-            </p>
-            <p className="font-display text-2xl font-semibold text-foreground">
-              {categories.reduce((sum, c) => sum + c.products, 0).toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <TriangleAlert className="size-4" />
-              Empty Categories
-            </p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-destructive">
-                {categories.filter((c) => c.products === 0).length}
-              </p>
-              <span className="text-xs font-medium text-destructive">Needs attention</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AdminStatCard
+          label="Total categories"
+          value={total.toLocaleString()}
+          caption="Across all pages"
+          loading={isPending}
+          corner={
+            <StatChip className="bg-accent text-primary">
+              <FolderTree className="size-4" aria-hidden />
+            </StatChip>
+          }
+        />
+        <AdminStatCard
+          label="Products on this page"
+          value={productsOnPage.toLocaleString()}
+          caption={`Across ${categories.length} ${categories.length === 1 ? "category" : "categories"}`}
+          loading={isPending}
+          corner={
+            <StatChip className="bg-success-muted text-success">
+              <Boxes className="size-4" aria-hidden />
+            </StatChip>
+          }
+        />
+        <AdminStatCard
+          label="Empty on this page"
+          value={emptyOnPage.toLocaleString()}
+          caption={emptyOnPage > 0 ? "No products assigned" : "All categories in use"}
+          tone={emptyOnPage > 0 ? "warning" : "default"}
+          loading={isPending}
+          corner={
+            <StatChip
+              className={
+                emptyOnPage > 0
+                  ? "bg-warning-muted text-warning"
+                  : "bg-success-muted text-success"
+              }
+            >
+              <PackageOpen className="size-4" aria-hidden />
+            </StatChip>
+          }
+        />
       </div>
 
-      {/* Section heading */}
-      <h2 className="font-display text-lg font-semibold text-foreground">All Categories</h2>
+      <Card className="gap-0 py-0">
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 border-b border-border p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="mr-1 text-base font-semibold tracking-tight text-foreground">
+              All Categories
+            </h2>
 
-      {/* Table */}
-      <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar: filters + search + sort */}
-        <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
               aria-label="Filter by status"
-              className="w-auto min-w-36"
+              className="h-10 w-auto min-w-36"
               value={status}
               onChange={(e) => withPageReset(setStatus)(e.target.value as "All" | CategoryStatus)}
             >
@@ -207,133 +215,203 @@ export default function CategoriesPage() {
                 </option>
               ))}
             </NativeSelect>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-72 sm:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-              <Input
-                type="search"
-                placeholder="Search by name, ID or description…"
-                className="h-10 rounded-lg bg-card pl-9"
-                value={search}
-                onChange={(e) => withPageReset(setSearch)(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-205 text-sm">
-            <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <tr>
-                <th className="px-5 py-3 text-left">Image</th>
-                <th className="px-2 py-3 text-left">Category Name</th>
-                <th className="px-2 py-3 text-left">Slug</th>
-                <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-2 py-3 text-left">Products</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {categories.map((category) => {
-                const Icon = getIconForKey(category.icon);
-                return (
-                  <tr key={category.id} className="hover:bg-muted/30">
-                    <td className="px-5 py-3">
-                      <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                        <Icon className="size-5" />
-                      </span>
-                    </td>
-                    <td className="px-2 py-3">
-                      <p className="font-semibold text-foreground">{category.name}</p>
-                      <p className="line-clamp-1 text-xs text-subtle">{category.description}</p>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                      {category.slug}
-                    </td>
-                    <td className="px-2 py-3">
-                      <Badge variant={category.status === "ACTIVE" ? "success" : "secondary"}>
-                        <span className="size-1.5 rounded-full bg-current" />
-                        {categoryStatusLabel[category.status]}
-                      </Badge>
-                    </td>
-                    <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
-                      {category.products.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${category.name}`}
-                          onClick={() => setModalTarget(category)}
-                        >
-                          <Pencil />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete ${category.name}`}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setPendingDelete(category)}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {categories.length === 0 && !isLoading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-14 text-center text-sm text-subtle">
-                    <FolderTree className="mx-auto mb-2 size-8 text-muted-foreground" />
-                    No categories match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-subtle">
-            Showing {categories.length} of {data?.meta.total ?? 0} categories
-          </p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Previous page"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              <ChevronLeft />
-            </Button>
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <Button
-                key={i}
-                variant={page === i + 1 ? "default" : "outline"}
-                size="icon-sm"
-                onClick={() => setPage(i + 1)}
-              >
-                {i + 1}
+            {hasFilters ? (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="size-4" aria-hidden />
+                Clear
               </Button>
-            ))}
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Next page"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              <ChevronRight />
-            </Button>
+            ) : null}
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle"
+              aria-hidden
+            />
+            <Input
+              type="text"
+              inputMode="search"
+              aria-label="Search categories"
+              placeholder="Search by name or description…"
+              className={cn("h-10 bg-card pl-9", search && "pr-9")}
+              value={search}
+              onChange={(e) => withPageReset(setSearch)(e.target.value)}
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => withPageReset(setSearch)("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {/* A failed request used to render the same "No categories match your
+            filters" row as a genuinely empty result — telling the admin their
+            data was gone when the request had merely errored. */}
+        {isError ? (
+          <div className="p-5">
+            <ErrorState error={error} onRetry={() => refetch()} />
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "overflow-x-auto transition-opacity duration-150",
+              isFetching && !isPending && "opacity-60",
+            )}
+          >
+            <table className="w-full min-w-3xl text-sm">
+              <thead className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wider text-subtle uppercase">
+                <tr>
+                  <th className="px-5 py-3 text-left">Category</th>
+                  <th className="px-3 py-3 text-left">Slug</th>
+                  <th className="px-3 py-3 text-left">Status</th>
+                  <th className="px-3 py-3 text-right">Products</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {isPending ? (
+                  <TableSkeleton rows={PAGE_SIZE} columns={5} />
+                ) : categories.length === 0 ? (
+                  <TableEmptyState
+                    colSpan={5}
+                    icon={FolderTree}
+                    title="No categories found"
+                    description={
+                      hasFilters
+                        ? "No categories match your filters."
+                        : "Create your first category to organise the catalogue."
+                    }
+                    action={
+                      hasFilters ? (
+                        <Button variant="outline" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : (
+                        <Button onClick={() => setModalTarget("new")}>
+                          <Plus className="size-4" aria-hidden />
+                          Add Category
+                        </Button>
+                      )
+                    }
+                  />
+                ) : (
+                  categories.map((category) => {
+                    const isArchived = category.status === "ARCHIVED";
+
+                    return (
+                      <tr
+                        key={category.id}
+                        className={cn(
+                          "transition-colors hover:bg-muted/40",
+                          isArchived && "opacity-60",
+                        )}
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            {/* Real thumbnail. Every row previously showed an
+                                icon from a lookup where `health`, `sports`,
+                                `toys`, `books`, `automotive`, `grocery` and
+                                `pets` were ALL mapped to a warning triangle. */}
+                            <CategoryThumb src={category.thumbnailName} name={category.name} />
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => setModalTarget(category)}
+                                className="block max-w-full truncate text-left font-medium text-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              >
+                                {category.name}
+                              </button>
+                              {category.description ? (
+                                <p className="line-clamp-1 text-xs text-subtle">
+                                  {category.description}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                          {category.slug}
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge
+                            variant={isArchived ? "secondary" : "success"}
+                            className="h-6 px-2.5"
+                          >
+                            <span className="size-1.5 rounded-full bg-current" />
+                            {categoryStatusLabel[category.status]}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                          <span
+                            className={
+                              category.products === 0
+                                ? "text-muted-foreground"
+                                : "font-medium text-foreground"
+                            }
+                          >
+                            {category.products.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Archive was only reachable from inside the edit
+                                modal — two clicks deep for a routine action. */}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={updateCategory.isPending}
+                              aria-label={`${isArchived ? "Restore" : "Archive"} ${category.name}`}
+                              title={isArchived ? "Restore category" : "Archive category"}
+                              onClick={() => handleToggleArchive(category)}
+                            >
+                              {isArchived ? <ArchiveRestore /> : <Archive />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Edit ${category.name}`}
+                              onClick={() => setModalTarget(category)}
+                            >
+                              <Pencil />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Delete ${category.name}`}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setPendingDelete(category)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!isError && categories.length > 0 ? (
+          <TablePagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            totalPages={totalPages}
+            rowsOnPage={categories.length}
+            onPageChange={setPage}
+            noun="categories"
+          />
+        ) : null}
       </Card>
 
       <CategoryModal
@@ -351,11 +429,25 @@ export default function CategoriesPage() {
         description={
           <>
             <strong className="font-semibold text-foreground">{pendingDelete?.name}</strong> will be
-            permanently removed. This action cannot be undone.
+            permanently removed.
+            {pendingDelete && pendingDelete.products > 0 ? (
+              <>
+                {" "}
+                It still has{" "}
+                <strong className="font-semibold text-foreground">
+                  {pendingDelete.products}
+                </strong>{" "}
+                product{pendingDelete.products === 1 ? "" : "s"} assigned to it.
+              </>
+            ) : null}{" "}
+            This action cannot be undone.
           </>
         }
         confirmLabel="Delete category"
-        onConfirm={handleConfirmDelete}
+        onConfirm={() => {
+          if (pendingDelete) deleteCategory.mutate(pendingDelete.id);
+          setPendingDelete(null);
+        }}
       />
     </div>
   );

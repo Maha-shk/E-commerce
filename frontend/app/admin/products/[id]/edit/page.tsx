@@ -47,7 +47,7 @@ export default function EditProductPage({
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-lg font-semibold text-foreground">Product not found</p>
         <p className="text-sm text-muted-foreground">
-          The product you're looking for doesn't exist or has been deleted.
+          The product you&apos;re looking for doesn&apos;t exist or has been deleted.
         </p>
       </div>
     );

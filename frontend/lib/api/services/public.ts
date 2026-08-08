@@ -147,6 +147,22 @@ export const publicService = {
     );
     return data;
   },
+  /**
+   * Sends a contact-form message. Creates (or appends to) the customer's
+   * support conversation, which the admin console reads.
+   */
+  async submitContact(payload: {
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+  }): Promise<{ conversationId: string; message: string }> {
+    const { data } = await api.post<
+      ApiResponse<{ conversationId: string; message: string }>
+    >("/public/contact", payload);
+    return data.data;
+  },
+
 
   /**
    * Get all unique brands

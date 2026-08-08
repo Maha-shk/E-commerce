@@ -4,7 +4,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 import { authStorage } from "@/lib/stores/auth-store";
-import type { ApiErrorBody, AuthTokens } from "@/lib/api/types";
+import type { ApiErrorBody, AuthUser } from "@/lib/api/types";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
@@ -39,27 +39,57 @@ api.interceptors.request.use((config) => {
 
 /* ---- Response: refresh once on 401, then retry ---- */
 
-/** Shared in-flight refresh so parallel 401s trigger only one refresh call. */
-let refreshPromise: Promise<string | null> | null = null;
+/**
+ * The single in-flight refresh for the whole app.
+ *
+ * Refresh tokens rotate: presenting one revokes it. Anything that refreshes
+ * independently is therefore a race — two callers read the same token, the
+ * first rotates it, and the second gets a 401 on a token that was valid when
+ * it was read. That is what made a page reload bounce an authenticated admin
+ * to /login: this interceptor and `useCurrentUser` each ran their own refresh.
+ *
+ * Everyone now goes through `refreshSession`, so concurrent callers await the
+ * same request and receive the same rotated pair.
+ */
+let refreshPromise: Promise<RefreshResult | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+export type RefreshResult = { accessToken: string; refreshToken: string; user?: AuthUser };
+
+async function performRefresh(): Promise<RefreshResult | null> {
   const refreshToken = authStorage.getRefreshToken();
   if (!refreshToken) return null;
 
   try {
     // A bare axios call: the instance's interceptors must not recurse here.
-    const { data } = await axios.post<{ success: true; data: AuthTokens }>(
+    const { data } = await axios.post<{ success: true; data: RefreshResult }>(
       `${API_URL}/auth/refresh`,
       { refreshToken },
       { headers: { "Content-Type": "application/json" } },
     );
     // Refresh tokens rotate server-side, so store the new pair.
     authStorage.setTokens(data.data);
-    return data.data.accessToken;
+    if (data.data.user) authStorage.setUser(data.data.user);
+    return data.data;
   } catch {
     authStorage.clear();
     return null;
   }
+}
+
+/**
+ * Refreshes the session, collapsing concurrent callers onto one request.
+ * Returns null when there is no usable session.
+ */
+export function refreshSession(): Promise<RefreshResult | null> {
+  refreshPromise ??= performRefresh().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const result = await refreshSession();
+  return result?.accessToken ?? null;
 }
 
 api.interceptors.response.use(
@@ -79,11 +109,8 @@ api.interceptors.response.use(
     ) {
       original._retried = true;
 
-      refreshPromise ??= refreshAccessToken().finally(() => {
-        refreshPromise = null;
-      });
-
-      const newToken = await refreshPromise;
+      // Shared with useCurrentUser — see refreshSession.
+      const newToken = await refreshAccessToken();
       if (newToken) {
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);

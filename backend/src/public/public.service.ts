@@ -254,6 +254,8 @@ export class PublicService {
       rows = rows.slice((page - 1) * limit, page * limit);
     }
 
+    rows = await this.withVariantRows(rows);
+
     return {
       success: true,
       data: rows.map((product: any) => {
@@ -354,13 +356,17 @@ export class PublicService {
       throw new BadRequestException('Product ID is required');
     }
 
-    const product = await this.productsService.findOne(params.id);
+    const found = await this.productsService.findOne(params.id);
 
     // findOne is the admin lookup and ignores visibility. Without this check a
     // PRIVATE or SCHEDULED product's detail page is reachable by guessing an id.
-    if (product.visibility !== ProductVisibility.PUBLIC) {
+    if (found.visibility !== ProductVisibility.PUBLIC) {
       throw new NotFoundException(`Product ${params.id} not found`);
     }
+
+    // The detail page is what feeds the variant picker, so it above all needs
+    // ids rather than the flattened names.
+    const [product] = await this.withVariantRows([found]);
 
     const discount = product.discount || 0;
     const price = Number(product.price) || 0;
@@ -451,7 +457,9 @@ export class PublicService {
 
     return {
       success: true,
-      data: filteredProducts.map((product: any) => this.toStorefrontProduct(product)),
+      data: (await this.withVariantRows(filteredProducts)).map((product: any) =>
+        this.toStorefrontProduct(product),
+      ),
     };
   }
 
@@ -479,6 +487,42 @@ export class PublicService {
     });
 
     return featured.map((row) => row.product);
+  }
+
+  /**
+   * Replaces the flattened variant names with real `{ id, name }` rows.
+   *
+   * `ProductsService.toProductView` maps variants down to `string[]` because
+   * the admin product form edits them as plain text. The storefront needs the
+   * id — without it every chip rendered `variant.id === undefined`, so
+   * selecting one appeared to select ALL of them (undefined === undefined) and
+   * the chosen name came out blank. Add-to-cart also can't identify a variant
+   * by name.
+   *
+   * One query for the whole page of products, then attached in memory.
+   */
+  private async withVariantRows<T extends { id: string; variants?: unknown }>(
+    products: T[],
+  ): Promise<T[]> {
+    if (products.length === 0) return products;
+
+    const rows = await this.prisma.productVariant.findMany({
+      where: { productId: { in: products.map((p) => p.id) } },
+      select: { id: true, name: true, productId: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const byProduct = new Map<string, { id: string; name: string }[]>();
+    for (const row of rows) {
+      const list = byProduct.get(row.productId) ?? [];
+      list.push({ id: row.id, name: row.name });
+      byProduct.set(row.productId, list);
+    }
+
+    return products.map((product) => ({
+      ...product,
+      variants: byProduct.get(product.id) ?? [],
+    }));
   }
 
   /** Single shape for every storefront product payload. */

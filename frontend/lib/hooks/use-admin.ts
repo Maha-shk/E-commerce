@@ -80,10 +80,19 @@ export function useRecentOrders(limit = 5) {
 
 /* ---- Products ---- */
 
-export function useProducts(params?: ProductQuery) {
+export function useProducts(
+  params?: ProductQuery,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: queryKeys.products.list(params),
     queryFn: () => productsApi.list(params),
+    // Lets the global search hold the query until the term is long enough.
+    enabled: options?.enabled ?? true,
+    // Keeps the current rows on screen while the next page/filter loads.
+    // Without it the table unmounts to skeletons on every keystroke, which is
+    // most of why the admin "felt slow" even when the request was fast.
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -122,6 +131,7 @@ export function useCategories(params?: CategoryQuery) {
   return useQuery({
     queryKey: queryKeys.categories.list(params),
     queryFn: () => categoriesApi.list(params),
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -152,6 +162,7 @@ export function useInventory(params?: InventoryQuery) {
   return useQuery({
     queryKey: queryKeys.inventory.list(params),
     queryFn: () => inventoryApi.list(params),
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -178,10 +189,12 @@ export function useAdjustStock() {
 
 /* ---- Orders ---- */
 
-export function useOrders(params?: OrderQuery) {
+export function useOrders(params?: OrderQuery, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.orders.list(params),
     queryFn: () => ordersApi.list(params),
+    enabled: options?.enabled ?? true,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -213,6 +226,7 @@ export function useCustomers(params?: CustomerQuery) {
   return useQuery({
     queryKey: queryKeys.customers.list(params),
     queryFn: () => customersApi.list(params),
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -237,6 +251,7 @@ export function useDiscounts(params?: DiscountQuery) {
   return useQuery({
     queryKey: queryKeys.discounts.list(params),
     queryFn: () => discountsApi.list(params),
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -320,6 +335,22 @@ export function useConversations(params?: PaginationQuery) {
   return useQuery({
     queryKey: queryKeys.messages.list(params),
     queryFn: () => messagesApi.list(params),
+  });
+}
+
+/**
+ * Total unread customer messages, for the topbar badge.
+ *
+ * The badge was previously a hardcoded red dot that was ALWAYS on, so it
+ * signalled nothing — an admin with a clean inbox still saw "you have mail".
+ */
+export function useUnreadMessageCount() {
+  return useQuery({
+    queryKey: [...queryKeys.messages.all, "unread-total"],
+    queryFn: () => messagesApi.list({ limit: 100 }),
+    select: (response) =>
+      response.data.reduce((sum, conversation) => sum + (conversation.unread ?? 0), 0),
+    staleTime: 30_000,
   });
 }
 

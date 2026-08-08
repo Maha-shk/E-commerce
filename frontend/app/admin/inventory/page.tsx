@@ -6,31 +6,38 @@ import {
   Search,
   Download,
   Plus,
-  TrendingUp,
-  ChevronLeft,
-  ChevronRight,
-  Package,
+  Boxes,
   PackageSearch,
+  PackageX,
+  AlertTriangle,
   RefreshCw,
+  Wallet,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { UpdateStockModal } from "@/components/admin/UpdateStockModal";
+import { AdminStatCard, StatChip } from "@/components/admin/AdminStatCard";
+import { TablePagination } from "@/components/admin/TablePagination";
+import { TableEmptyState } from "@/components/admin/TableEmptyState";
+import { ErrorState, TableSkeleton } from "@/components/admin/QueryState";
 import {
   useInventory,
   useInventoryStats,
   useAdjustStock,
+  useCategories,
 } from "@/lib/hooks/use-admin";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { useCategories } from "@/lib/hooks/use-admin";
+import { downloadCsv } from "@/lib/admin/csv";
+import { formatCompact, formatDate, formatEuro, formatRelative } from "@/lib/admin/format";
 import { stockStatusLabel, type InventoryItem, type StockStatus } from "@/lib/api/models";
-import { formatCompact } from "@/lib/admin/format";
+import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const statusVariant: Record<StockStatus, "success" | "warning" | "destructive"> = {
   IN_STOCK: "success",
@@ -40,11 +47,40 @@ const statusVariant: Record<StockStatus, "success" | "warning" | "destructive"> 
 
 const statusOptions: StockStatus[] = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"];
 
-function compactUsd(value: number): string {
-  return `$${new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 0,
-  }).format(value)}`;
+/**
+ * Stock level against the reorder threshold.
+ *
+ * Replaces a dead "Image" column — `InventoryItem` carries no image field, so
+ * that column rendered the same package icon on every row and told the admin
+ * nothing. On an inventory screen, how close a line is to reordering is the
+ * information actually worth the width.
+ */
+function StockLevel({ stock, threshold }: { stock: number; threshold: number }) {
+  // Full bar at 3× the reorder threshold — beyond that the exact figure
+  // matters more than the bar, and the number is right beside it.
+  const ceiling = Math.max(threshold * 3, 1);
+  const pct = Math.min(100, (stock / ceiling) * 100);
+
+  const tone =
+    stock === 0 ? "bg-destructive" : stock <= threshold ? "bg-warning" : "bg-success";
+
+  return (
+    <div className="flex items-center justify-end gap-2.5">
+      <span className="w-16 font-medium tabular-nums text-foreground">
+        {stock.toLocaleString()}
+      </span>
+      <span
+        className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted"
+        role="img"
+        aria-label={`${stock} in stock, reorder at ${threshold}`}
+      >
+        <span
+          className={cn("block h-full rounded-full transition-all duration-300", tone)}
+          style={{ width: `${Math.max(pct, stock > 0 ? 4 : 0)}%` }}
+        />
+      </span>
+    </div>
+  );
 }
 
 export default function InventoryPage() {
@@ -56,7 +92,7 @@ export default function InventoryPage() {
 
   const debouncedSearch = useDebounce(search);
 
-  const { data, isLoading, isError, error, refetch } = useInventory({
+  const { data, isPending, isFetching, isError, error, refetch } = useInventory({
     page,
     limit: PAGE_SIZE,
     search: debouncedSearch || undefined,
@@ -64,13 +100,17 @@ export default function InventoryPage() {
     status: status === "All" ? undefined : status,
   });
 
-  const { data: stats } = useInventoryStats();
+  const { data: stats, isLoading: statsLoading } = useInventoryStats();
   const { data: categoriesData } = useCategories({ limit: 100 });
   const adjustStock = useAdjustStock();
 
   const inventory = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
   const totalPages = data?.meta.totalPages ?? 1;
   const categories = categoriesData?.data ?? [];
+  const threshold = stats?.lowStockThreshold ?? 10;
+
+  const hasFilters = Boolean(search) || categoryId !== "All" || status !== "All";
 
   function withPageReset<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -79,42 +119,57 @@ export default function InventoryPage() {
     };
   }
 
+  function clearFilters() {
+    setSearch("");
+    setCategoryId("All");
+    setStatus("All");
+    setPage(1);
+  }
+
   function handleExport() {
-    const header = ["Name", "SKU", "Category", "Stock", "Status", "Last Updated"];
-    const rows = inventory.map((i) => [
-      i.name,
-      i.sku,
-      i.category || "N/A",
-      String(i.stock),
-      stockStatusLabel[i.status],
-      new Date(i.lastUpdated).toLocaleDateString(),
-    ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "inventory.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(
+      "inventory.csv",
+      ["Name", "SKU", "Category", "Stock", "Unit value", "Status", "Last updated"],
+      inventory.map((i) => [
+        i.name,
+        i.sku,
+        i.category || "",
+        String(i.stock),
+        i.unitValue.toFixed(2),
+        stockStatusLabel[i.status],
+        formatDate(i.lastUpdated),
+      ]),
+    );
+  }
+
+  /** Jump straight to the lines that need attention. */
+  function showNeedsAttention(next: StockStatus) {
+    setStatus(next);
+    setCategoryId("All");
+    setSearch("");
+    setPage(1);
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Inventory Overview"
-        subtitle="Real-time stock levels and availability tracking."
+        title="Inventory"
+        subtitle="Live stock levels and reorder alerts across the catalogue."
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="xl" onClick={handleExport}>
-              <Download />
-              Export Data
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleExport}
+              disabled={inventory.length === 0}
+              title="Download the rows on this page as CSV"
+            >
+              <Download className="size-4" aria-hidden />
+              Export page
             </Button>
-            <Button asChild size="xl">
-              <Link href="/products/new">
-                <Plus />
+            <Button asChild size="lg">
+              <Link href="/admin/products/new">
+                <Plus className="size-4" aria-hidden />
                 Add Product
               </Link>
             </Button>
@@ -124,66 +179,82 @@ export default function InventoryPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Total SKU</p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-foreground">
-                {(stats?.totalProducts ?? 0).toLocaleString()}
-              </p>
-              <span className="text-xs font-medium text-subtle">Products</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AdminStatCard
+          label="Total SKUs"
+          value={(stats?.totalProducts ?? 0).toLocaleString()}
+          caption={`${(stats?.totalUnits ?? 0).toLocaleString()} units on hand`}
+          loading={statsLoading}
+          corner={
+            <StatChip className="bg-accent text-primary">
+              <Boxes className="size-4" aria-hidden />
+            </StatChip>
+          }
+        />
 
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Out of Stock</p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-destructive">
-                {stats?.outOfStock ?? 0}
-              </p>
-              <span className="text-xs font-medium text-subtle">Items flagged</span>
-            </div>
-          </CardContent>
-        </Card>
+        <button
+          type="button"
+          onClick={() => showNeedsAttention("OUT_OF_STOCK")}
+          className="rounded-xl text-left transition-shadow hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <AdminStatCard
+            label="Out of stock"
+            value={(stats?.outOfStock ?? 0).toLocaleString()}
+            caption="Tap to filter"
+            tone={stats?.outOfStock ? "destructive" : "default"}
+            loading={statsLoading}
+            corner={
+              <StatChip className="bg-destructive/10 text-destructive">
+                <PackageX className="size-4" aria-hidden />
+              </StatChip>
+            }
+          />
+        </button>
 
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Low Stock</p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-warning">
-                {stats?.lowStock ?? 0}
-              </p>
-              <span className="text-xs font-medium text-subtle">Reorder soon</span>
-            </div>
-          </CardContent>
-        </Card>
+        <button
+          type="button"
+          onClick={() => showNeedsAttention("LOW_STOCK")}
+          className="rounded-xl text-left transition-shadow hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <AdminStatCard
+            label="Low stock"
+            value={(stats?.lowStock ?? 0).toLocaleString()}
+            caption={`At or below ${threshold} units`}
+            tone={stats?.lowStock ? "warning" : "default"}
+            loading={statsLoading}
+            corner={
+              <StatChip className="bg-warning-muted text-warning">
+                <AlertTriangle className="size-4" aria-hidden />
+              </StatChip>
+            }
+          />
+        </button>
 
-        <Card>
-          <CardContent className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Total Value</p>
-            <div className="flex items-baseline gap-2">
-              <p className="font-display text-2xl font-semibold text-foreground">
-                {compactUsd(stats?.totalValue ?? 0)}
-              </p>
-              <span className="text-xs font-medium text-subtle">USD Est.</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AdminStatCard
+          label="Stock value"
+          // This said "USD Est." and formatted with a "$" — on a store that
+          // prices, charges and reports in EUR everywhere else.
+          value={`€${formatCompact(stats?.totalValue ?? 0)}`}
+          caption="Estimated, at unit value"
+          loading={statsLoading}
+          corner={
+            <StatChip className="bg-success-muted text-success">
+              <Wallet className="size-4" aria-hidden />
+            </StatChip>
+          }
+        />
       </div>
 
-      {/* Section heading */}
-      <h2 className="font-display text-lg font-semibold text-foreground">All Inventories</h2>
+      <Card className="gap-0 py-0">
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 border-b border-border p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="mr-1 text-base font-semibold tracking-tight text-foreground">
+              Stock Levels
+            </h2>
 
-      {/* Inventory table */}
-      <Card className="gap-0 overflow-hidden py-0">
-        {/* Toolbar: filters left, search + sort right */}
-        <div className="flex flex-col gap-3 border-b p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
               aria-label="Filter by category"
-              className="w-auto min-w-40"
+              className="h-10 w-auto min-w-40"
               value={categoryId}
               onChange={(e) => withPageReset(setCategoryId)(e.target.value)}
             >
@@ -197,7 +268,7 @@ export default function InventoryPage() {
 
             <NativeSelect
               aria-label="Filter by stock status"
-              className="w-auto min-w-36"
+              className="h-10 w-auto min-w-36"
               value={status}
               onChange={(e) => withPageReset(setStatus)(e.target.value as "All" | StockStatus)}
             >
@@ -208,128 +279,164 @@ export default function InventoryPage() {
                 </option>
               ))}
             </NativeSelect>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-72 sm:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-              <Input
-                type="search"
-                placeholder="Search by name or SKU…"
-                className="h-10 rounded-lg bg-card pl-9"
-                value={search}
-                onChange={(e) => withPageReset(setSearch)(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-240 text-sm">
-            <thead className="border-b bg-muted/50 text-xs font-semibold uppercase tracking-wider text-subtle">
-              <tr>
-                <th className="px-5 py-3 text-left">Image</th>
-                <th className="px-2 py-3 text-left">Product Name</th>
-                <th className="px-2 py-3 text-left">SKU</th>
-                <th className="px-2 py-3 text-left">Category</th>
-                <th className="px-2 py-3 text-left">Status</th>
-                <th className="px-2 py-3 text-left">Stock</th>
-                <th className="px-2 py-3 text-left">Last Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {inventory.map((item) => (
-                <tr key={item.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-3">
-                    <span className="flex size-11 items-center justify-center rounded-lg bg-linear-to-br from-accent to-muted text-primary">
-                      <Package className="size-5" />
-                    </span>
-                  </td>
-                  <td className="px-2 py-3">
-                    <p className="font-semibold text-foreground">{item.name}</p>
-                  </td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">{item.sku}</td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                    {item.category || "N/A"}
-                  </td>
-                  <td className="px-2 py-3">
-                    <Badge variant={statusVariant[item.status]}>
-                      <span className="size-1.5 rounded-full bg-current" />
-                      {stockStatusLabel[item.status]}
-                    </Badge>
-                  </td>
-                  <td className="px-2 py-3 font-semibold whitespace-nowrap text-foreground">
-                    {item.stock.toLocaleString()}
-                  </td>
-                  <td className="px-2 py-3 whitespace-nowrap text-muted-foreground">
-                    {new Date(item.lastUpdated).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelected(item)}
-                        aria-label={`Update stock for ${item.name}`}
-                      >
-                        <RefreshCw />
-                        Update Stock
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {inventory.length === 0 && !isLoading && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-14 text-center text-sm text-subtle">
-                    <PackageSearch className="mx-auto mb-2 size-8 text-muted-foreground" />
-                    No products match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-subtle">
-            Showing {inventory.length} of {data?.meta.total ?? 0} products
-          </p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Previous page"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              <ChevronLeft />
-            </Button>
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <Button
-                key={i}
-                variant={page === i + 1 ? "default" : "outline"}
-                size="icon-sm"
-                onClick={() => setPage(i + 1)}
-              >
-                {i + 1}
+            {hasFilters ? (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="size-4" aria-hidden />
+                Clear
               </Button>
-            ))}
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Next page"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              <ChevronRight />
-            </Button>
+            ) : null}
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle"
+              aria-hidden
+            />
+            <Input
+              type="text"
+              inputMode="search"
+              aria-label="Search inventory"
+              placeholder="Search by name or SKU…"
+              className={cn("h-10 bg-card pl-9", search && "pr-9")}
+              value={search}
+              onChange={(e) => withPageReset(setSearch)(e.target.value)}
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => withPageReset(setSearch)("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {/* A failed request used to fall through to the same "No products match
+            your filters" row as an empty result. */}
+        {isError ? (
+          <div className="p-5">
+            <ErrorState error={error} onRetry={() => refetch()} />
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "overflow-x-auto transition-opacity duration-150",
+              isFetching && !isPending && "opacity-60",
+            )}
+          >
+            <table className="w-full min-w-4xl text-sm">
+              <thead className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wider text-subtle uppercase">
+                <tr>
+                  <th className="px-5 py-3 text-left">Product</th>
+                  <th className="px-3 py-3 text-left">SKU</th>
+                  <th className="px-3 py-3 text-left">Category</th>
+                  <th className="px-3 py-3 text-left">Status</th>
+                  <th className="px-3 py-3 text-right">Stock</th>
+                  <th className="px-3 py-3 text-right">Unit value</th>
+                  <th className="px-3 py-3 text-left">Updated</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {isPending ? (
+                  <TableSkeleton rows={PAGE_SIZE} columns={8} />
+                ) : inventory.length === 0 ? (
+                  <TableEmptyState
+                    colSpan={8}
+                    icon={PackageSearch}
+                    title="No stock records found"
+                    description={
+                      hasFilters
+                        ? "No products match your filters."
+                        : "Add a product to start tracking stock."
+                    }
+                    action={
+                      hasFilters ? (
+                        <Button variant="outline" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : (
+                        <Button asChild>
+                          <Link href="/admin/products/new">
+                            <Plus className="size-4" aria-hidden />
+                            Add Product
+                          </Link>
+                        </Button>
+                      )
+                    }
+                  />
+                ) : (
+                  inventory.map((item) => (
+                    <tr key={item.id} className="transition-colors hover:bg-muted/40">
+                      <td className="px-5 py-3">
+                        <Link
+                          href={`/admin/products/${item.id}/edit`}
+                          className="block max-w-xs truncate font-medium text-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          {item.name}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                        {item.sku}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                        {item.category || "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Badge variant={statusVariant[item.status]} className="h-6 px-2.5">
+                          <span className="size-1.5 rounded-full bg-current" />
+                          {stockStatusLabel[item.status]}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-3">
+                        <StockLevel stock={item.stock} threshold={threshold} />
+                      </td>
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums text-muted-foreground">
+                        {formatEuro(item.unitValue)}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                        {/* "2 days ago" beats a bare date when the question is
+                            "has anyone touched this recently?" */}
+                        <span title={formatDate(item.lastUpdated)}>
+                          {formatRelative(item.lastUpdated)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelected(item)}
+                            aria-label={`Update stock for ${item.name}`}
+                          >
+                            <RefreshCw className="size-3.5" aria-hidden />
+                            Update
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!isError && inventory.length > 0 ? (
+          <TablePagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            totalPages={totalPages}
+            rowsOnPage={inventory.length}
+            onPageChange={setPage}
+            noun="products"
+          />
+        ) : null}
       </Card>
 
       <UpdateStockModal
@@ -337,10 +444,7 @@ export default function InventoryPage() {
         onClose={() => setSelected(null)}
         onSave={(adjustment) => {
           if (selected) {
-            adjustStock.mutate({
-              productId: selected.id,
-              ...adjustment,
-            });
+            adjustStock.mutate({ productId: selected.id, ...adjustment });
           }
         }}
       />

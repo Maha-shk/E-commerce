@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Archive, ArchiveRestore, ImagePlus, Image as ImageIcon, Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -91,14 +91,16 @@ function CategoryFields({
       : null,
   );
 
-  const [slug, setSlug] = useState(category?.slug ?? "");
-
-  // Auto-generate slug from name
-  useEffect(() => {
-    if (!category?.slug) {
-      setSlug(slugify(name));
-    }
-  }, [name, category?.slug]);
+  /*
+   * The slug follows the name until the admin types their own.
+   *
+   * This was an effect that called `setSlug(slugify(name))` on every
+   * keystroke — an extra render per character, and it fought the input: on a
+   * new category you could not edit the slug at all, because the next name
+   * render overwrote whatever you had typed. Deriving it fixes both.
+   */
+  const [slugOverride, setSlugOverride] = useState<string | null>(null);
+  const slug = slugOverride ?? category?.slug ?? slugify(name);
 
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
@@ -186,7 +188,7 @@ function CategoryFields({
             <Input
               id="cat-slug"
               value={slug}
-              onChange={(e) => setSlug(e.target.value)}
+              onChange={(e) => setSlugOverride(e.target.value)}
               placeholder="summer-collection-2024"
               className={fieldClass}
               required

@@ -28,6 +28,12 @@ export default () => ({
     from: process.env.MAIL_FROM ?? 'CENTO Admin <no-reply@cento.local>',
   },
 
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+  },
+
   // No bootstrapAdmin block here: nothing in the app ever read it, and
   // prisma/seed.ts — the only consumer of ADMIN_* — reads process.env directly.
   // Keeping a copy meant a default admin password sat hardcoded in the bundle.

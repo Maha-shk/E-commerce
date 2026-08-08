@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authApi, type RegisterPayload } from "@/lib/api/services/auth";
-import { getApiErrorMessage } from "@/lib/api/client";
+import { getApiErrorMessage, refreshSession } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { cartStorage } from "@/lib/stores/cart-store";
@@ -29,39 +29,39 @@ export function useSession() {
 /**
  * Re-validates the session against the server. Runs once a refresh token
  * exists, and repopulates the user after a reload.
+ *
+ * Refresh tokens ROTATE — the server revokes the presented one and issues a
+ * new pair. That makes the token a moving target, which is why the request
+ * reads it from the store at call time instead of closing over the value that
+ * was current when the query was created. The stale closure was the cause of
+ * the "refresh bounces me to /login and back" report: a second run of this
+ * query replayed an already-revoked token, got a 401, and `AdminGuard` treated
+ * the error as a dead session.
  */
 export function useCurrentUser() {
-  const refreshToken = useAuthStore((s) => s.refreshToken);
   const hydrated = useAuthStore((s) => s.hydrated);
-  const setSession = useAuthStore((s) => s.setSession);
-  const setUser = useAuthStore((s) => s.setUser);
+  const refreshToken = useAuthStore((s) => s.refreshToken);
 
   return useQuery({
     queryKey: queryKeys.auth.me,
     queryFn: async () => {
-      // Use refresh endpoint to get both user AND new access token
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
+      // Goes through the app-wide shared refresh, which reads the token at
+      // call time and collapses concurrent callers onto one request. Doing its
+      // own fetch here is what raced the axios interceptor.
+      const session = await refreshSession();
+      if (!session) throw new Error("Session expired");
 
-      if (!response.ok) {
-        throw new Error('Failed to refresh session');
-      }
-
-      const data = await response.json();
-
-      // Store the full session including new access token
-      if (data.success && data.data) {
-        setSession(data.data);
-        return data.data.user;
-      }
-
-      throw new Error('Invalid refresh response');
+      return session.user ?? useAuthStore.getState().user;
     },
     enabled: hydrated && Boolean(refreshToken),
+    // A rotating token must not be spent more often than necessary. Without
+    // these, remounting a guarded layout or returning to the tab fired another
+    // rotation, and any overlap between two of them invalidated the session.
     staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 }

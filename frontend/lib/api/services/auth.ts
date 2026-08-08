@@ -111,7 +111,16 @@ export const authApi = {
   uploadAvatar: async (file: File): Promise<AuthUser> => {
     const body = new FormData();
     body.append("file", file);
-    const { data } = await api.post<ApiResponse<AuthUser>>("/auth/me/avatar", body);
+
+    const { data } = await api.post<ApiResponse<AuthUser>>("/auth/me/avatar", body, {
+      // The shared instance defaults every request to `application/json`.
+      // axios only generates a `multipart/form-data` header (with the boundary
+      // the server needs to split the parts) when Content-Type is UNSET, so the
+      // default has to be cleared here. Leaving it meant the upload was sent as
+      // JSON, multer found no file part, and the API answered
+      // "No image was uploaded".
+      headers: { "Content-Type": undefined },
+    });
     return data.data;
   },
 

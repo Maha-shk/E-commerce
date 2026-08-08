@@ -1,5 +1,6 @@
 import { del, get, getPaginated, patch, post, put } from "@/lib/api/request";
-import type { PaginationQuery } from "@/lib/api/types";
+import { api } from "@/lib/api/client";
+import type { ApiResponse, PaginationQuery } from "@/lib/api/types";
 
 /**
  * Typed wrappers over every /admin endpoint.
@@ -220,4 +221,39 @@ export const bannersApi = {
   reorder: (ids: string[]) =>
     patch<{ message: string }>("/admin/banners/reorder", { ids }),
   remove: (id: string) => del<{ message: string }>(`/admin/banners/${id}`),
+};
+
+/* ---- Uploads ---- */
+
+export type UploadedImageResult = {
+  url: string;
+  publicId: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  format?: string;
+};
+
+export const uploadsApi = {
+  /**
+   * Uploads an image and returns its CDN URL.
+   *
+   * `Content-Type` is explicitly cleared: the shared axios instance defaults
+   * every request to `application/json`, and axios only generates the
+   * `multipart/form-data` boundary when the header is unset.
+   */
+  image: async (
+    file: File,
+    folder: "banners" | "products" | "categories" = "banners",
+  ): Promise<UploadedImageResult> => {
+    const body = new FormData();
+    body.append("file", file);
+
+    const { data } = await api.post<ApiResponse<UploadedImageResult>>(
+      `/admin/uploads/image?folder=${folder}`,
+      body,
+      { headers: { "Content-Type": undefined } },
+    );
+    return data.data;
+  },
 };

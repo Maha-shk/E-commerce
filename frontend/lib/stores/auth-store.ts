@@ -74,5 +74,6 @@ export const authStorage = {
     useAuthStore.getState().setTokens(tokens),
   setSession: (session: LoginResponse) =>
     useAuthStore.getState().setSession(session),
+  setUser: (user: AuthUser) => useAuthStore.getState().setUser(user),
   clear: () => useAuthStore.getState().clearSession(),
 };

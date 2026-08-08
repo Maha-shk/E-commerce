@@ -13,6 +13,7 @@ import { HealthController } from './health/health.controller';
 import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
 import { BannersModule } from './banners/banners.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { ProductsModule } from './products/products.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
@@ -61,6 +62,7 @@ import { AddressesModule } from './addresses/addresses.module';
     DashboardModule,
     CategoriesModule,
     BannersModule,
+    UploadsModule,
     ProductsModule,
     InventoryModule,
     OrdersModule,

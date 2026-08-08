@@ -19,7 +19,10 @@ import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { OrdersService } from '../orders/orders.service';
-import { SupabaseService } from '../supabase/supabase.service';
+import {
+  UploadsService,
+  type UploadedImage,
+} from '../uploads/uploads.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResendOtpDto, VerifyOtpDto } from './dto/verify-otp.dto';
@@ -32,32 +35,15 @@ import { UpdateMeDto } from './dto/update-profile.dto';
 import { isUnclaimedAccount } from '../common/constants/account.constants';
 import { JwtRefreshPayload, JwtPayload } from './types/jwt-payload.interface';
 
+/**
+ * Re-exported so `auth.controller` can type its `@UploadedFile()` parameter
+ * without reaching into the uploads module. Validation (type, size) now lives
+ * in `UploadsService`, alongside the upload itself.
+ */
+export type { UploadedImage } from '../uploads/uploads.service';
+
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_MINUTES = 10;
-
-/** Supabase Storage bucket holding profile pictures. Must exist and be public. */
-const AVATAR_BUCKET = 'avatars';
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const AVATAR_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
-
-/**
- * The shape multer puts on the request.
- *
- * Declared structurally rather than importing `Express.Multer.File`, because
- * `@types/multer` isn't a dependency here and adding it just for one parameter
- * type isn't worth the install.
- */
-export interface UploadedImage {
-  buffer: Buffer;
-  mimetype: string;
-  size: number;
-  originalname?: string;
-}
 
 /**
  * jsonwebtoken types `expiresIn` as a template-literal union (e.g. "15m"), which
@@ -88,7 +74,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly mail: MailService,
     private readonly orders: OrdersService,
-    private readonly supabase: SupabaseService,
+    private readonly uploads: UploadsService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -378,51 +364,22 @@ export class AuthService {
    * was no way to actually upload a picture.
    */
   async updateAvatar(userId: string, file: UploadedImage) {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('No image was uploaded');
-    }
-
-    if (!ALLOWED_AVATAR_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(
-        `Unsupported image type "${file.mimetype}". Use JPEG, PNG or WebP.`,
-      );
-    }
-
-    if (file.size > MAX_AVATAR_BYTES) {
-      throw new BadRequestException(
-        `Image is too large (max ${Math.round(MAX_AVATAR_BYTES / 1024 / 1024)}MB)`,
-      );
-    }
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
     });
     if (!user) throw new UnauthorizedException('User not found');
 
-    const extension = AVATAR_EXTENSIONS[file.mimetype] ?? 'jpg';
-    // Timestamped so a replaced avatar gets a new URL and doesn't sit behind a
-    // stale CDN/browser cache of the old image.
-    const path = `${userId}/${Date.now()}.${extension}`;
-
-    let avatarUrl: string;
-    try {
-      avatarUrl = await this.supabase.uploadFile(
-        AVATAR_BUCKET,
-        path,
-        file.buffer,
-        file.mimetype,
-      );
-    } catch (error) {
-      this.logger.error(`Avatar upload failed for ${userId}`, error as Error);
-      throw new BadRequestException(
-        'Could not store the image. Please try again.',
-      );
-    }
+    // One asset per user, overwritten in place. Cloudinary's `invalidate` purges
+    // the CDN copy, so the new picture appears without a cache-busting suffix
+    // and old avatars don't accumulate.
+    const { url } = await this.uploads.uploadImage(file, 'avatars', {
+      publicId: userId,
+    });
 
     return this.prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl },
+      data: { avatarUrl: url },
       select: USER_PUBLIC_SELECT,
     });
   }
