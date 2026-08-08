@@ -4,6 +4,18 @@ import { Public } from '../common/decorators/public.decorator';
 import { PublicService } from './public.service';
 import { ContactFormDto } from './dto/contact.dto';
 
+/**
+ * Reads an optional boolean query param.
+ *
+ * Absent stays `undefined` (meaning "no opinion", not `false`); everything else
+ * is true unless it explicitly reads as false. Query strings are always text,
+ * so `Boolean(value)` would turn "false" and "0" into `true`.
+ */
+function parseBooleanParam(value?: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  return !['false', '0', 'no', ''].includes(value.toLowerCase());
+}
+
 @ApiTags('public')
 @Public()
 @Controller('public')
@@ -13,14 +25,12 @@ export class PublicController {
   @Get('banners')
   async getBanners(
     @Query('type') type?: string,
-    // Taken as a string on purpose: query params always arrive as text, and a
-    // naive Boolean() cast turns the string "false" into `true`.
     @Query('isActive') isActive?: string,
     @Query('limit') limit?: number,
   ) {
     return this.publicService.getBanners({
       type,
-      isActive: isActive === undefined ? undefined : isActive !== 'false',
+      isActive: parseBooleanParam(isActive),
       limit,
     });
   }
@@ -37,18 +47,22 @@ export class PublicController {
   async getProducts(
     @Query('categoryId') categoryId?: string,
     @Query('search') search?: string,
-    @Query('bestsellers') bestsellers?: boolean,
-    @Query('newArrivals') newArrivals?: boolean,
-    @Query('sale') sale?: boolean,
+    // Taken as strings and coerced explicitly rather than relying on the
+    // ValidationPipe's implicit primitive conversion. It happens to do the
+    // right thing today, but a naive Boolean() cast reads the string "false"
+    // as true, and these flags decide whether a whole section is filtered.
+    @Query('bestsellers') bestsellers?: string,
+    @Query('newArrivals') newArrivals?: string,
+    @Query('sale') sale?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
     return this.publicService.getProducts({
       categoryId,
       search,
-      bestsellers,
-      newArrivals,
-      sale,
+      bestsellers: parseBooleanParam(bestsellers),
+      newArrivals: parseBooleanParam(newArrivals),
+      sale: parseBooleanParam(sale),
       page,
       limit,
     });

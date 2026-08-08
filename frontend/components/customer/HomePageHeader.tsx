@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Heart, Menu, Search, ShoppingCart, User, X } from "lucide-react";
 import { useSession } from "@/lib/hooks/use-auth";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
@@ -38,12 +40,28 @@ export function HomePageHeader({
   setMobileMenuOpen: (open: boolean) => void;
   cartCount?: number;
 }) {
+  const router = useRouter();
   const { isAuthenticated, isAdmin, hydrated } = useSession();
   const { wishlistItemIds } = useWishlist();
+  const [searchTerm, setSearchTerm] = useState("");
 
   const profileHref =
     hydrated && isAuthenticated ? (isAdmin ? "/admin/dashboard" : "/account") : "/login";
   const wishlistCount = wishlistItemIds.length;
+
+  /**
+   * The search box was previously a bare <input> with no handler at all —
+   * typing did nothing and Enter did nothing. /products already reads a
+   * `search` query param, so submitting just needs to navigate there.
+   */
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const term = searchTerm.trim();
+    if (!term) return;
+
+    router.push(`/products?search=${encodeURIComponent(term)}`);
+    setMobileMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
@@ -81,16 +99,28 @@ export function HomePageHeader({
           {/* Actions */}
           <div className="flex items-center gap-1">
             {/* Search */}
-            <div className="mr-2 hidden items-center gap-2 rounded-full bg-muted px-4 lg:flex focus-within:ring-2 focus-within:ring-ring/40">
-              <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <form
+              role="search"
+              onSubmit={submitSearch}
+              className="mr-2 hidden items-center gap-2 rounded-full bg-muted px-4 lg:flex focus-within:ring-2 focus-within:ring-ring/40"
+            >
+              <button
+                type="submit"
+                aria-label="Search"
+                className="flex shrink-0 items-center text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Search className="size-4" aria-hidden />
+              </button>
               <input
-                type="text"
-                inputMode="search"
+                type="search"
+                name="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search products…"
                 aria-label="Search products"
-                className="h-10 w-40 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="h-10 w-40 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
               />
-            </div>
+            </form>
 
             <Link
               href="/account/wishlist"
@@ -140,6 +170,31 @@ export function HomePageHeader({
             className="border-t border-border py-3 md:hidden"
             aria-label="Main"
           >
+            {/* The desktop search is lg-only, so small screens had no way to
+                search at all. */}
+            <form
+              role="search"
+              onSubmit={submitSearch}
+              className="mb-3 flex items-center gap-2 rounded-full bg-muted px-4 focus-within:ring-2 focus-within:ring-ring/40 lg:hidden"
+            >
+              <button
+                type="submit"
+                aria-label="Search"
+                className="flex shrink-0 items-center text-muted-foreground"
+              >
+                <Search className="size-4" aria-hidden />
+              </button>
+              <input
+                type="search"
+                name="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search products…"
+                aria-label="Search products"
+                className="h-10 w-full border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+              />
+            </form>
+
             <ul className="flex flex-col">
               {NAV_LINKS.map((link) => (
                 <li key={link.href}>

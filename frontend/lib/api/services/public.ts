@@ -1,5 +1,6 @@
 import { api } from '../client';
 import type { ApiResponse, PaginatedResponse } from '../types';
+import type { PublicOrder } from '../order-types';
 
 // Types
 export interface Banner {
@@ -47,6 +48,16 @@ export interface Product {
     id: string;
     url: string;
     position: number;
+  }>;
+  /**
+   * Admin-configured options for this product (Prisma `ProductVariant`).
+   * The API has always returned these — the type just never declared them, so
+   * the product page fell back to hardcoded fake "Color"/"Size" lists.
+   */
+  variants?: Array<{
+    id: string;
+    productId: string;
+    name: string;
   }>;
   variantCount: number;
   inStock: boolean;
@@ -148,8 +159,8 @@ export const publicService = {
   /**
    * Get order details by order number
    */
-  async getOrder(orderNumber: string): Promise<ApiResponse<any>> {
-    const { data } = await api.get<ApiResponse<any>>(
+  async getOrder(orderNumber: string): Promise<ApiResponse<PublicOrder>> {
+    const { data } = await api.get<ApiResponse<PublicOrder>>(
       `/public/orders/${orderNumber}`
     );
     return data;

@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useProducts } from "@/lib/hooks/use-customer";
+import type { Product } from "@/lib/api/services/public";
 import { useCategories } from "@/lib/hooks/use-homepage";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ export function ProductBrowser({
   description,
   query,
   emptyMessage = "Try adjusting your filters.",
+  guard,
 }: {
   title: string;
   description?: string;
@@ -56,17 +58,29 @@ export function ProductBrowser({
     sale?: boolean;
   };
   emptyMessage?: string;
+  /**
+   * Client-side safety net applied before the user's own filters, for pages
+   * whose definition must hold regardless of what the API returns (e.g. /sales
+   * must never show a product that isn't discounted).
+   */
+  guard?: (product: Product) => boolean;
 }) {
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [sortBy, setSortBy] = useState<SortValue>("newest");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const {
-    data: products,
+    data: raw,
     isPending,
     isError,
     refetch,
   } = useProducts({ ...query, limit: 50 });
+
+  // Applied before anything else, so the category list and the grid agree.
+  const products = useMemo(
+    () => (guard ? (raw ?? []).filter(guard) : (raw ?? [])),
+    [raw, guard],
+  );
 
   // Real categories from the API. The old pages filtered against a hardcoded
   // ["Electronics", "Audio", "Accessories", "Cameras", "Gaming"] list, so
@@ -75,7 +89,7 @@ export function ProductBrowser({
 
   // Only offer categories that actually appear in this result set.
   const categories = useMemo(() => {
-    if (!products || !allCategories) return [];
+    if (!allCategories) return [];
     const present = new Set(products.map((p) => p.categoryId).filter(Boolean));
     return allCategories
       .filter((c) => present.has(c.id))
@@ -83,7 +97,7 @@ export function ProductBrowser({
   }, [products, allCategories]);
 
   const visible = useMemo(() => {
-    const list = (products ?? []).filter((product) => {
+    const list = products.filter((product) => {
       if (filters.categoryIds.length > 0) {
         if (!product.categoryId || !filters.categoryIds.includes(product.categoryId)) {
           return false;

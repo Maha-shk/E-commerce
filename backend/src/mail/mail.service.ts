@@ -72,6 +72,42 @@ export class MailService implements OnModuleInit {
     );
   }
 
+  /**
+   * Support reply emailed to a customer when an admin answers their message.
+   *
+   * Without this the reply only ever existed in the admin console — it was
+   * written to the database and the customer was never told.
+   */
+  async sendSupportReply(
+    to: string,
+    name: string,
+    replyText: string,
+    originalText?: string,
+  ) {
+    const subject = 'Re: your message to CENTO';
+    const quoted = originalText
+      ? `\n\n---\nYour original message:\n${originalText}`
+      : '';
+
+    const text = `Hi ${name},\n\n${replyText}${quoted}\n\n— The CENTO team`;
+
+    await this.send(
+      to,
+      subject,
+      text,
+      `<p>Hi ${escapeHtml(name)},</p>
+       <p style="white-space:pre-wrap">${escapeHtml(replyText)}</p>
+       ${
+         originalText
+           ? `<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0" />
+              <p style="color:#666;font-size:13px">Your original message:</p>
+              <blockquote style="color:#666;font-size:13px;white-space:pre-wrap;margin:0;padding-left:12px;border-left:3px solid #e5e5e5">${escapeHtml(originalText)}</blockquote>`
+           : ''
+       }
+       <p>— The CENTO team</p>`,
+    );
+  }
+
   /** 6-digit code emailed for a password reset request. */
   async sendPasswordResetCode(to: string, name: string, code: string) {
     const subject = 'Reset your CENTO password';
@@ -85,4 +121,19 @@ export class MailService implements OnModuleInit {
        <p>It expires in 10 minutes. If you didn't request this, you can ignore this email.</p>`,
     );
   }
+}
+
+/**
+ * Minimal HTML escaping for values interpolated into an email body.
+ *
+ * Reply text is admin-authored and customer names are user-supplied, so both
+ * reach the template as untrusted strings.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

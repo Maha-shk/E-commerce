@@ -1,320 +1,201 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import { Check, ShoppingCart, MapPin, CreditCard, Package, Truck } from "lucide-react";
+import { CheckCircle2, Mail, PackageX, ShieldAlert, UserPlus } from "lucide-react";
+import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
+import { OrderDetail } from "@/components/customer/OrderDetail";
+import { EmptyState, LoadingState } from "@/components/customer/StateBlock";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/hooks/use-auth";
+import { usePublicOrder } from "@/lib/hooks/use-public-order";
 
-export default function OrderConfirmPage() {
+/**
+ * Reads the one-shot checkout token exactly once per mount.
+ *
+ * This is the fix for the "Something went wrong" error. The old page read
+ * `sessionStorage` inside an effect and *deleted* the flags on a successful
+ * check. React StrictMode double-invokes effects in development, so the first
+ * pass consumed the token and the second pass — finding nothing — fell through
+ * to "Invalid access - Please complete checkout first".
+ *
+ * A lazy `useState` initialiser runs once per component instance, so the value
+ * survives the second invocation.
+ */
+function useCheckoutToken(orderId: string | undefined) {
+  const [token] = useState(() => {
+    if (typeof window === "undefined") return null;
+
+    const justCompleted = sessionStorage.getItem("justCompletedCheckout");
+    const recentOrderId = sessionStorage.getItem("recentOrderId");
+
+    // Clear immediately: the token is single-use, and we've captured it.
+    sessionStorage.removeItem("justCompletedCheckout");
+    sessionStorage.removeItem("recentOrderId");
+
+    return justCompleted === "true" && recentOrderId === orderId ? recentOrderId : null;
+  });
+
+  return token;
+}
+
+export default function OrderConfirmationPage() {
   const params = useParams();
-  const router = useRouter();
-  const { user, isAuthenticated } = useSession();
-  const [orderData, setOrderData] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [accessChecked, setAccessChecked] = useState(false);
+  const orderId = typeof params.orderId === "string" ? params.orderId : undefined;
 
-  useEffect(() => {
-    async function fetchOrderData() {
-      if (!params.orderId) return;
+  const { user, isAuthenticated, hydrated } = useSession();
+  const justCheckedOut = useCheckoutToken(orderId);
+  const { data: order, isPending, isError } = usePublicOrder(orderId);
 
-      setIsLoading(true);
-      setError(null);
+  // Keep the celebratory framing for the whole visit, not just until the
+  // first re-render. (State, not a ref: this drives what gets rendered.)
+  const [arrivedFromCheckout] = useState(() => Boolean(justCheckedOut));
 
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/orders/${params.orderId}`);
+  const ownerEmail = order?.customer?.email;
+  const canView =
+    !order ||
+    !hydrated ||
+    arrivedFromCheckout ||
+    !user ||
+    !ownerEmail ||
+    ownerEmail === user.email;
 
-        if (!response.ok) {
-          console.error('Failed to fetch order:', response.status);
-          setError('Order not found');
-          setIsLoading(false);
-          return;
-        }
-
-        const result = await response.json();
-        if (result.success && result.data) {
-          setOrderData(result.data);
-
-          // Check if user has access to this order
-          checkOrderAccess(result.data);
-        } else {
-          setError('Unable to load order details');
-        }
-      } catch (error) {
-        console.error('Error fetching order data:', error);
-        setError('Failed to load order details');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchOrderData();
-  }, [params.orderId]);
-
-  // Function to check if user has proper access to the order
-  const checkOrderAccess = (order: any) => {
-    setAccessChecked(true);
-
-    // Check if user came through proper checkout flow
-    const justCompletedCheckout = sessionStorage.getItem('justCompletedCheckout');
-    const recentOrderId = sessionStorage.getItem('recentOrderId');
-
-    // Case 1: User just completed checkout (proper flow)
-    if (justCompletedCheckout === 'true' && recentOrderId === params.orderId) {
-      // Clear the flags
-      sessionStorage.removeItem('justCompletedCheckout');
-      sessionStorage.removeItem('recentOrderId');
-      return;
-    }
-
-    // Case 2: Guest checkout flow - user not authenticated but just completed order
-    if (!isAuthenticated && recentOrderId === params.orderId) {
-      // Allow access for guests who just completed an order
-      // They'll be prompted to login for tracking
-      sessionStorage.removeItem('justCompletedCheckout');
-      sessionStorage.removeItem('recentOrderId');
-      return;
-    }
-
-    // Case 3: Authenticated user - check if order belongs to them
-    if (isAuthenticated && user && order.customerEmail) {
-      // Order has a customer email, check if it matches current user
-      if (order.customerEmail !== user.email) {
-        // Order belongs to different user
-        setError('Access denied - This order belongs to another user');
-        setTimeout(() => {
-          router.push('/account');
-        }, 2000);
-        return;
-      }
-      // Valid user viewing their own order - clear flags if present
-      sessionStorage.removeItem('justCompletedCheckout');
-      sessionStorage.removeItem('recentOrderId');
-      return;
-    }
-
-    // Case 4: Direct URL access without proper checkout flow
-    if (!justCompletedCheckout && !recentOrderId) {
-      setError('Invalid access - Please complete checkout first');
-      setTimeout(() => {
-        if (isAuthenticated) {
-          router.push('/account');
-        } else {
-          router.push('/products');
-        }
-      }, 3000);
-      return;
-    }
-
-    // Case 5: Authenticated user viewing guest order (converted after login)
-    if (isAuthenticated && user && !order.customerEmail && recentOrderId === params.orderId) {
-      // Guest order that user just logged in to view
-      sessionStorage.removeItem('justCompletedCheckout');
-      sessionStorage.removeItem('recentOrderId');
-      return;
-    }
-
-    // Default: Clear flags
-    sessionStorage.removeItem('justCompletedCheckout');
-    sessionStorage.removeItem('recentOrderId');
-  };
-
-  // If order not found after checking, redirect
-  useEffect(() => {
-    if (accessChecked && error && !isLoading) {
-      // Give user time to see error message before redirect
-      const redirectTimer = setTimeout(() => {
-        if (isAuthenticated) {
-          router.push('/account');
-        } else {
-          router.push('/products');
-        }
-      }, 3000);
-
-      return () => clearTimeout(redirectTimer);
-    }
-  }, [accessChecked, error, isLoading, isAuthenticated, router]);
-
-  if (isLoading) {
+  if (isPending || !hydrated) {
     return (
-      <div className="min-h-screen bg-[#FBF9F8] flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#00234E]"></div>
-          <p className="mt-4 text-gray-600">Loading order details...</p>
-        </div>
-      </div>
+      <CustomerPageShell>
+        <LoadingState label="Loading your order…" />
+      </CustomerPageShell>
     );
   }
 
-  if (error || !orderData) {
+  if (isError || !order) {
     return (
-      <div className="min-h-screen bg-[#FBF9F8] flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h1>
-          <p className="text-gray-600 mb-6">{error || 'We could not find your order details'}</p>
-          <Link
-            href="/products"
-            className="inline-block px-6 py-3 bg-[#00234E] hover:bg-[#001a3a] text-white font-semibold rounded-lg transition-colors"
-          >
-            Continue Shopping
-          </Link>
-        </div>
-      </div>
+      <CustomerPageShell>
+        <EmptyState
+          bordered
+          icon={PackageX}
+          title="Order not found"
+          description="We couldn't find that order. If you've just checked out, check your email for the confirmation."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/products">Continue shopping</Link>
+            </Button>
+          }
+        />
+      </CustomerPageShell>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <CustomerPageShell>
+        <EmptyState
+          bordered
+          icon={ShieldAlert}
+          title="You can't view this order"
+          description="This order belongs to a different account."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/account/orders">View my orders</Link>
+            </Button>
+          }
+        />
+      </CustomerPageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF9F8] py-12 px-4">
-      <div className="container mx-auto max-w-4xl">
-        {/* Success Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
-            <Check className="w-10 h-10 text-green-600" strokeWidth={3} />
+    <CustomerPageShell>
+      {/* Success banner */}
+      <Card className="mb-6 gap-0 py-0">
+        <div className="flex flex-col items-center gap-4 px-6 py-10 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-success-muted text-success">
+            <CheckCircle2 className="size-7" aria-hidden />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {arrivedFromCheckout ? "Thank you for your order!" : "Order confirmed"}
+            </h1>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground text-pretty">
+              Your order{" "}
+              <span className="font-medium text-foreground tabular-nums">
+                {order.orderNumber}
+              </span>{" "}
+              is confirmed. We&apos;ve sent a confirmation to{" "}
+              <span className="font-medium text-foreground">
+                {order.customer?.email ?? "your email address"}
+              </span>
+              .
+            </p>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-            Order Confirmed!
-          </h1>
-          <p className="text-gray-600 text-lg mb-4">
-            Thank you for your purchase. We've received your order.
+
+          <div className="flex flex-wrap justify-center gap-3">
+            <Button asChild>
+              <Link href="/products">Continue Shopping</Link>
+            </Button>
+            {isAuthenticated ? (
+              <Button asChild variant="outline">
+                <Link href="/account/orders">Track Order</Link>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
+
+      {/* Guests get the sign-up nudge *here*, instead of being bounced to
+          /login before ever seeing their confirmation. */}
+      {!isAuthenticated ? (
+        <Card className="mb-6 gap-0 py-0">
+          <div className="flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <UserPlus className="size-5" aria-hidden />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">
+                  Create an account to track this order
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Sign up with{" "}
+                  <span className="font-medium text-foreground">
+                    {order.customer?.email ?? "your email"}
+                  </span>{" "}
+                  to follow its progress and reorder in one click.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button asChild>
+                <Link href="/register">Create Account</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/login">Sign In</Link>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      <OrderDetail order={order} />
+
+      <Card className="mt-6 gap-0 py-0">
+        <div className="flex items-center gap-3 p-5 text-sm text-muted-foreground">
+          <Mail className="size-4 shrink-0" aria-hidden />
+          <p>
+            A confirmation email is on its way. Questions about this order?{" "}
+            <Link
+              href="/contact"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Contact us
+            </Link>
+            .
           </p>
-          <p className="text-gray-500">
-            Order <span className="font-semibold text-gray-900">#{orderData.orderNumber}</span>
-          </p>
         </div>
-
-        {/* Order Details */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          {/* Items Section */}
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Items</h2>
-            <div className="space-y-4">
-              {orderData.items.map((item: any) => (
-                <div key={item.id} className="flex gap-4">
-                  <div className="relative w-20 h-20 shrink-0">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-full h-full object-cover rounded-lg"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 text-sm line-clamp-2">
-                      {item.name}
-                    </h3>
-                    <p className="text-gray-500 text-xs mt-1">
-                      {item.color && `Color: ${item.color}`}
-                    </p>
-                    <p className="text-gray-500 text-xs">
-                      Quantity: {item.quantity}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    {item.discount > 0 ? (
-                      <>
-                        <p className="font-semibold text-gray-900">
-                          ${(item.salePrice * item.quantity).toFixed(2)}
-                        </p>
-                        <p className="text-gray-400 line-through text-xs">
-                          ${(item.price * item.quantity).toFixed(2)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="font-semibold text-gray-900">
-                        ${(item.price * item.quantity).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Shipping Information */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Truck className="w-5 h-5 text-[#00234E]" />
-              <h3 className="text-lg font-semibold text-gray-900">Shipping Information</h3>
-            </div>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>
-                <span className="font-medium text-gray-900">Name:</span> {orderData.shippingAddress.fullName}
-              </p>
-              <p>
-                <span className="font-medium text-gray-900">Address:</span> {orderData.shippingAddress.address}
-              </p>
-              <p>
-                <span className="font-medium text-gray-900">City:</span> {orderData.shippingAddress.city}, {orderData.shippingAddress.state} {orderData.shippingAddress.postalCode}
-              </p>
-              <p>
-                <span className="font-medium text-gray-900">Country:</span> {orderData.shippingAddress.country}
-              </p>
-            </div>
-          </div>
-
-          {/* Order Summary */}
-          <div className="p-6 bg-gray-50">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span>${orderData.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Shipping</span>
-                <span>{orderData.shipping === 0 ? 'Free' : `$${orderData.shipping.toFixed(2)}`}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Tax</span>
-                <span>${orderData.tax.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xl font-bold text-gray-900 pt-3 border-t border-gray-300">
-                <span>Total</span>
-                <span className="text-orange-500">${orderData.total.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Estimated Delivery */}
-            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
-              <div className="flex items-center gap-3">
-                <Package className="w-5 h-5 text-[#00234E]" />
-                <div>
-                  <p className="font-medium text-gray-900">Estimated Delivery</p>
-                  <p className="text-gray-600 text-sm">{orderData.estimatedDelivery}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 mt-6">
-          <Link
-            href="/products"
-            className="flex-1 inline-flex items-center justify-center px-8 py-3 bg-[#00234E] hover:bg-[#001a3a] text-white font-semibold rounded-lg transition-colors"
-          >
-            Continue Shopping
-          </Link>
-          <button
-            onClick={() => router.push('/orders')}
-            className="flex-1 inline-flex items-center justify-center px-8 py-3 border-2 border-[#00234E] text-[#00234E] hover:bg-[#00234E] hover:text-white font-semibold rounded-lg transition-colors"
-          >
-            Track Order
-          </button>
-        </div>
-
-        {/* Need Help Section */}
-        <div className="mt-8 text-center">
-          <p className="text-gray-600 mb-2">Need help with your order?</p>
-          <Link
-            href="/contact"
-            className="text-[#00234E] hover:text-[#001a3a] font-medium"
-          >
-            Contact Our Support Team
-          </Link>
-        </div>
-      </div>
-    </div>
+      </Card>
+    </CustomerPageShell>
   );
 }

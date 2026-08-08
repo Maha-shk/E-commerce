@@ -17,6 +17,7 @@ import { Field } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/ui/select-native";
+import { site } from "@/lib/site";
 
 const SUBJECTS = [
   { value: "general", label: "General Inquiry" },
@@ -28,21 +29,23 @@ const SUBJECTS = [
   { value: "other", label: "Other" },
 ] as const;
 
+// Details come from lib/site.ts so the footer, the legal pages and this
+// page can't disagree about how to reach support.
 const CONTACT_DETAILS = [
   {
     icon: Mail,
     title: "Email",
-    lines: ["support@cento.local", "info@cento.local"],
+    lines: [site.email.support, site.email.general],
   },
   {
     icon: Phone,
     title: "Phone",
-    lines: ["+1 (555) 123-4567", "Mon–Fri, 9am–6pm EST"],
+    lines: [site.phone, site.hours],
   },
   {
     icon: MapPin,
     title: "Address",
-    lines: ["123 Commerce Street", "New York, NY 10001"],
+    lines: [site.address.line1, site.address.line2],
   },
 ] as const;
 

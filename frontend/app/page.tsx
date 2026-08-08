@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import {
@@ -19,6 +18,7 @@ import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
 import { Container } from "@/components/customer/Container";
 import { SectionHeading } from "@/components/customer/SectionHeading";
 import { CarouselItem, ProductCarousel } from "@/components/customer/ProductCarousel";
+import { HeroCarousel } from "@/components/customer/HeroCarousel";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -58,9 +58,8 @@ export default function HomePage() {
   const { data: bestSellers, isPending: bestSellersPending } = useBestSellers(10);
   const { data: newArrivals, isPending: newArrivalsPending } = useNewArrivals(3);
   const { data: saleProducts, isPending: saleProductsPending } = useSaleProducts(10);
-  // Highest-priority active HERO banner, if the admin has published one.
+  // Every active HERO banner, in priority order.
   const { data: heroBanners } = useHeroBanners();
-  const heroBanner = heroBanners?.[0];
 
   const { addItem } = useCart();
 
@@ -84,49 +83,11 @@ export default function HomePage() {
     // `bleed` because the homepage lays out its own full-width bands; each
     // band uses <Container> internally so they still line up with the header.
     <CustomerPageShell bleed>
-      {/* Hero — driven by the active HERO banner, with the built-in artwork as
-          the fallback so the page never renders an empty slot. */}
+      {/* Hero — cycles through every active HERO banner the admin has
+          published, falling back to the bundled artwork if there are none. */}
       <section className="pt-8 pb-4 md:pt-10 md:pb-6">
         <Container>
-          <div className="relative h-96 overflow-hidden rounded-3xl md:h-120">
-            <Image
-              src={heroBanner?.imageUrl || "/images/homepage/hero-image.png"}
-              alt=""
-              fill
-              priority
-              sizes="(max-width: 1280px) 100vw, 1280px"
-              className="object-cover"
-              // Remote banner URLs can't be optimised without a configured
-              // loader domain; the bundled fallback still goes through it.
-              unoptimized={Boolean(heroBanner?.imageUrl)}
-            />
-            {/* Brand-navy scrim (was a hardcoded green that clashed with the
-                rest of the palette), heavier on the left so the copy stays
-                legible over any artwork. */}
-            <div className="absolute inset-0 bg-linear-to-r from-primary/90 via-primary/60 to-transparent" />
-
-            <div className="absolute inset-0 flex items-center">
-              <div className="max-w-xl px-6 sm:px-10 md:px-14">
-                <h1 className="text-3xl leading-tight font-semibold tracking-tight text-white text-balance md:text-4xl lg:text-5xl">
-                  {heroBanner?.title || "Experience the Future of Audio Engineering"}
-                </h1>
-                {heroBanner?.description ? (
-                  <p className="mt-3 max-w-lg text-sm text-white/85 text-pretty md:text-base">
-                    {heroBanner.description}
-                  </p>
-                ) : null}
-                <Button
-                  asChild
-                  size="xl"
-                  className="mt-6 rounded-full bg-orange-500 text-white hover:bg-orange-600"
-                >
-                  <Link href={heroBanner?.linkUrl || "/products"}>
-                    {heroBanner?.linkText || "Shop Now"}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
+          <HeroCarousel banners={heroBanners} />
         </Container>
       </section>
 

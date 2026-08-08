@@ -28,6 +28,7 @@ import {
   ResetPasswordDto,
 } from './dto/password.dto';
 import { UpdateMeDto } from './dto/update-profile.dto';
+import { isUnclaimedAccount } from '../common/constants/account.constants';
 import { JwtRefreshPayload, JwtPayload } from './types/jwt-payload.interface';
 
 const BCRYPT_ROUNDS = 12;
@@ -72,23 +73,34 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) {
+
+    // A placeholder row (created when a stranger used the contact form) must
+    // not lock the real owner out of the address — claim it instead. Ownership
+    // is still proven by the OTP issued below, exactly as for a fresh signup.
+    if (existing && !isUnclaimedAccount(existing)) {
       throw new BadRequestException('An account with this email already exists');
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        fullName: dto.fullName.trim(),
-        passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
-        role: Role.CUSTOMER,
-        status: UserStatus.ACTIVE,
-        // dto.terms is validated as exactly `true`, so reaching here means the
-        // account holder accepted the terms at this moment.
-        termsAcceptedAt: new Date(),
-      },
-      select: USER_PUBLIC_SELECT,
-    });
+    const data = {
+      fullName: dto.fullName.trim(),
+      passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
+      role: Role.CUSTOMER,
+      status: UserStatus.ACTIVE,
+      // dto.terms is validated as exactly `true`, so reaching here means the
+      // account holder accepted the terms at this moment.
+      termsAcceptedAt: new Date(),
+    };
+
+    const user = existing
+      ? await this.prisma.user.update({
+          where: { id: existing.id },
+          data,
+          select: USER_PUBLIC_SELECT,
+        })
+      : await this.prisma.user.create({
+          data: { ...data, email },
+          select: USER_PUBLIC_SELECT,
+        });
 
     await this.issueOtp(user.id, user.email, user.fullName, VerificationTokenType.EMAIL_VERIFICATION);
 

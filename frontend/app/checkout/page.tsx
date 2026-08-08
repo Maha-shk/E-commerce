@@ -313,14 +313,14 @@ export default function CheckoutPage() {
 
       await clearCart();
 
+      // Everyone lands on the confirmation. Guests used to be bounced to
+      // /login first and never saw a confirmation at all — the sign-up nudge
+      // now lives on the confirmation page itself, after the receipt.
       if (!isAuthenticated) {
-        // Guests sign in afterwards so they can track the order.
         sessionStorage.setItem("pendingOrderId", orderId);
         sessionStorage.setItem("pendingOrderEmail", contact.email);
-        router.push("/login?redirect=order-confirmation");
-      } else {
-        router.push(`/order-confirmation/${orderId}`);
       }
+      router.push(`/order-confirmation/${orderId}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Couldn't place your order. Please try again.",

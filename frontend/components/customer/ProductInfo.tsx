@@ -1,245 +1,264 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, ShoppingCart, Package, Shield, Box } from "lucide-react";
+import { Heart, Loader2, RotateCcw, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { QuantityStepper } from "@/components/customer/QuantityStepper";
+import { LoginRequiredDialog } from "@/components/ui/login-required-dialog";
+import { useCart } from "@/lib/hooks/use-cart";
+import { useWishlist } from "@/lib/hooks/use-wishlist";
+import { useSession } from "@/lib/hooks/use-auth";
+import type { Product } from "@/lib/api/services/public";
+import { formatMoney } from "@/lib/format";
+import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
-interface Product {
-  id: string;
-  name: string;
-  brand: string;
-  description: string;
-  sku: string;
-  price: number;
-  salePrice: number;
-  discountPercent: number;
-  stock: number;
-  status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
-  tags: string[];
-  images: Array<{ id: string; url: string; position: number }>;
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-  } | null;
-  inStock: boolean;
-  lowStock: boolean;
-}
+/** Trust row under the buy buttons. Wording comes from lib/site.ts. */
+const ASSURANCES = [
+  {
+    icon: Truck,
+    text: `Free standard delivery over ${formatMoney(site.freeShippingThreshold)}`,
+  },
+  { icon: RotateCcw, text: `${site.returnWindowDays}-day returns` },
+  { icon: ShieldCheck, text: "Secure checkout" },
+] as const;
 
-interface ProductInfoProps {
-  product: Product;
-}
+export function ProductInfo({ product }: { product: Product }) {
+  const { isAuthenticated } = useSession();
+  const { addItem } = useCart();
+  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
-export function ProductInfo({ product }: ProductInfoProps) {
-  const [selectedColor, setSelectedColor] = useState<string>("");
-  const [selectedSize, setSelectedSize] = useState<string>("");
-  const [isWishlisted, setIsWishlisted] = useState(false);
   const [quantity, setQuantity] = useState(1);
-
-  // Mock color and size options based on product data
-  const colorOptions = ["Black", "Brown", "Blue"];
-  const sizeOptions = ["38mm", "42mm", "44mm"];
+  const [isAdding, setIsAdding] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [loginPrompt, setLoginPrompt] = useState<"add to wishlist" | null>(null);
 
   const hasDiscount = product.discountPercent > 0;
-  const displayPrice = hasDiscount ? product.salePrice : product.price;
-
-  const handleAddToCart = () => {
-    // TODO: Implement add to cart functionality
-    console.log("Adding to cart:", {
-      productId: product.id,
-      quantity,
-      color: selectedColor,
-      size: selectedSize,
-    });
-  };
-
-  const handleToggleWishlist = () => {
-    // TODO: Implement wishlist functionality
-    setIsWishlisted(!isWishlisted);
-    console.log("Wishlist toggled for:", product.id);
-  };
-
   const isOutOfStock = !product.inStock || product.stock === 0;
+  const inWishlist = isInWishlist(product.id);
+
+  // Admin-configured options. Replaces the hardcoded ["Black","Brown","Blue"]
+  // and ["38mm","42mm","44mm"] lists that were shown on every single product
+  // regardless of what it was.
+  const variants = product.variants ?? [];
+
+  /**
+   * Previously this was a `console.log("Adding to cart", …)` TODO — the button
+   * on the product page never actually added anything.
+   */
+  const handleAddToCart = async () => {
+    setIsAdding(true);
+    try {
+      await addItem(product.id, quantity);
+    } catch {
+      // useCart already surfaced the reason as a toast.
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  /** Also a TODO before: it only flipped a local boolean and never persisted. */
+  const handleToggleWishlist = () => {
+    if (!isAuthenticated) {
+      setLoginPrompt("add to wishlist");
+      return;
+    }
+    if (inWishlist) removeFromWishlist(product.id);
+    else addToWishlist(product.id.toString());
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Collection Label */}
-      {product.category && (
-        <p className="text-sm font-semibold uppercase tracking-wider text-primary">
-          {product.category.name}
-        </p>
-      )}
+    <div className="space-y-5">
+      {/* Category */}
+      {product.category ? (
+        <p className="eyebrow">{product.category.name}</p>
+      ) : null}
 
-      {/* Product Name */}
-      <h1 className="font-display text-3xl font-bold text-foreground lg:text-4xl">
-        {product.name}
-      </h1>
-
-      {/* Brand */}
-      <p className="text-sm text-muted-foreground">{product.brand}</p>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+          {product.name}
+        </h1>
+        {product.brand ? (
+          <p className="mt-1.5 text-sm text-muted-foreground">{product.brand}</p>
+        ) : null}
+      </div>
 
       {/* Price */}
-      <div className="flex items-baseline gap-3">
-        <span className="font-display text-3xl font-bold text-foreground">
-          €{displayPrice.toFixed(2)}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-3xl font-semibold tracking-tight tabular-nums">
+          {formatMoney(hasDiscount ? product.salePrice : product.price)}
         </span>
-        {hasDiscount && (
+        {hasDiscount ? (
           <>
-            <span className="text-lg text-muted-foreground line-through">
-              €{product.price.toFixed(2)}
+            <span className="text-base text-muted-foreground line-through tabular-nums">
+              {formatMoney(product.price)}
             </span>
-            <Badge className="bg-orange-500 text-white text-xs hover:bg-orange-600">
-              {product.discountPercent}% OFF
+            <Badge className="h-6 bg-orange-500 px-2.5 text-white">
+              {product.discountPercent}% off
             </Badge>
           </>
-        )}
+        ) : null}
       </div>
 
-      {/* Stock Status */}
+      {/* Availability */}
       <div>
         {isOutOfStock ? (
-          <Badge variant="destructive">Out of Stock</Badge>
+          <Badge variant="destructive" className="h-6 px-2.5">
+            Out of stock
+          </Badge>
         ) : product.lowStock ? (
-          <Badge className="bg-red-500 text-white hover:bg-red-600">Low Stock - Only {product.stock} left</Badge>
+          <Badge variant="warning" className="h-6 px-2.5">
+            Low stock — only {product.stock} left
+          </Badge>
         ) : (
-          <Badge variant="success">In Stock</Badge>
+          <Badge variant="success" className="h-6 px-2.5">
+            In stock
+          </Badge>
         )}
       </div>
 
-      {/* Color Options */}
-      {colorOptions.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-foreground">Color</p>
-          <div className="flex flex-wrap gap-3">
-            {colorOptions.map((color) => (
-              <button
-                key={color}
-                onClick={() => setSelectedColor(color)}
-                className={cn(
-                  "rounded-lg border-2 px-6 py-2 text-sm font-medium transition-colors",
-                  selectedColor === color
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-foreground hover:border-primary"
-                )}
-              >
-                {color}
-              </button>
-            ))}
-          </div>
+      {/* Description — moved up from the bottom of the page to sit directly
+          under the availability badge, where shoppers actually look for it. */}
+      {product.description ? (
+        <div className="border-t border-border pt-5">
+          <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+            {product.description}
+          </p>
         </div>
-      )}
+      ) : null}
 
-      {/* Size Options */}
-      {sizeOptions.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-foreground">Size</p>
-          <div className="flex flex-wrap gap-3">
-            {sizeOptions.map((size) => (
-              <button
-                key={size}
-                onClick={() => setSelectedSize(size)}
-                className={cn(
-                  "rounded-lg border-2 px-6 py-2 text-sm font-medium transition-colors",
-                  selectedSize === size
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-foreground hover:border-primary"
-                )}
-              >
-                {size}
-              </button>
-            ))}
+      {/* Variants */}
+      {variants.length > 0 ? (
+        <div className="space-y-2.5 border-t border-border pt-5">
+          <p className="text-sm font-semibold">
+            Variants{" "}
+            <span className="font-normal text-muted-foreground">
+              ({variants.length})
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {variants.map((variant) => {
+              const isSelected = selectedVariant === variant.id;
+              return (
+                <button
+                  key={variant.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedVariant(isSelected ? null : variant.id)}
+                  className={cn(
+                    "rounded-lg border px-4 py-2 text-sm font-medium transition-colors duration-150",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    isSelected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-foreground hover:border-primary hover:bg-muted",
+                  )}
+                >
+                  {variant.name}
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Quantity */}
-      <div className="space-y-3">
-        <p className="text-sm font-semibold text-foreground">Quantity</p>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
-            disabled={quantity <= 1}
-            className="flex size-10 items-center justify-center rounded-lg border-2 border-input bg-background text-foreground transition-colors hover:border-primary disabled:opacity-50"
-            aria-label="Decrease quantity"
-          >
-            -
-          </button>
-          <span className="min-w-12 text-center font-semibold tabular-nums">{quantity}</span>
-          <button
-            onClick={() => setQuantity((prev) => Math.min(product.stock, prev + 1))}
-            disabled={quantity >= product.stock}
-            className="flex size-10 items-center justify-center rounded-lg border-2 border-input bg-background text-foreground transition-colors hover:border-primary disabled:opacity-50"
-            aria-label="Increase quantity"
-          >
-            +
-          </button>
+      {!isOutOfStock ? (
+        <div className="space-y-2.5 border-t border-border pt-5">
+          <p className="text-sm font-semibold">Quantity</p>
+          <QuantityStepper
+            value={quantity}
+            max={Math.max(1, product.stock)}
+            disabled={isAdding}
+            onChange={setQuantity}
+          />
         </div>
-      </div>
+      ) : null}
 
-      {/* Action Buttons */}
+      {/* Actions */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button
           size="xl"
-          onClick={handleAddToCart}
-          disabled={isOutOfStock}
           className="flex-1"
+          disabled={isOutOfStock || isAdding}
+          onClick={handleAddToCart}
         >
-          <ShoppingCart className="mr-2 size-5" />
-          Add to Cart
+          {isAdding ? (
+            <Loader2 className="size-5 animate-spin" aria-hidden />
+          ) : (
+            <ShoppingCart className="size-5" aria-hidden />
+          )}
+          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
         </Button>
+
         <Button
           variant="outline"
           size="xl"
           onClick={handleToggleWishlist}
+          aria-pressed={inWishlist}
           className={cn(
             "flex-1",
-            isWishlisted && "border-destructive text-destructive hover:bg-destructive/10"
+            inWishlist && "border-destructive/40 text-destructive hover:bg-destructive/10",
           )}
         >
-          <Heart className={cn("mr-2 size-5", isWishlisted && "fill-current")} />
-          {isWishlisted ? "Wishlisted" : "Add to Wishlist"}
+          <Heart className={cn("size-5", inWishlist && "fill-current")} aria-hidden />
+          {inWishlist ? "In Wishlist" : "Add to Wishlist"}
         </Button>
       </div>
 
-      {/* Additional Info */}
-      <div className="space-y-3 border-t pt-6">
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Package className="size-5 text-primary" />
-          <span>Free Personalization</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Shield className="size-5 text-primary" />
-          <span>3 Year Warranty</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Box className="size-5 text-primary" />
-          <span>Complete with Box</span>
-        </div>
-      </div>
+      {/* Assurances */}
+      <ul className="space-y-2.5 border-t border-border pt-5">
+        {ASSURANCES.map((item) => {
+          const Icon = item.icon;
+          return (
+            <li
+              key={item.text}
+              className="flex items-center gap-3 text-sm text-muted-foreground"
+            >
+              <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              {item.text}
+            </li>
+          );
+        })}
+      </ul>
 
-      {/* Description */}
-      <div className="space-y-2 border-t pt-6">
-        <h3 className="text-sm font-semibold text-foreground">Description</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {product.description}
-        </p>
-      </div>
+      {/* Meta */}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border pt-5 text-sm">
+        {product.sku ? (
+          <>
+            <dt className="text-muted-foreground">SKU</dt>
+            <dd className="text-right font-medium">{product.sku}</dd>
+          </>
+        ) : null}
+        {product.brand ? (
+          <>
+            <dt className="text-muted-foreground">Brand</dt>
+            <dd className="text-right font-medium">{product.brand}</dd>
+          </>
+        ) : null}
+      </dl>
 
       {/* Tags */}
-      {product.tags && product.tags.length > 0 && (
-        <div className="space-y-2 border-t pt-6">
-          <h3 className="text-sm font-semibold text-foreground">Tags</h3>
+      {product.tags && product.tags.length > 0 ? (
+        <div className="space-y-2.5 border-t border-border pt-5">
+          <p className="text-sm font-semibold">Tags</p>
           <div className="flex flex-wrap gap-2">
             {product.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-xs">
+              <Badge key={tag} variant="secondary" className="h-6 px-2.5">
                 {tag}
               </Badge>
             ))}
           </div>
         </div>
-      )}
+      ) : null}
+
+      {loginPrompt ? (
+        <LoginRequiredDialog
+          open={loginPrompt !== null}
+          onOpenChange={(open) => !open && setLoginPrompt(null)}
+          action={loginPrompt}
+        />
+      ) : null}
     </div>
   );
 }

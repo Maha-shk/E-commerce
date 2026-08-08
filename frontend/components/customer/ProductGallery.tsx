@@ -2,118 +2,98 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ProductImage } from "@/components/customer/ProductImage";
 import { cn } from "@/lib/utils";
 
-interface Image {
+type GalleryImage = {
   id: string;
   url: string;
   position: number;
-}
+};
 
-interface ProductGalleryProps {
-  images: Image[];
-}
+/**
+ * Product image viewer: one large frame plus a thumbnail rail.
+ *
+ * Rewritten to use `next/image` (via ProductImage) — it previously used raw
+ * `<img>` tags, so full-size originals were shipped for every thumbnail.
+ */
+export function ProductGallery({ images = [] }: { images: GalleryImage[] }) {
+  const [index, setIndex] = useState(0);
 
-export function ProductGallery({ images = [] }: ProductGalleryProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  // If no images, show placeholder
-  if (!images || images.length === 0) {
+  if (images.length === 0) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-muted">
-        <p className="text-sm text-muted-foreground">No product images</p>
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted">
+        <ProductImage src={null} sizes="(max-width: 1024px) 100vw, 560px" />
       </div>
     );
   }
 
-  const currentImage = images[currentIndex];
-
-  const handlePrevious = () => {
-    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
-  };
-
-  const handleThumbnailClick = (index: number) => {
-    setCurrentIndex(index);
-  };
+  const current = images[Math.min(index, images.length - 1)];
+  const step = (delta: number) =>
+    setIndex((i) => (i + delta + images.length) % images.length);
 
   return (
-    <div className="flex gap-4">
-      {/* Thumbnails - Desktop: Left side, Mobile: Bottom */}
-      <div className="hidden gap-2 lg:flex lg:flex-col">
-        {images.slice(0, 5).map((image, index) => (
-          <button
-            key={image.id}
-            onClick={() => handleThumbnailClick(index)}
-            className={cn(
-              "relative aspect-square w-20 overflow-hidden rounded-lg border-2 transition-colors hover:border-primary",
-              index === currentIndex ? "border-primary" : "border-border"
-            )}
-            aria-label={`View image ${index + 1}`}
-          >
-            <img
-              src={image.url}
-              alt={`Product thumbnail ${index + 1}`}
-              className="size-full object-cover"
-            />
-          </button>
-        ))}
-      </div>
+    <div className="flex flex-col gap-3">
+      {/* Main frame */}
+      <div className="group relative aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/10">
+        <ProductImage
+          key={current.id}
+          src={current.url}
+          sizes="(max-width: 1024px) 100vw, 560px"
+          priority
+        />
 
-      {/* Main Image */}
-      <div className="relative flex-1">
-        <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted">
-          <img
-            src={currentImage.url}
-            alt={`Product image ${currentIndex + 1}`}
-            className="size-full object-cover"
-          />
-        </div>
-
-        {/* Navigation Buttons */}
-        {images.length > 1 && (
+        {images.length > 1 ? (
           <>
             <button
-              onClick={handlePrevious}
-              className="absolute left-2 top-1/2 flex -translate-y-1/2 size-10 items-center justify-center rounded-full bg-white/90 shadow-md transition-colors hover:bg-white"
+              type="button"
+              onClick={() => step(-1)}
               aria-label="Previous image"
+              className="absolute top-1/2 left-3 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 text-foreground shadow-card opacity-0 backdrop-blur-sm transition hover:bg-card focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-hover:opacity-100"
             >
-              <ChevronLeft className="size-5" />
+              <ChevronLeft className="size-4" aria-hidden />
             </button>
             <button
-              onClick={handleNext}
-              className="absolute right-2 top-1/2 flex -translate-y-1/2 size-10 items-center justify-center rounded-full bg-white/90 shadow-md transition-colors hover:bg-white"
+              type="button"
+              onClick={() => step(1)}
               aria-label="Next image"
+              className="absolute top-1/2 right-3 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 text-foreground shadow-card opacity-0 backdrop-blur-sm transition hover:bg-card focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-hover:opacity-100"
             >
-              <ChevronRight className="size-5" />
+              <ChevronRight className="size-4" aria-hidden />
             </button>
+
+            <span className="absolute right-3 bottom-3 rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium tabular-nums backdrop-blur-sm">
+              {Math.min(index, images.length - 1) + 1} / {images.length}
+            </span>
           </>
-        )}
+        ) : null}
       </div>
 
-      {/* Mobile Thumbnails */}
-      <div className="flex gap-2 lg:hidden">
-        {images.slice(0, 5).map((image, index) => (
-          <button
-            key={image.id}
-            onClick={() => handleThumbnailClick(index)}
-            className={cn(
-              "relative aspect-square w-16 overflow-hidden rounded-lg border-2 transition-colors hover:border-primary",
-              index === currentIndex ? "border-primary" : "border-border"
-            )}
-            aria-label={`View image ${index + 1}`}
-          >
-            <img
-              src={image.url}
-              alt={`Product thumbnail ${index + 1}`}
-              className="size-full object-cover"
-            />
-          </button>
-        ))}
-      </div>
+      {/* Thumbnails — a horizontal rail on every breakpoint, so the layout
+          doesn't reshuffle between mobile and desktop. */}
+      {images.length > 1 ? (
+        <div className="scrollbar-hide flex gap-2 overflow-x-auto" role="tablist">
+          {images.map((image, i) => (
+            <button
+              key={image.id}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              aria-label={`View image ${i + 1}`}
+              onClick={() => setIndex(i)}
+              className={cn(
+                "relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted transition",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                i === index
+                  ? "ring-2 ring-primary"
+                  : "opacity-70 ring-1 ring-foreground/10 hover:opacity-100",
+              )}
+            >
+              <ProductImage src={image.url} sizes="64px" />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

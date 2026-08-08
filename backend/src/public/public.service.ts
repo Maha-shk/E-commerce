@@ -1,17 +1,90 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProductsService } from '../products/products.service';
 import { CategoriesService } from '../categories/categories.service';
 import { MessagesService } from '../messages/messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BannerType,
+  CategoryStatus,
+  CategoryVisibility,
+  FeaturedSection,
   MessageDirection,
+  ProductVisibility,
   Role,
   OrderStatus,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
 import { ContactFormDto } from './dto/contact.dto';
+import { UNCLAIMED_PASSWORD_HASH } from '../common/constants/account.constants';
+import {
+  CreatePublicOrderDto,
+  OrderAddressDto,
+  OrderContactDto,
+} from './dto/create-order.dto';
+
+/**
+ * How many products to pull before ranking or filtering a storefront section.
+ *
+ * Sections order the whole catalogue (best sellers by units sold, sale by
+ * discount), so slicing to the requested limit first would rank only the newest
+ * few rows. Wide enough for this catalogue; if it grows past this, these
+ * sections should move into SQL.
+ */
+const SECTION_SCAN_LIMIT = 200;
+
+/** How many of the newest products the "New Arrivals" browse surfaces. */
+const NEW_ARRIVALS_WINDOW = 24;
+
+/**
+ * Shipping rules, mirroring `CartService` so the price quoted in the cart is
+ * the price charged at checkout.
+ */
+const FREE_SHIPPING_THRESHOLD = 100;
+const STANDARD_SHIPPING_RATE = 10;
+const EXPRESS_SHIPPING_RATE = 25;
+
+/** Money is stored as Decimal(12,2); keep intermediate maths to the same scale. */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Express is always charged — the free-shipping threshold is a standard-
+ * delivery perk, not a free upgrade.
+ */
+function resolveShippingCost(subtotal: number, deliveryMethod?: string): number {
+  if (deliveryMethod === 'express') return EXPRESS_SHIPPING_RATE;
+  return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_RATE;
+}
+
+/**
+ * Next sequential order number, e.g. "ORD-2026-0007".
+ *
+ * `orderNumber` is unique, and the previous implementation picked a random
+ * 4-digit suffix — with only 9000 values a collision (and a 500) was a matter
+ * of time. Runs inside the order transaction so the read and the insert can't
+ * interleave with another checkout.
+ */
+async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const prefix = `ORD-${new Date().getFullYear()}-`;
+
+  const latest = await tx.order.findFirst({
+    where: { orderNumber: { startsWith: prefix } },
+    orderBy: { orderNumber: 'desc' },
+    select: { orderNumber: true },
+  });
+
+  const lastSequence = latest
+    ? Number.parseInt(latest.orderNumber.slice(prefix.length), 10) || 0
+    : 0;
+
+  return `${prefix}${String(lastSequence + 1).padStart(4, '0')}`;
+}
 
 @Injectable()
 export class PublicService {
@@ -67,7 +140,13 @@ export class PublicService {
   }
 
   async getCategories(params?: any) {
-    const result = await this.categoriesService.findAll(params);
+    const result = await this.categoriesService.findAll({
+      ...params,
+      // Same rule as products: an archived or hidden category is an admin-side
+      // state and must never reach the storefront. Not caller controlled.
+      status: CategoryStatus.ACTIVE,
+      visibility: CategoryVisibility.VISIBLE,
+    });
 
     return {
       success: true,
@@ -87,23 +166,50 @@ export class PublicService {
     const page = params?.page ? Number(params.page) : 1;
     const limit = params?.limit ? Number(params.limit) : 20;
 
+    // `bestsellers` / `newArrivals` / `sale` rank or filter across the whole
+    // catalogue, so the ordering has to be applied before the page is cut.
+    // Fetch a wide slice, narrow it, then paginate in memory.
+    const isSection = Boolean(
+      params?.bestsellers || params?.newArrivals || params?.sale,
+    );
+
     const queryParams = {
-      page,
-      limit,
-      skip: (page - 1) * limit,
+      page: isSection ? 1 : page,
+      limit: isSection ? SECTION_SCAN_LIMIT : limit,
+      skip: isSection ? 0 : (page - 1) * limit,
       sortBy: 'createdAt' as const,
       sortOrder: 'desc' as const,
       ...(params?.categoryId && { categoryId: params.categoryId }),
       ...(params?.search && { search: params.search }),
-      ...(params?.status && { status: params.status }),
-      ...(params?.visibility && { visibility: params.visibility }),
+      // The storefront only ever shows PUBLIC products. This is not caller
+      // controlled: the admin's PRIVATE and SCHEDULED products were previously
+      // served to anonymous shoppers because no visibility filter was applied.
+      visibility: ProductVisibility.PUBLIC,
     };
 
     const products = await this.productsService.findAll(queryParams);
+    let rows = products.data;
+    let total = products.meta?.total ?? rows.length;
+
+    if (isSection) {
+      if (params?.sale) {
+        rows = rows.filter((p: any) => (p.discount || 0) > 0);
+      }
+      if (params?.newArrivals) {
+        // Already sorted newest-first by the query above.
+        rows = rows.slice(0, NEW_ARRIVALS_WINDOW);
+      }
+      if (params?.bestsellers) {
+        rows = await this.rankBySalesVolume(rows);
+      }
+
+      total = rows.length;
+      rows = rows.slice((page - 1) * limit, page * limit);
+    }
 
     return {
       success: true,
-      data: products.data.map((product: any) => {
+      data: rows.map((product: any) => {
         const discount = product.discount || 0;
         const price = Number(product.price) || 0;
         const stock = product.stock || 0;
@@ -141,16 +247,73 @@ export class PublicService {
           updatedAt: product.updatedAt,
         };
       }),
-      meta: products.meta,
+      meta: { ...products.meta, total },
     };
+  }
+
+  /**
+   * Products that have actually sold, ranked by units sold (best first).
+   *
+   * Products with **no** sales are excluded, not merely pushed to the bottom.
+   * Ranking alone still returned the whole catalogue, so a brand-new product
+   * appeared under a "Best Sellers" heading purely because nothing outranked
+   * it. A best seller is something people bought; zero sales disqualifies.
+   *
+   * Consequence worth knowing: a catalogue with no order history yields an
+   * empty rail. That is the honest answer — the storefront renders its empty
+   * state rather than passing newest-first off as best-selling.
+   *
+   * `OrderItem` records the SKU rather than a product relation, so the join is
+   * on SKU. Only PAID-or-later orders count, so an abandoned PENDING order
+   * can't inflate a ranking.
+   */
+  private async rankBySalesVolume<T extends { sku?: string }>(rows: T[]): Promise<T[]> {
+    const skus = rows.map((r) => r.sku).filter(Boolean) as string[];
+    if (skus.length === 0) return [];
+
+    const grouped = await this.prisma.orderItem.groupBy({
+      by: ['sku'],
+      where: {
+        sku: { in: skus },
+        // A cancelled or unpaid order is not a sale.
+        order: {
+          paymentStatus: PaymentStatus.PAID,
+          status: { notIn: [OrderStatus.CANCELLED, OrderStatus.RETURNED] },
+        },
+      },
+      _sum: { quantity: true },
+    });
+
+    const unitsBySku = new Map(
+      grouped
+        .filter((g) => (g._sum.quantity ?? 0) > 0)
+        .map((g) => [g.sku, g._sum.quantity ?? 0]),
+    );
+
+    return rows
+      .map((row, index) => ({
+        row,
+        index, // preserves newest-first ordering within an equal-sales group
+        units: unitsBySku.get(row.sku ?? '') ?? 0,
+      }))
+      .filter((entry) => entry.units > 0)
+      .sort((a, b) => b.units - a.units || a.index - b.index)
+      .map((entry) => entry.row);
   }
 
   async getProduct(params: { id?: string; slug?: string }) {
     if (!params.id) {
-      throw new Error('Product ID is required');
+      // Was a bare Error, which surfaced as a 500 for what is a client mistake.
+      throw new BadRequestException('Product ID is required');
     }
 
     const product = await this.productsService.findOne(params.id);
+
+    // findOne is the admin lookup and ignores visibility. Without this check a
+    // PRIVATE or SCHEDULED product's detail page is reachable by guessing an id.
+    if (product.visibility !== ProductVisibility.PUBLIC) {
+      throw new NotFoundException(`Product ${params.id} not found`);
+    }
 
     const discount = product.discount || 0;
     const price = Number(product.price) || 0;
@@ -193,69 +356,122 @@ export class PublicService {
     };
   }
 
+  /**
+   * Products for a homepage rail.
+   *
+   * Every section used to fall through to "newest N", which made BEST_SELLERS
+   * and NEW_ARRIVALS return byte-identical lists. Each one now means what its
+   * name says:
+   *
+   *   BEST_SELLERS - ranked by units actually sold (OrderItem quantities)
+   *   NEW_ARRIVALS - newest by createdAt
+   *   SALE         - discounted only, newest first
+   *
+   * An admin can override any rail through the `FeaturedProduct` table; when a
+   * section has no curated rows the automatic ranking above is used, so the
+   * homepage is never empty.
+   */
   async getFeaturedProducts(params: { section: string; limit?: number }) {
-    const limit = params.limit || 4;
-    const queryParams = {
+    const limit = Number(params.limit) || 4;
+    const section = params.section as FeaturedSection;
+
+    const curated = await this.getCuratedSection(section, limit);
+    if (curated.length > 0) {
+      return { success: true, data: curated.map((p) => this.toStorefrontProduct(p)) };
+    }
+
+    const products = await this.productsService.findAll({
       page: 1,
-      limit: params.section === 'SALE' ? 50 : limit, // Get more products first so we can filter
+      // Scan wide, then rank/filter — the interesting product may not be in
+      // the newest `limit` rows.
+      limit: SECTION_SCAN_LIMIT,
       skip: 0,
       sortBy: 'createdAt' as const,
       sortOrder: 'desc' as const,
-    };
+      visibility: ProductVisibility.PUBLIC,
+    });
 
-    const products = await this.productsService.findAll(queryParams);
-
-    // For SALE section, filter products that actually have discounts
     let filteredProducts = products.data;
-    if (params.section === 'SALE') {
-      filteredProducts = products.data.filter((product: any) => {
-        const discount = product.discount || 0;
-        return discount > 0;
-      }).slice(0, limit); // Then limit to requested amount
-    } else {
-      filteredProducts = products.data.slice(0, limit);
+
+    if (section === 'SALE') {
+      filteredProducts = filteredProducts.filter((p: any) => (p.discount || 0) > 0);
+    } else if (section === 'BEST_SELLERS') {
+      filteredProducts = await this.rankBySalesVolume(filteredProducts);
     }
+    // NEW_ARRIVALS needs no extra work: the query is already newest-first.
+
+    filteredProducts = filteredProducts.slice(0, limit);
 
     return {
       success: true,
-      data: filteredProducts.map((product: any) => {
-        const discount = product.discount || 0;
-        const price = Number(product.price) || 0;
-        const stock = product.stock || 0;
-        const salePrice = price - (price * (discount / 100));
-        const images = product.images || [];
-        const variants = product.variants || [];
+      data: filteredProducts.map((product: any) => this.toStorefrontProduct(product)),
+    };
+  }
 
-        return {
-          id: product.id,
-          name: product.name,
-          brand: product.brand || '',
-          description: product.description || '',
-          sku: product.sku || '',
-          stock: stock,
-          status: product.status || 'IN_STOCK',
-          price: price,
-          discount: discount,
-          visibility: product.visibility || 'PUBLIC',
-          scheduledDate: product.scheduledDate || null,
-          tags: product.tags || [],
-          categoryId: product.categoryId || null,
-          category: product.category ? {
+  /**
+   * Admin-curated rows for a rail, newest curation first within display order.
+   * Returns `[]` when the section has not been curated, which is the signal to
+   * fall back to the automatic ranking.
+   */
+  private async getCuratedSection(section: FeaturedSection, limit: number) {
+    if (!Object.values(FeaturedSection).includes(section)) return [];
+
+    const featured = await this.prisma.featuredProduct.findMany({
+      where: {
+        section,
+        isActive: true,
+        // A curated pick still has to be publicly visible, or the admin could
+        // pin a PRIVATE product onto the homepage.
+        product: { visibility: ProductVisibility.PUBLIC },
+      },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'desc' }],
+      take: limit,
+      include: {
+        product: { include: { images: true, category: true, variants: true } },
+      },
+    });
+
+    return featured.map((row) => row.product);
+  }
+
+  /** Single shape for every storefront product payload. */
+  private toStorefrontProduct(product: any) {
+    const discount = product.discount || 0;
+    const price = Number(product.price) || 0;
+    const stock = product.stock || 0;
+    const images = product.images || [];
+    const variants = product.variants || [];
+
+    return {
+      id: product.id,
+      name: product.name,
+      brand: product.brand || '',
+      description: product.description || '',
+      sku: product.sku || '',
+      stock,
+      status: product.status || 'IN_STOCK',
+      price,
+      discount,
+      visibility: product.visibility || 'PUBLIC',
+      scheduledDate: product.scheduledDate || null,
+      tags: product.tags || [],
+      categoryId: product.categoryId || null,
+      category: product.category
+        ? {
             id: product.category.id,
             name: product.category.name,
             slug: product.category.slug,
-          } : null,
-          images: images,
-          variants: variants,
-          variantCount: variants.length,
-          inStock: stock > 0,
-          lowStock: stock > 0 && stock <= 10,
-          salePrice: salePrice,
-          discountPercent: discount,
-          createdAt: product.createdAt,
-          updatedAt: product.updatedAt,
-        };
-      }),
+          }
+        : null,
+      images,
+      variants,
+      variantCount: variants.length,
+      inStock: stock > 0,
+      lowStock: stock > 0 && stock <= 10,
+      salePrice: price - price * (discount / 100),
+      discountPercent: discount,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
     };
   }
 
@@ -267,6 +483,9 @@ export class PublicService {
       skip: 0,
       sortBy: 'name' as const,
       sortOrder: 'asc' as const,
+      // A brand that only appears on unreleased products would otherwise leak
+      // through the storefront's brand filter.
+      visibility: ProductVisibility.PUBLIC,
     };
 
     const products = await this.productsService.findAll(queryParams);
@@ -285,10 +504,21 @@ export class PublicService {
   }
 
   async submitContactForm(data: ContactFormDto) {
+    // `Conversation.customerId` is required, so a contact submission from a
+    // stranger has to be attached to a User row. That placeholder is NOT a
+    // registered account: it has no usable password and has never accepted
+    // terms, which is exactly how `AuthService.register` recognises it and
+    // lets the real owner claim the address later.
+    //
+    // Normalised to lowercase to match `register`, which does the same. Without
+    // it, "Foo@x.com" here and "foo@x.com" there produce two accounts for one
+    // person.
+    const email = data.email.toLowerCase().trim();
+
     // Check if a customer with this email already exists
     let customer = await this.prisma.user.findFirst({
       where: {
-        email: data.email,
+        email,
         role: Role.CUSTOMER,
       },
       select: { id: true },
@@ -298,12 +528,17 @@ export class PublicService {
     if (!customer) {
       customer = await this.prisma.user.create({
         data: {
-          email: data.email,
+          email,
           fullName: data.name,
           role: Role.CUSTOMER,
           status: 'ACTIVE',
-          // Generate a random password for guest customers (they can reset it later)
-          passwordHash: Buffer.from(Math.random().toString()).toString('base64'),
+          // Not a bcrypt hash, so it can never match in `bcrypt.compare` and
+          // the placeholder cannot be signed into. The owner claims the address
+          // by registering (which verifies by OTP) or via password reset.
+          passwordHash: UNCLAIMED_PASSWORD_HASH,
+          // Left null deliberately — it is the marker that nobody has accepted
+          // terms for this address yet. See `AuthService.register`.
+          termsAcceptedAt: null,
         },
         select: { id: true },
       });
@@ -369,119 +604,200 @@ export class PublicService {
     }
   }
 
-  async createOrder(orderData: any) {
-    try {
-      const {
-        contactInfo,
-        shippingAddress,
-        deliveryMethod,
-        items,
-        subtotal,
-        shippingCost,
-        total
-      } = orderData;
+  /**
+   * Places a customer order.
+   *
+   * Every figure is computed here from the product records. The checkout still
+   * posts `subtotal`, `shippingCost` and `total`, and they are all discarded —
+   * previously `unitPrice` came straight from `item.price`, so a crafted
+   * request could buy anything for a cent.
+   *
+   * Also fixed here: line items used to store a fabricated `SKU-<productId>`
+   * instead of the product's real SKU. Sales reporting and the Best Sellers
+   * rail both group by SKU, so no order placed through checkout ever counted.
+   *
+   * Runs in one transaction: stock is re-checked and decremented alongside the
+   * insert so two shoppers can't both buy the last unit.
+   */
+  async createOrder(dto: CreatePublicOrderDto) {
+    const { contactInfo, shippingAddress, deliveryMethod, items } = dto;
 
-      // Validate required fields
-      if (!contactInfo || !contactInfo.email || !contactInfo.phone) {
-        throw new Error('Contact information is required');
+    // Collapse duplicate lines for the same product before pricing, otherwise
+    // the stock check passes per line while the total draw exceeds stock.
+    const quantityByProductId = new Map<string, number>();
+    for (const item of items) {
+      quantityByProductId.set(
+        item.productId,
+        (quantityByProductId.get(item.productId) ?? 0) + item.quantity,
+      );
+    }
+
+    const productIds = [...quantityByProductId.keys()];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, visibility: ProductVisibility.PUBLIC },
+    });
+
+    if (products.length !== productIds.length) {
+      const found = new Set(products.map((p) => p.id));
+      const missing = productIds.filter((id) => !found.has(id));
+      throw new BadRequestException(
+        `These products are no longer available: ${missing.join(', ')}`,
+      );
+    }
+
+    // Price each line from the database record.
+    const lines = products.map((product) => {
+      const quantity = quantityByProductId.get(product.id)!;
+
+      if (product.stock < quantity) {
+        throw new BadRequestException(
+          `Only ${product.stock} × "${product.name}" left in stock`,
+        );
       }
 
-      if (!shippingAddress || !shippingAddress.firstName || !shippingAddress.lastName || !shippingAddress.address ||
-          !shippingAddress.city || !shippingAddress.country || !shippingAddress.postalCode) {
-        throw new Error('Shipping address is required');
-      }
-
-      if (!items || items.length === 0) {
-        throw new Error('Order must contain at least one item');
-      }
-
-      // Generate order number
-      const orderNumber = `ORD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      // Create or get customer
-      let customer = await this.prisma.user.findFirst({
-        where: {
-          email: contactInfo.email,
-          role: Role.CUSTOMER,
-        },
-      });
-
-      if (!customer) {
-        // Create new customer if doesn't exist
-        customer = await this.prisma.user.create({
-          data: {
-            email: contactInfo.email,
-            fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`,
-            phone: contactInfo.phone,
-            role: Role.CUSTOMER,
-            status: 'ACTIVE',
-            emailVerified: true,
-            passwordHash: Buffer.from(Math.random().toString()).toString('base64'), // Random password
-          },
-        });
-      }
-
-      // Create order items with correct structure
-      const orderItems = items.map((item: any) => ({
-        productId: item.productId,
-        name: item.name,
-        sku: `SKU-${item.productId}`, // Generate SKU if not provided
-        quantity: item.quantity,
-        unitPrice: item.price,
-      }));
-
-      // Format shipping address as array of strings
-      const addressLines = [
-        `${shippingAddress.firstName} ${shippingAddress.lastName}`,
-        shippingAddress.address,
-        shippingAddress.apartment,
-        `${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postalCode}`,
-        shippingAddress.country,
-      ].filter((line) => line && line.trim() !== '');
-
-      // Calculate estimated delivery date (5-7 business days)
-      const estimatedDelivery = new Date();
-      estimatedDelivery.setDate(estimatedDelivery.getDate() + (deliveryMethod === 'express' ? 3 : 7));
-
-      // Create the order
-      const order = await this.prisma.order.create({
-        data: {
-          orderNumber,
-          customerId: customer.id,
-          status: OrderStatus.PENDING,
-          items: {
-            create: orderItems,
-          },
-          shippingAddress: addressLines,
-          shippingMethod: deliveryMethod === 'express' ? 'Express Delivery (DHL)' : 'Standard Delivery (BRT)',
-          shippingCost: shippingCost,
-          discount: 0,
-        },
-      });
+      const price = Number(product.price);
+      const discount = product.discount ?? 0;
+      // Same formula the storefront displays, so the shopper is charged the
+      // price they saw.
+      const unitPrice = round2(price - price * (discount / 100));
 
       return {
-        success: true,
-        data: {
-          id: order.id,
-          orderNumber: order.orderNumber,
-          customerEmail: customer.email,
-          customerName: customer.fullName,
-          shippingAddress: addressLines,
-          paymentMethod: 'Credit Card',
-          items: items,
-          subtotal,
-          shippingCost,
-          total,
-          estimatedDelivery,
-          createdAt: order.createdAt,
-        },
+        product,
+        quantity,
+        unitPrice,
+        lineTotal: round2(unitPrice * quantity),
       };
-    } catch (error) {
-      console.error('Order creation error:', error);
-      throw error;
-    }
+    });
+
+    const subtotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
+    const shippingCost = resolveShippingCost(subtotal, deliveryMethod);
+    const total = round2(subtotal + shippingCost);
+
+    const customer = await this.resolveOrderCustomer(contactInfo, shippingAddress);
+
+    const addressLines = [
+      `${shippingAddress.firstName} ${shippingAddress.lastName}`,
+      shippingAddress.address,
+      shippingAddress.apartment ?? '',
+      [shippingAddress.city, shippingAddress.state, shippingAddress.postalCode]
+        .filter(Boolean)
+        .join(', '),
+      shippingAddress.country,
+    ].filter((line): line is string => Boolean(line && line.trim() !== ''));
+
+    const estimatedDelivery = new Date();
+    estimatedDelivery.setDate(
+      estimatedDelivery.getDate() + (deliveryMethod === 'express' ? 3 : 7),
+    );
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          orderNumber: await nextOrderNumber(tx),
+          customerId: customer.id,
+          status: OrderStatus.PENDING,
+          shippingAddress: addressLines,
+          shippingMethod:
+            deliveryMethod === 'express'
+              ? 'Express Delivery (DHL)'
+              : 'Standard Delivery (BRT)',
+          shippingCost: new Prisma.Decimal(shippingCost),
+          discount: new Prisma.Decimal(0),
+          items: {
+            create: lines.map((l) => ({
+              productId: l.product.id,
+              name: l.product.name,
+              // The real SKU — this is the join key for all sales reporting.
+              sku: l.product.sku,
+              quantity: l.quantity,
+              unitPrice: new Prisma.Decimal(l.unitPrice),
+            })),
+          },
+        },
+      });
+
+      // Conditional decrement: `stock: { gte: quantity }` makes a concurrent
+      // order that already took the last unit fail here rather than oversell.
+      for (const line of lines) {
+        const claimed = await tx.product.updateMany({
+          where: { id: line.product.id, stock: { gte: line.quantity } },
+          data: { stock: { decrement: line.quantity } },
+        });
+        if (claimed.count === 0) {
+          throw new BadRequestException(
+            `"${line.product.name}" sold out while you were checking out`,
+          );
+        }
+      }
+
+      return created;
+    });
+
+    return {
+      success: true,
+      data: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerEmail: customer.email,
+        customerName: customer.fullName,
+        shippingAddress: addressLines,
+        paymentMethod: 'Credit Card',
+        items: lines.map((l) => ({
+          productId: l.product.id,
+          name: l.product.name,
+          sku: l.product.sku,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          lineTotal: l.lineTotal,
+        })),
+        subtotal,
+        shippingCost,
+        total,
+        estimatedDelivery,
+        createdAt: order.createdAt,
+      },
+    };
   }
 
+  /**
+   * Finds or creates the account an order is attached to.
+   *
+   * A guest checkout creates the same kind of unclaimed placeholder the contact
+   * form does — `emailVerified` stays false. The previous code set it to true,
+   * which both faked a verification that never happened and permanently blocked
+   * the real owner from ever registering that address.
+   */
+  private async resolveOrderCustomer(
+    contactInfo: OrderContactDto,
+    shippingAddress: OrderAddressDto,
+  ) {
+    const email = contactInfo.email.toLowerCase().trim();
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      // Fill in a phone number we didn't have; never overwrite a real one.
+      if (!existing.phone && contactInfo.phone) {
+        return this.prisma.user.update({
+          where: { id: existing.id },
+          data: { phone: contactInfo.phone },
+        });
+      }
+      return existing;
+    }
+
+    return this.prisma.user.create({
+      data: {
+        email,
+        fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`.trim(),
+        phone: contactInfo.phone,
+        role: Role.CUSTOMER,
+        status: 'ACTIVE',
+        emailVerified: false,
+        passwordHash: UNCLAIMED_PASSWORD_HASH,
+        termsAcceptedAt: null,
+      },
+    });
+  }
   async getOrderByNumber(orderNumber: string) {
     const order = await this.prisma.order.findFirst({
       where: {

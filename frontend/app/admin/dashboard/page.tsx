@@ -206,7 +206,7 @@ function RecentOrdersCard() {
 
       <div className="border-t p-3">
         <Button asChild variant="ghost" className="w-full font-semibold text-primary">
-          <Link href="/orders">View All Orders</Link>
+          <Link href="/admin/orders">View All Orders</Link>
         </Button>
       </div>
     </Card>

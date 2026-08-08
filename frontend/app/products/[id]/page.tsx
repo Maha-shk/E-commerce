@@ -1,86 +1,96 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { ChevronRight, PackageX } from "lucide-react";
+import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
 import { ProductGallery } from "@/components/customer/ProductGallery";
 import { ProductInfo } from "@/components/customer/ProductInfo";
 import { RelatedProducts } from "@/components/customer/RelatedProducts";
-import { HomePageHeader } from "@/components/customer/HomePageHeader";
-import { HomePageFooter } from "@/components/customer/HomePageFooter";
+import { EmptyState, ErrorState, LoadingState } from "@/components/customer/StateBlock";
+import { Button } from "@/components/ui/button";
 import { useProduct } from "@/lib/hooks/use-customer";
-import { useCart } from "@/lib/hooks/use-cart";
-import { Loader2 } from "lucide-react";
-import { ErrorState } from "@/components/admin/QueryState";
+
+/** Breadcrumb trail — the page previously gave no sense of where you were. */
+function Breadcrumbs({
+  category,
+  name,
+}: {
+  category: { name: string; slug: string } | null;
+  name: string;
+}) {
+  const crumbClass =
+    "rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
+  return (
+    <nav aria-label="Breadcrumb" className="mb-6">
+      <ol className="flex flex-wrap items-center gap-1.5 text-sm">
+        <li>
+          <Link href="/products" className={crumbClass}>
+            Products
+          </Link>
+        </li>
+        {category ? (
+          <>
+            <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
+            <li>
+              <Link href={`/categories/${category.slug}`} className={crumbClass}>
+                {category.name}
+              </Link>
+            </li>
+          </>
+        ) : null}
+        <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
+        <li className="min-w-0 max-w-[16rem] truncate font-medium" aria-current="page">
+          {name}
+        </li>
+      </ol>
+    </nav>
+  );
+}
 
 export default function ProductDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const [id, setId] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const id = typeof params.id === "string" ? params.id : "";
 
-  useEffect(() => {
-    setId(params.id as string);
-  }, [params]);
-
-  const { data: product, isLoading, isError, error } = useProduct(id ?? "");
-  const { totalItems } = useCart();
-
-  if (!id) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return <ErrorState error={error} onRetry={() => router.refresh()} />;
-  }
-
-  if (!product) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-lg font-semibold text-foreground">Product not found</p>
-        <p className="text-sm text-muted-foreground">
-          The product you're looking for doesn't exist or has been removed.
-        </p>
-      </div>
-    );
-  }
+  const { data: product, isPending, isError, refetch } = useProduct(id);
 
   return (
-    <div className="min-h-screen bg-white">
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
-      />
+    <CustomerPageShell>
+      {isError ? (
+        <ErrorState title="Couldn't load this product" onRetry={() => refetch()} />
+      ) : isPending ? (
+        <LoadingState label="Loading product…" />
+      ) : !product ? (
+        <EmptyState
+          bordered
+          icon={PackageX}
+          title="Product not found"
+          description="This product doesn't exist, or it's no longer available."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/products">Browse all products</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <Breadcrumbs category={product.category} name={product.name} />
 
-      <main className="container mx-auto px-4 py-8">
-        {/* Product Detail Section */}
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
-          {/* Product Gallery */}
-          <ProductGallery images={product.images || []} />
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
+            <ProductGallery images={product.images ?? []} />
+            <ProductInfo product={product} />
+          </div>
 
-          {/* Product Info */}
-          <ProductInfo product={product} />
-        </div>
-
-        {/* Related Products */}
-        <div className="mt-16">
-          <RelatedProducts categoryId={product.categoryId} currentProductId={product.id} />
-        </div>
-      </main>
-
-      <HomePageFooter />
-    </div>
+          <div className="mt-16">
+            <RelatedProducts
+              categoryId={product.categoryId}
+              currentProductId={product.id}
+              categoryName={product.category?.name}
+            />
+          </div>
+        </>
+      )}
+    </CustomerPageShell>
   );
 }

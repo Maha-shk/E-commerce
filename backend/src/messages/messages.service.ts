@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MessageDirection, OrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { paginate } from '../common/dto/paginated-response';
 import { initialsOf } from '../customers/customers.service';
 import {
@@ -11,7 +12,68 @@ import {
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
+
+  /**
+   * Conversations belonging to one customer, newest activity first, with the
+   * full message thread inlined.
+   *
+   * Backs the customer-facing inbox: admin replies previously existed only in
+   * the admin console, so a customer had no way to read one.
+   */
+  async findAllForCustomer(customerId: string) {
+    const conversations = await this.prisma.conversation.findMany({
+      where: { customerId },
+      orderBy: { lastMessageAt: 'desc' },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    return conversations.map((conversation) => ({
+      id: conversation.id,
+      lastMessageAt: conversation.lastMessageAt,
+      createdAt: conversation.createdAt,
+      messages: conversation.messages.map((message) => ({
+        id: message.id,
+        // Named from the customer's point of view — `direction` is stored from
+        // the admin's, where INCOMING means "from the customer".
+        author:
+          message.direction === MessageDirection.INCOMING ? 'you' : 'support',
+        text: message.text,
+        createdAt: message.createdAt,
+      })),
+    }));
+  }
+
+  /** Appends a customer follow-up to their own conversation. */
+  async addCustomerMessage(customerId: string, conversationId: string, text: string) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, customerId },
+      select: { id: true },
+    });
+    if (!conversation) {
+      throw new NotFoundException(`Conversation ${conversationId} not found`);
+    }
+
+    const [message] = await this.prisma.$transaction([
+      this.prisma.message.create({
+        data: {
+          conversationId,
+          direction: MessageDirection.INCOMING,
+          text,
+        },
+      }),
+      this.prisma.conversation.update({
+        where: { id: conversationId },
+        // Bumps the admin's unread badge, same as a contact-form submission.
+        data: { lastMessageAt: new Date(), unreadCount: { increment: 1 } },
+      }),
+    ]);
+
+    return message;
+  }
 
   async findAll(query: ConversationQueryDto) {
     const where: Prisma.ConversationWhereInput = {
@@ -139,8 +201,21 @@ export class MessagesService {
 
   /** Admin reply. Sending also clears the unread counter. */
   async reply(id: string, dto: SendMessageDto) {
-    const exists = await this.prisma.conversation.count({ where: { id } });
-    if (!exists) throw new NotFoundException(`Conversation ${id} not found`);
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        customer: { select: { email: true, fullName: true } },
+        // The customer's own last message, quoted back for context.
+        messages: {
+          where: { direction: MessageDirection.INCOMING },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { text: true },
+        },
+      },
+    });
+    if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
 
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
@@ -155,6 +230,18 @@ export class MessagesService {
         data: { lastMessageAt: new Date(), unreadCount: 0 },
       }),
     ]);
+
+    // The reply used to stop at the database, so the customer was never told an
+    // answer existed. Sent after the write commits, and MailService swallows
+    // its own failures — a bad SMTP config must not lose the admin's reply.
+    if (conversation.customer?.email) {
+      await this.mail.sendSupportReply(
+        conversation.customer.email,
+        conversation.customer.fullName,
+        dto.text,
+        conversation.messages[0]?.text,
+      );
+    }
 
     return message;
   }

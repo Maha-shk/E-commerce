@@ -1,355 +1,82 @@
 "use client";
 
-import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { HomePageHeader } from "@/components/customer/HomePageHeader";
-import { HomePageFooter } from "@/components/customer/HomePageFooter";
-import { useCategoryBySlug, useCategories } from "@/lib/hooks/use-homepage";
-import { useProducts } from "@/lib/hooks/use-customer";
-import { useCart } from "@/lib/hooks/use-cart";
-import { ProductCard } from "@/components/customer/ProductCard";
-import { Loader2, Search, ChevronDown, Check } from "lucide-react";
 import Link from "next/link";
+import { ChevronRight, LayoutGrid } from "lucide-react";
+import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
+import { ProductBrowser } from "@/components/customer/ProductBrowser";
+import { EmptyState, LoadingState } from "@/components/customer/StateBlock";
+import { Button } from "@/components/ui/button";
+import { useCategoryBySlug } from "@/lib/hooks/use-homepage";
 
+/**
+ * A category is just the product listing scoped to one categoryId, so it runs
+ * through the same `ProductBrowser` as /products, /sales and the rest.
+ *
+ * This page previously carried its own ~355-line copy of the filter sidebar,
+ * sort dropdown and grid — which is why it still looked like the old design
+ * after everything else was updated.
+ */
 export default function CategoryDetailPage() {
   const params = useParams();
-  const slug = params.slug as string;
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [inStockOnly, setInStockOnly] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("newest");
-  const [sortOpen, setSortOpen] = useState(false);
+  const slug = typeof params.slug === "string" ? params.slug : "";
 
-  // Fetch current category
-  const { data: category, isLoading: categoryLoading } = useCategoryBySlug(slug);
+  const { data: category, isPending } = useCategoryBySlug(slug);
 
-  // Fetch products only when category exists
-  const shouldFetchProducts = category?.id ? true : false;
-  const categoryId = category?.id;
-  const { data: products, isLoading: productsLoading, isError: productsError } = useProducts(
-    shouldFetchProducts && categoryId
-      ? {
-          categoryId: categoryId,
-          search: searchQuery || undefined,
-          limit: 50,
-        }
-      : undefined
-  );
-
-  // Cart count
-  const { totalItems } = useCart();
-
-  // Clear all filters
-  const clearFilters = () => {
-    setInStockOnly(false);
-    setSearchQuery("");
-    setSortBy("newest");
-  };
-
-  // Filter products
-  const filteredProducts = useMemo(() => {
-    if (!products) return [];
-
-    return products.filter((product) => {
-      // Stock filter
-      if (inStockOnly && !product.inStock) return false;
-
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (
-          !product.name.toLowerCase().includes(query) &&
-          !product.description?.toLowerCase().includes(query)
-        ) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [products, inStockOnly, searchQuery]);
-
-  // Sort products
-  const sortedProducts = useMemo(() => {
-    return [...filteredProducts].sort((a, b) => {
-      if (sortBy === "price-low") return a.salePrice - b.salePrice;
-      if (sortBy === "price-high") return b.salePrice - a.salePrice;
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "newest")
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return 0;
-    });
-  }, [filteredProducts, sortBy]);
-
-  const sortOptions = [
-    { value: "newest", label: "Newest Arrivals" },
-    { value: "price-low", label: "Price: Low to High" },
-    { value: "price-high", label: "Price: High to Low" },
-    { value: "name", label: "Name: A to Z" },
-  ];
-
-  const currentSortLabel =
-    sortOptions.find((opt) => opt.value === sortBy)?.label || "Newest Arrivals";
-
-  // Loading state
-  if (categoryLoading) {
+  if (isPending) {
     return (
-      <div className="min-h-screen bg-[#FBF9F8]">
-        <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
-      />
-        <main className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-[#00234E]" />
-          </div>
-        </main>
-      </div>
+      <CustomerPageShell>
+        <LoadingState label="Loading category…" />
+      </CustomerPageShell>
     );
   }
 
-  // Category not found
   if (!category) {
     return (
-      <div className="min-h-screen bg-[#FBF9F8]">
-        <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
-      />
-        <main className="container mx-auto px-4 py-8">
-          <div className="text-center py-20">
-            <p className="text-gray-500 text-lg">Category not found</p>
-            <Link href="/categories" className="text-[#00234E] hover:underline mt-4 inline-block">
-              Back to Categories
-            </Link>
-          </div>
-        </main>
-      </div>
+      <CustomerPageShell>
+        <EmptyState
+          bordered
+          icon={LayoutGrid}
+          title="Category not found"
+          description="This category doesn't exist, or it's no longer available."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/categories">Browse all categories</Link>
+            </Button>
+          }
+        />
+      </CustomerPageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF9F8]">
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
+    <CustomerPageShell>
+      <nav aria-label="Breadcrumb" className="mb-6">
+        <ol className="flex flex-wrap items-center gap-1.5 text-sm">
+          <li>
+            <Link
+              href="/categories"
+              className="rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Categories
+            </Link>
+          </li>
+          <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
+          <li className="font-medium" aria-current="page">
+            {category.name}
+          </li>
+        </ol>
+      </nav>
+
+      <ProductBrowser
+        title={category.name}
+        description={
+          category.description ||
+          `${category.productCount} ${category.productCount === 1 ? "product" : "products"} in this category.`
+        }
+        query={{ categoryId: category.id }}
+        emptyMessage="Nothing in this category matches your filters."
       />
-
-      <main className="container mx-auto px-4 py-8">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-6">
-          <Link href="/" className="hover:text-[#00234E]">
-            Home
-          </Link>
-          <span>/</span>
-          <Link href="/categories" className="hover:text-[#00234E]">
-            Categories
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">{category.name}</span>
-        </div>
-
-        {/* Category Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-          {/* Category Banner */}
-          <div className="relative h-64 overflow-hidden">
-            {category.thumbnailName ? (
-              <img
-                src={category.thumbnailName}
-                alt={category.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                <div className="text-gray-400 text-sm">No image</div>
-              </div>
-            )}
-
-            {/* Overlay with Category Info */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-6">
-              <div className="mb-3">
-                <h1 className="text-4xl font-bold text-white mb-2">
-                  {category.name}
-                </h1>
-                <p className="text-white/80">{category.description}</p>
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="bg-orange-500 text-white px-3 py-1 rounded-full font-medium">
-                  {category.productCount} {category.productCount === 1 ? "product" : "products"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Filters */}
-          <aside className="lg:w-64 shrink-0">
-            <div className="lg:sticky lg:top-24">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-bold text-[#00234E] tracking-wide mb-6">
-                  FILTERS
-                </h2>
-
-                {/* Availability Section */}
-                <div className="mb-6">
-                  <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-3">
-                    Availability
-                  </h3>
-                  <label className="flex items-center justify-between cursor-pointer group py-1">
-                    <span className="text-xs text-gray-600 group-hover:text-[#00234E] transition-colors font-medium">
-                      In Stock Only
-                    </span>
-                    <div
-                      onClick={() => setInStockOnly(!inStockOnly)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 cursor-pointer ${
-                        inStockOnly
-                          ? "bg-[#00234E] shadow-lg shadow-[#00234E]/30"
-                          : "bg-gray-200 group-hover:bg-gray-300"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full transition-all duration-200 bg-white shadow-md ${
-                          inStockOnly ? "translate-x-5" : "translate-x-1"
-                        }`}
-                      />
-                    </div>
-                  </label>
-                </div>
-
-                {/* Clear Filters Button */}
-                <button
-                  onClick={clearFilters}
-                  className="w-full bg-[#00234E] hover:bg-[#001a3a] text-white py-2 px-4 rounded-lg font-semibold uppercase tracking-wider transition-all duration-200 hover:shadow-xl hover:shadow-[#00234E]/30 active:scale-[0.98] border-2 border-[#00234E] text-xs"
-                >
-                  Clear All Filters
-                </button>
-              </div>
-            </div>
-          </aside>
-
-          {/* Main Content Area */}
-          <div className="flex-1">
-            {/* Search, Sort Bar and Product Count */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-auto sm:flex-1 max-w-xs">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search products in this category..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00234E] focus:border-[#00234E] transition-all duration-200 hover:border-gray-300"
-                />
-              </div>
-
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                <p className="text-gray-600 text-sm whitespace-nowrap">
-                  Showing{" "}
-                  <span className="font-semibold text-gray-900">
-                    {sortedProducts.length}
-                  </span>{" "}
-                  {sortedProducts.length === 1 ? "product" : "products"}
-                </p>
-
-              {/* Sort Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setSortOpen(!sortOpen)}
-                  className={`flex items-center space-x-3 px-5 py-2.5 border-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    sortOpen
-                      ? "border-[#00234E] bg-[#00234E]/5 shadow-md shadow-[#00234E]/20"
-                      : "border-gray-200 hover:border-[#00234E] hover:bg-[#00234E]/5"
-                  }`}
-                >
-                  <span className="text-gray-600">Sort by:</span>
-                  <span className="font-semibold text-[#00234E]">
-                    {currentSortLabel}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-[#00234E] transition-transform ${
-                      sortOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {sortOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white border-2 border-gray-100 rounded-lg shadow-xl shadow-gray-200/50 z-10 overflow-hidden">
-                    <div className="p-1">
-                      {sortOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setSortBy(option.value);
-                            setSortOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-3 text-sm transition-all duration-200 rounded-md ${
-                            sortBy === option.value
-                              ? "bg-[#00234E] text-white font-semibold shadow-md"
-                              : "text-gray-700 hover:bg-gray-100 font-medium"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{option.label}</span>
-                            {sortBy === option.value && (
-                              <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                </div>
-              </div>
-            </div>
-
-            {/* Loading State */}
-            {productsLoading && (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-[#00234E]" />
-              </div>
-            )}
-
-            {/* Error State */}
-            {productsError && (
-              <div className="text-center py-20">
-                <p className="text-red-500 mb-4">Failed to load products</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="bg-[#00234E] text-white px-6 py-2 rounded-lg hover:bg-[#00234E]/90 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {!productsLoading && !productsError && sortedProducts.length === 0 && (
-              <div className="text-center py-20">
-                <p className="text-gray-500 text-lg">No products found</p>
-                <p className="text-gray-400 mt-2">Try adjusting your filters</p>
-              </div>
-            )}
-
-            {/* Products Grid */}
-            {!productsLoading && !productsError && sortedProducts.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      <HomePageFooter />
-    </div>
+    </CustomerPageShell>
   );
 }

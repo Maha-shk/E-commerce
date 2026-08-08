@@ -12,6 +12,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
 import { HealthController } from './health/health.controller';
 import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
+import { BannersModule } from './banners/banners.module';
 import { ProductsModule } from './products/products.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
@@ -59,6 +60,7 @@ import { AddressesModule } from './addresses/addresses.module';
     // Admin dashboard features
     DashboardModule,
     CategoriesModule,
+    BannersModule,
     ProductsModule,
     InventoryModule,
     OrdersModule,

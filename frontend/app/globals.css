@@ -268,6 +268,55 @@
   .field-label {
     @apply text-xs font-medium text-muted-foreground;
   }
+
+  /* ----------------------------------------------------------------
+     Long-form copy (privacy, terms, shipping, returns).
+     @tailwindcss/typography isn't installed, so the reading rhythm is
+     defined once here rather than re-tagged on every paragraph.
+     ---------------------------------------------------------------- */
+  .legal-prose {
+    @apply text-sm leading-relaxed text-muted-foreground;
+  }
+
+  .legal-prose h2 {
+    @apply mt-10 mb-3 scroll-mt-28 text-lg font-semibold tracking-tight text-foreground first:mt-0;
+  }
+
+  .legal-prose h3 {
+    @apply mt-6 mb-2 text-base font-semibold tracking-tight text-foreground;
+  }
+
+  .legal-prose p {
+    @apply mb-4 text-pretty last:mb-0;
+  }
+
+  .legal-prose ul {
+    @apply mb-4 list-disc space-y-1.5 pl-5 marker:text-border;
+  }
+
+  .legal-prose ol {
+    @apply mb-4 list-decimal space-y-1.5 pl-5 marker:text-muted-foreground;
+  }
+
+  .legal-prose a {
+    @apply font-medium text-foreground underline underline-offset-4 decoration-border transition-colors hover:decoration-foreground;
+  }
+
+  .legal-prose strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .legal-prose table {
+    @apply mb-4 w-full border-collapse text-left;
+  }
+
+  .legal-prose th {
+    @apply border-b border-border pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase;
+  }
+
+  .legal-prose td {
+    @apply border-b border-border py-3 align-top text-foreground;
+  }
 }
 
 @supports (scrollbar-width: thin) {
