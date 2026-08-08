@@ -7,6 +7,8 @@ export class SupabaseService {
   private readonly logger = new Logger(SupabaseService.name);
   private adminClient: SupabaseClient;
   private anonClient: SupabaseClient;
+  /** Buckets already confirmed to exist, so the check runs once per process. */
+  private readonly knownBuckets = new Set<string>();
 
   constructor(private supabaseConfig: SupabaseConfig) {
     if (supabaseConfig.isConfigured()) {
@@ -77,9 +79,45 @@ export class SupabaseService {
   }
 
   /**
+   * Creates a public storage bucket if it isn't there yet.
+   *
+   * Storage buckets aren't provisioned by the Prisma migrations, and a fresh
+   * Supabase project has none — so an upload to a bucket nobody created by hand
+   * fails with a bare "Bucket not found". Doing it here makes storage-backed
+   * features work on any environment without a manual dashboard step.
+   *
+   * Idempotent: a duplicate-name error means another request won the race, so
+   * it is treated as success.
+   */
+  async ensureBucket(bucket: string, isPublic = true): Promise<void> {
+    if (this.knownBuckets.has(bucket)) return;
+
+    const { data } = await this.adminClient.storage.getBucket(bucket);
+    if (data) {
+      this.knownBuckets.add(bucket);
+      return;
+    }
+
+    const { error } = await this.adminClient.storage.createBucket(bucket, {
+      public: isPublic,
+    });
+
+    // "already exists" is the concurrent-creation case, not a failure.
+    if (error && !/already exists/i.test(error.message)) {
+      this.logger.error(`Could not create bucket "${bucket}": ${error.message}`);
+      throw new Error(`Failed to create storage bucket: ${error.message}`);
+    }
+
+    this.logger.log(`Storage bucket "${bucket}" ready`);
+    this.knownBuckets.add(bucket);
+  }
+
+  /**
    * Helper method to upload files to Supabase Storage
    */
   async uploadFile(bucket: string, path: string, file: Buffer | Uint8Array, contentType: string): Promise<string> {
+    await this.ensureBucket(bucket);
+
     const { data, error } = await this.adminClient
       .storage
       .from(bucket)

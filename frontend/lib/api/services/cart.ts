@@ -42,7 +42,15 @@ function sessionHeaders() {
 export type AddCartItemPayload = {
   productId: string;
   quantity: number;
+  /**
+   * Which `ProductVariant` was chosen. The server rejects the request when the
+   * product defines variants and this is missing, so a shopper can never end up
+   * with an order line that doesn't say which version they bought.
+   */
+  variantId?: string;
+  /** @deprecated Superseded by `variantId`. */
   color?: string;
+  /** @deprecated Superseded by `variantId`. */
   size?: string;
 };
 

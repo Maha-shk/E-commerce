@@ -59,7 +59,6 @@ export function HeroCarousel({ banners }: { banners?: Banner[] }) {
   }, []);
 
   const active = slides[index];
-  const isFallback = active.id === FALLBACK.id;
 
   return (
     <div
@@ -72,28 +71,51 @@ export function HeroCarousel({ banners }: { banners?: Banner[] }) {
       aria-roledescription="carousel"
       aria-label="Featured"
     >
-      {slides.map((slide, i) => (
-        <div
-          key={slide.id}
-          className={cn(
-            "absolute inset-0 transition-opacity duration-700 ease-out",
-            i === index ? "opacity-100" : "pointer-events-none opacity-0",
-          )}
-          aria-hidden={i !== index}
-        >
-          <Image
-            src={slide.imageUrl || FALLBACK.imageUrl}
-            alt=""
-            fill
-            priority={i === 0}
-            sizes="(max-width: 1280px) 100vw, 1280px"
-            className="object-cover"
-            // Remote banner URLs can't be optimised without a configured
-            // loader domain; the bundled fallback still goes through it.
-            unoptimized={!slide.imageUrl.startsWith("/")}
-          />
-        </div>
-      ))}
+      {slides.map((slide, i) => {
+        const desktopSrc = slide.imageUrl || FALLBACK.imageUrl;
+        // The admin can upload a separate mobile crop, and the API returns it —
+        // but the storefront was only ever rendering `imageUrl`, so a portrait
+        // banner uploaded for phones was silently unused.
+        const mobileSrc = slide.mobileImageUrl || desktopSrc;
+        const hasMobileCrop = Boolean(
+          slide.mobileImageUrl && slide.mobileImageUrl !== desktopSrc,
+        );
+
+        return (
+          <div
+            key={slide.id}
+            className={cn(
+              "absolute inset-0 transition-opacity duration-700 ease-out",
+              i === index ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={i !== index}
+          >
+            {hasMobileCrop ? (
+              <Image
+                src={mobileSrc}
+                alt=""
+                fill
+                priority={i === 0}
+                sizes="100vw"
+                className="object-cover md:hidden"
+                unoptimized={!mobileSrc.startsWith("/")}
+              />
+            ) : null}
+
+            <Image
+              src={desktopSrc}
+              alt=""
+              fill
+              priority={i === 0}
+              sizes="(max-width: 1280px) 100vw, 1280px"
+              className={cn("object-cover", hasMobileCrop && "hidden md:block")}
+              // Remote banner URLs can't be optimised without a configured
+              // loader domain; the bundled fallback still goes through it.
+              unoptimized={!desktopSrc.startsWith("/")}
+            />
+          </div>
+        );
+      })}
 
       {/* Brand-navy scrim, heavier on the left so copy stays legible over any
           artwork the admin uploads. */}
@@ -123,8 +145,6 @@ export function HeroCarousel({ banners }: { banners?: Banner[] }) {
               {active.linkText || "Shop Now"}
             </Link>
           </Button>
-
-          {isFallback && banners?.length === 0 ? null : null}
         </div>
       </div>
 

@@ -3,8 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  NotificationCategory,
+  NotificationType,
+  OrderStatus,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { paginate } from '../common/dto/paginated-response';
 import {
   CreateOrderDto,
@@ -34,7 +41,10 @@ const STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async findAll(query: OrderQueryDto) {
     const where: Prisma.OrderWhereInput = {
@@ -140,6 +150,21 @@ export class OrdersService {
       },
       include: ORDER_INCLUDE,
     });
+
+    // Mirrors the customer checkout path so the console shows every new order,
+    // whoever created it. Never allowed to fail the order itself.
+    try {
+      await this.notifications.emit({
+        type: NotificationType.SUCCESS,
+        category: NotificationCategory.ORDERS,
+        title: `New order ${order.orderNumber}`,
+        description: `Created in the admin console${
+          order.customer ? ` for ${order.customer.fullName}` : ''
+        }.`,
+      });
+    } catch {
+      /* notification failure must not fail the order */
+    }
 
     return toOrderView(order);
   }

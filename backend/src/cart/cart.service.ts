@@ -4,6 +4,7 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCartItemDto,
@@ -22,6 +23,28 @@ interface CartTotals {
   total: number;
 }
 
+/**
+ * Everything a cart response needs, in one place.
+ *
+ * This shape was duplicated across nine queries; `variants` and the `variant`
+ * relation had to be added to every one of them for the cart to be able to name
+ * the shopper's selection, so it is now defined once.
+ */
+const CART_INCLUDE = {
+  items: {
+    include: {
+      variant: true,
+      product: {
+        include: {
+          images: true,
+          category: true,
+          variants: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.CartInclude;
+
 @Injectable()
 export class CartService {
   constructor(private readonly prisma: PrismaService) {}
@@ -34,35 +57,13 @@ export class CartService {
       // Authenticated user cart
       let cart = await this.prisma.cart.findFirst({
         where: { userId },
-        include: {
-          items: {
-            include: {
-              product: {
-                include: {
-                  images: true,
-                  category: true,
-                },
-              },
-            },
-          },
-        },
+        include: CART_INCLUDE,
       });
 
       if (!cart) {
         cart = await this.prisma.cart.create({
           data: { userId },
-          include: {
-            items: {
-              include: {
-                product: {
-                  include: {
-                    images: true,
-                    category: true,
-                  },
-                },
-              },
-            },
-          },
+          include: CART_INCLUDE,
         });
       }
 
@@ -71,35 +72,13 @@ export class CartService {
       // Guest cart
       let cart = await this.prisma.cart.findFirst({
         where: { sessionId },
-        include: {
-          items: {
-            include: {
-              product: {
-                include: {
-                  images: true,
-                  category: true,
-                },
-              },
-            },
-          },
-        },
+        include: CART_INCLUDE,
       });
 
       if (!cart) {
         cart = await this.prisma.cart.create({
           data: { sessionId },
-          include: {
-            items: {
-              include: {
-                product: {
-                  include: {
-                    images: true,
-                    category: true,
-                  },
-                },
-              },
-            },
-          },
+          include: CART_INCLUDE,
         });
       }
 
@@ -120,6 +99,46 @@ export class CartService {
   /**
    * Add item to cart
    */
+  /**
+   * Validates the shopper's variant choice against the product.
+   *
+   * A product that defines variants cannot be added without picking one — the
+   * cart previously accepted a bare product id and the warehouse had no way to
+   * know which version was ordered. A product with no variants must not carry
+   * one, so a stale id from another product can't be attached.
+   */
+  private resolveVariantId(
+    product: { id: string; name: string; variants: { id: string; name: string }[] },
+    variantId?: string,
+  ): string | null {
+    const hasVariants = product.variants.length > 0;
+
+    if (!hasVariants) {
+      if (variantId) {
+        throw new BadRequestException(
+          `"${product.name}" has no variants to choose from`,
+        );
+      }
+      return null;
+    }
+
+    if (!variantId) {
+      const options = product.variants.map((v) => v.name).join(', ');
+      throw new BadRequestException(
+        `Select a variant for "${product.name}" (${options})`,
+      );
+    }
+
+    const match = product.variants.find((v) => v.id === variantId);
+    if (!match) {
+      throw new BadRequestException(
+        `"${variantId}" is not a variant of "${product.name}"`,
+      );
+    }
+
+    return match.id;
+  }
+
   async addItem(
     dto: CreateCartItemDto,
     userId?: string,
@@ -128,6 +147,7 @@ export class CartService {
     // Verify product exists and is in stock
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
+      include: { variants: true },
     });
 
     if (!product) {
@@ -146,14 +166,16 @@ export class CartService {
       );
     }
 
+    const variantId = this.resolveVariantId(product, dto.variantId);
+
     const cart = await this.getCartForUser(userId, sessionId);
 
-    // Check if item already exists in cart
+    // Two different variants of the same product are two different lines, so
+    // the variant is part of the identity — not just the product id.
     const existingItem = cart.items.find(
       (item) =>
         item.productId === dto.productId &&
-        (item.color || null) === (dto.color || null) &&
-        (item.size || null) === (dto.size || null),
+        (item.variantId || null) === (variantId || null),
     );
 
     if (existingItem) {
@@ -180,6 +202,7 @@ export class CartService {
           productId: dto.productId,
           quantity: dto.quantity,
           unitPrice: product.price,
+          variantId,
           color: dto.color,
           size: dto.size,
         },
@@ -189,18 +212,7 @@ export class CartService {
     // Return updated cart
     const updatedCart = await this.prisma.cart.findUnique({
       where: { id: cart.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                images: true,
-                category: true,
-              },
-            },
-          },
-        },
-      },
+      include: CART_INCLUDE,
     });
 
     return this.toCartResponse(updatedCart!);
@@ -247,18 +259,7 @@ export class CartService {
     // Return updated cart
     const updatedCart = await this.prisma.cart.findUnique({
       where: { id: cart.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                images: true,
-                category: true,
-              },
-            },
-          },
-        },
-      },
+      include: CART_INCLUDE,
     });
 
     return this.toCartResponse(updatedCart!);
@@ -295,18 +296,7 @@ export class CartService {
     // Return updated cart
     const updatedCart = await this.prisma.cart.findUnique({
       where: { id: cart.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                images: true,
-                category: true,
-              },
-            },
-          },
-        },
-      },
+      include: CART_INCLUDE,
     });
 
     return this.toCartResponse(updatedCart!);
@@ -347,18 +337,7 @@ export class CartService {
     const userCart = await this.getCartForUser(userId);
     const guestCart = await this.prisma.cart.findFirst({
       where: { sessionId },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                images: true,
-                category: true,
-              },
-            },
-          },
-        },
-      },
+      include: CART_INCLUDE,
     });
 
     if (!guestCart || guestCart.items.length === 0) {
@@ -367,11 +346,11 @@ export class CartService {
 
     // Merge items from guest cart to user cart
     for (const guestItem of guestCart.items) {
+      // Same identity rule as addItem: a line is (product, variant).
       const existingItem = userCart.items.find(
         (item) =>
           item.productId === guestItem.productId &&
-          (item.color || null) === (guestItem.color || null) &&
-          (item.size || null) === (guestItem.size || null),
+          (item.variantId || null) === (guestItem.variantId || null),
       );
 
       if (existingItem) {
@@ -400,6 +379,7 @@ export class CartService {
             productId: guestItem.productId,
             quantity: guestItem.quantity,
             unitPrice: guestItem.unitPrice,
+            variantId: guestItem.variantId,
             color: guestItem.color,
             size: guestItem.size,
           },
@@ -415,18 +395,7 @@ export class CartService {
     // Return merged cart
     const mergedCart = await this.prisma.cart.findUnique({
       where: { id: userCart.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                images: true,
-                category: true,
-              },
-            },
-          },
-        },
-      },
+      include: CART_INCLUDE,
     });
 
     return this.toCartResponse(mergedCart!);
@@ -499,6 +468,17 @@ export class CartService {
       image: product.images[0]?.url || null,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      variantId: item.variantId || undefined,
+      // Resolved from the relation when loaded, else looked up in the product's
+      // own variant list, so the cart row can always name what was chosen.
+      variantName:
+        item.variant?.name ||
+        product.variants?.find((v: any) => v.id === item.variantId)?.name ||
+        undefined,
+      availableVariants: (product.variants ?? []).map((v: any) => ({
+        id: v.id,
+        name: v.name,
+      })),
       color: item.color || undefined,
       size: item.size || undefined,
       inStock: product.status !== 'OUT_OF_STOCK',

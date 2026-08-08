@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Heart, Loader2, RotateCcw, ShieldCheck, ShoppingCart, Truck } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { QuantityStepper } from "@/components/customer/QuantityStepper";
+import { VariantPicker } from "@/components/customer/VariantPicker";
 import { LoginRequiredDialog } from "@/components/ui/login-required-dialog";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
@@ -43,14 +45,25 @@ export function ProductInfo({ product }: { product: Product }) {
   // regardless of what it was.
   const variants = product.variants ?? [];
 
+  // A product that offers variants can't be added until one is picked — the
+  // server enforces the same rule, so sending without it would just bounce.
+  const needsVariant = variants.length > 0 && !selectedVariant;
+  const selectedVariantName =
+    variants.find((v) => v.id === selectedVariant)?.name ?? null;
+
   /**
    * Previously this was a `console.log("Adding to cart", …)` TODO — the button
    * on the product page never actually added anything.
    */
   const handleAddToCart = async () => {
+    if (needsVariant) {
+      toast.error("Please select an option first");
+      return;
+    }
+
     setIsAdding(true);
     try {
-      await addItem(product.id, quantity);
+      await addItem(product.id, quantity, selectedVariant ?? undefined);
     } catch {
       // useCart already surfaced the reason as a toast.
     } finally {
@@ -131,34 +144,36 @@ export function ProductInfo({ product }: { product: Product }) {
       {/* Variants */}
       {variants.length > 0 ? (
         <div className="space-y-2.5 border-t border-border pt-5">
-          <p className="text-sm font-semibold">
-            Variants{" "}
-            <span className="font-normal text-muted-foreground">
-              ({variants.length})
-            </span>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {variants.map((variant) => {
-              const isSelected = selectedVariant === variant.id;
-              return (
-                <button
-                  key={variant.id}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => setSelectedVariant(isSelected ? null : variant.id)}
-                  className={cn(
-                    "rounded-lg border px-4 py-2 text-sm font-medium transition-colors duration-150",
-                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                    isSelected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-foreground hover:border-primary hover:bg-muted",
-                  )}
-                >
-                  {variant.name}
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <p className="text-sm font-semibold">
+              Variant
+              <span className="ml-0.5 text-destructive" aria-hidden>
+                *
+              </span>
+            </p>
+            {/* Echo the choice back in words — on a long chip row the selected
+                fill alone is easy to lose track of. */}
+            {selectedVariantName ? (
+              <p className="text-sm text-muted-foreground">
+                Selected:{" "}
+                <span className="font-medium text-foreground">
+                  {selectedVariantName}
+                </span>
+              </p>
+            ) : null}
           </div>
+
+          <VariantPicker
+            variants={variants}
+            value={selectedVariant}
+            onChange={setSelectedVariant}
+          />
+
+          {needsVariant ? (
+            <p className="text-xs font-medium text-muted-foreground">
+              Choose one of the {variants.length} options to continue.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -180,7 +195,10 @@ export function ProductInfo({ product }: { product: Product }) {
         <Button
           size="xl"
           className="flex-1"
+          // Left clickable while a variant is missing so the click can explain
+          // why; a disabled button would just feel broken.
           disabled={isOutOfStock || isAdding}
+          aria-disabled={needsVariant || undefined}
           onClick={handleAddToCart}
         >
           {isAdding ? (
@@ -188,7 +206,11 @@ export function ProductInfo({ product }: { product: Product }) {
           ) : (
             <ShoppingCart className="size-5" aria-hidden />
           )}
-          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+          {isOutOfStock
+            ? "Out of Stock"
+            : needsVariant
+              ? "Select an option"
+              : "Add to Cart"}
         </Button>
 
         <Button

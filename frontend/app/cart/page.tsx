@@ -217,6 +217,17 @@ export default function CartPage() {
 
                         {/* Variant chips + stock, on one wrapping line */}
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                          {/* The admin-configured variant. `colour`/`size` below
+                              are the superseded free-text fields, still shown
+                              for lines added before variants existed. */}
+                          {item.variantName ? (
+                            <span>
+                              Variant:{" "}
+                              <span className="font-medium text-foreground">
+                                {item.variantName}
+                              </span>
+                            </span>
+                          ) : null}
                           {item.color ? (
                             <span>
                               Colour:{" "}

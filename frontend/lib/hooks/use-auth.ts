@@ -173,6 +173,41 @@ export function useUpdateProfile() {
   });
 }
 
+/**
+ * Uploads a new profile picture. Shares `useUpdateProfile`'s pattern of writing
+ * the server's user back into the store so the avatar changes everywhere at
+ * once — sidebar, header and profile card all read from the same session.
+ */
+export function useUploadAvatar() {
+  const queryClient = useQueryClient();
+  const setUser = useAuthStore((s) => s.setUser);
+
+  return useMutation({
+    mutationFn: authApi.uploadAvatar,
+    onSuccess: (user) => {
+      setUser(user);
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      toast.success("Profile picture updated");
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
+export function useRemoveAvatar() {
+  const queryClient = useQueryClient();
+  const setUser = useAuthStore((s) => s.setUser);
+
+  return useMutation({
+    mutationFn: authApi.removeAvatar,
+    onSuccess: (user) => {
+      setUser(user);
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      toast.success("Profile picture removed");
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+}
+
 export function useChangePassword() {
   return useMutation({
     mutationFn: authApi.changePassword,

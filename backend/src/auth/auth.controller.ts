@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -8,13 +9,21 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AuthService } from './auth.service';
+import { AuthService, type UploadedImage } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResendOtpDto, VerifyOtpDto } from './dto/verify-otp.dto';
@@ -136,6 +145,37 @@ export class AuthController {
   @ApiOperation({ summary: 'Update the signed-in user profile (name/phone/avatar)' })
   updateMe(@CurrentUser('id') userId: string, @Body() dto: UpdateMeDto) {
     return this.auth.updateMe(userId, dto);
+  }
+
+  /**
+   * Multipart upload of a profile picture, field name `file`.
+   *
+   * `PATCH /auth/me` could already set `avatarUrl`, but only to a URL the
+   * client had to host itself — there was no way to actually upload an image.
+   * Size and MIME are re-checked in the service; the limit here just stops a
+   * huge body being buffered in the first place.
+   */
+  @ApiBearerAuth()
+  @Post('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a profile picture' })
+  uploadAvatar(
+    @CurrentUser('id') userId: string,
+    @UploadedFile() file: UploadedImage,
+  ) {
+    return this.auth.updateAvatar(userId, file);
+  }
+
+  @ApiBearerAuth()
+  @Delete('me/avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove the profile picture' })
+  removeAvatar(@CurrentUser('id') userId: string) {
+    return this.auth.removeAvatar(userId);
   }
 
   @ApiBearerAuth()

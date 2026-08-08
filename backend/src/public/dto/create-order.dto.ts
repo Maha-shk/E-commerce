@@ -60,6 +60,15 @@ export class OrderItemDto {
   @Min(1, { message: 'Quantity must be at least 1' })
   quantity!: number;
 
+  /**
+   * Chosen `ProductVariant`. Required when the product defines variants —
+   * validated against the product record, the same rule the cart enforces.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  variantId?: string;
+
   /* ---- Accepted for backwards compatibility, never read ---- */
 
   @ApiPropertyOptional({ description: 'Ignored — the name is read from the product record' })

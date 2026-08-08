@@ -288,6 +288,10 @@ export default function CheckoutPage() {
           deliveryMethod,
           items: items.map((item) => ({
             productId: item.productId,
+            // Carries the shopper's variant choice onto the order line. Without
+            // it the server rejects any product that defines variants, and the
+            // warehouse would have no idea which version was bought.
+            variantId: item.variantId,
             name: item.name,
             quantity: item.quantity,
             price: item.price,

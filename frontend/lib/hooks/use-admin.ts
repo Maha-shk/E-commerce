@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import {
+  bannersApi,
   categoriesApi,
   customersApi,
   dashboardApi,
@@ -22,6 +23,7 @@ import {
   profileApi,
   reportsApi,
   settingsApi,
+  type BannerQuery,
   type CategoryQuery,
   type CustomerQuery,
   type DiscountQuery,
@@ -383,5 +385,54 @@ export function useRevokeSession() {
   return useAdminMutation((id: string) => profileApi.revokeSession(id), {
     successMessage: "Session revoked",
     invalidate: [queryKeys.profile.all],
+  });
+}
+
+/* ---- Banners ---- */
+
+export function useBanners(params?: BannerQuery) {
+  return useQuery({
+    queryKey: queryKeys.banners.list(params),
+    queryFn: () => bannersApi.list(params),
+  });
+}
+
+export function useCreateBanner() {
+  return useAdminMutation(bannersApi.create, {
+    successMessage: "Banner created",
+    invalidate: [queryKeys.banners.all],
+  });
+}
+
+export function useUpdateBanner() {
+  return useAdminMutation(
+    ({ id, body }: { id: string; body: unknown }) => bannersApi.update(id, body),
+    { successMessage: "Banner updated", invalidate: [queryKeys.banners.all] },
+  );
+}
+
+export function useSetBannerActive() {
+  return useAdminMutation(
+    ({ id, isActive }: { id: string; isActive: boolean }) =>
+      bannersApi.setActive(id, isActive),
+    { successMessage: "Banner visibility updated", invalidate: [queryKeys.banners.all] },
+  );
+}
+
+/**
+ * Persists a new display order. The list is reordered locally first, so the
+ * rows don't jump back while the request is in flight.
+ */
+export function useReorderBanners() {
+  return useAdminMutation((ids: string[]) => bannersApi.reorder(ids), {
+    successMessage: "Order saved",
+    invalidate: [queryKeys.banners.all],
+  });
+}
+
+export function useDeleteBanner() {
+  return useAdminMutation(bannersApi.remove, {
+    successMessage: "Banner deleted",
+    invalidate: [queryKeys.banners.all],
   });
 }

@@ -16,6 +16,11 @@ export interface CartItem {
   image: string | null;
   quantity: number;
   unitPrice: number;
+  /** Selected variant, when the product has any. */
+  variantId?: string;
+  variantName?: string;
+  /** Every variant the product offers, so the cart can show a switcher. */
+  availableVariants?: { id: string; name: string }[];
   color?: string;
   size?: string;
   inStock: boolean;
@@ -72,7 +77,7 @@ interface CartState {
 
   // Actions
   fetchCart: () => Promise<void>;
-  addItem: (productId: string, quantity: number, color?: string, size?: string) => Promise<void>;
+  addItem: (productId: string, quantity: number, variantId?: string) => Promise<void>;
   updateItem: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -106,10 +111,10 @@ export const useCartStore = create<CartState>()(
         }
       },
 
-      addItem: async (productId, quantity, color, size) => {
+      addItem: async (productId, quantity, variantId) => {
         set({ isLoading: true, error: null });
         try {
-          const cart = await cartApi.addItem({ productId, quantity, color, size });
+          const cart = await cartApi.addItem({ productId, quantity, variantId });
           set({ cart, isLoading: false });
         } catch (error) {
           set({ error: getApiErrorMessage(error), isLoading: false });
@@ -218,8 +223,8 @@ export const cartStorage = {
   getCart: () => useCartStore.getState().cart,
   // Was returning the function itself rather than invoking it.
   getCartCount: () => useCartStore.getState().getCartCount(),
-  addItem: (productId: string, quantity: number, color?: string, size?: string) =>
-    useCartStore.getState().addItem(productId, quantity, color, size),
+  addItem: (productId: string, quantity: number, variantId?: string) =>
+    useCartStore.getState().addItem(productId, quantity, variantId),
   updateItem: (itemId: string, quantity: number) =>
     useCartStore.getState().updateItem(itemId, quantity),
   removeItem: (itemId: string) => useCartStore.getState().removeItem(itemId),

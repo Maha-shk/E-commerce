@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ProductsService } from '../products/products.service';
@@ -13,6 +14,8 @@ import {
   CategoryVisibility,
   FeaturedSection,
   MessageDirection,
+  NotificationCategory,
+  NotificationType,
   ProductVisibility,
   Role,
   OrderStatus,
@@ -21,6 +24,7 @@ import {
 } from '@prisma/client';
 import { ContactFormDto } from './dto/contact.dto';
 import { UNCLAIMED_PASSWORD_HASH } from '../common/constants/account.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreatePublicOrderDto,
   OrderAddressDto,
@@ -36,6 +40,9 @@ import {
  * sections should move into SQL.
  */
 const SECTION_SCAN_LIMIT = 200;
+
+/** At or below this stock level a product triggers a low-stock notification. */
+const LOW_STOCK_THRESHOLD = 10;
 
 /** How many of the newest products the "New Arrivals" browse surfaces. */
 const NEW_ARRIVALS_WINDOW = 24;
@@ -60,6 +67,43 @@ function round2(value: number): number {
 function resolveShippingCost(subtotal: number, deliveryMethod?: string): number {
   if (deliveryMethod === 'express') return EXPRESS_SHIPPING_RATE;
   return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_RATE;
+}
+
+/**
+ * Validates a checkout line's variant choice against the product.
+ *
+ * Mirrors `CartService.resolveVariantId` so an order can't slip through with a
+ * missing or foreign variant just because it skipped the cart. Returns the
+ * matched variant, or null for products that have none.
+ */
+function resolveOrderVariant(
+  product: { name: string; variants: { id: string; name: string }[] },
+  variantId?: string,
+): { id: string; name: string } | null {
+  if (product.variants.length === 0) {
+    if (variantId) {
+      throw new BadRequestException(
+        `"${product.name}" has no variants to choose from`,
+      );
+    }
+    return null;
+  }
+
+  if (!variantId) {
+    const options = product.variants.map((v) => v.name).join(', ');
+    throw new BadRequestException(
+      `Select a variant for "${product.name}" (${options})`,
+    );
+  }
+
+  const match = product.variants.find((v) => v.id === variantId);
+  if (!match) {
+    throw new BadRequestException(
+      `"${variantId}" is not a variant of "${product.name}"`,
+    );
+  }
+
+  return match;
 }
 
 /**
@@ -88,11 +132,14 @@ async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
 
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   constructor(
     private readonly productsService: ProductsService,
     private readonly categoriesService: CategoriesService,
     private readonly messagesService: MessagesService,
     private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -622,19 +669,32 @@ export class PublicService {
   async createOrder(dto: CreatePublicOrderDto) {
     const { contactInfo, shippingAddress, deliveryMethod, items } = dto;
 
-    // Collapse duplicate lines for the same product before pricing, otherwise
-    // the stock check passes per line while the total draw exceeds stock.
-    const quantityByProductId = new Map<string, number>();
+    // A line is identified by (product, variant): two variants of the same
+    // product are two lines. Duplicates of the same pair are collapsed first,
+    // otherwise the stock check passes per line while the total draw exceeds
+    // what's on the shelf.
+    const requested = new Map<
+      string,
+      { productId: string; variantId?: string; quantity: number }
+    >();
     for (const item of items) {
-      quantityByProductId.set(
-        item.productId,
-        (quantityByProductId.get(item.productId) ?? 0) + item.quantity,
-      );
+      const key = `${item.productId}::${item.variantId ?? ''}`;
+      const existing = requested.get(key);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        requested.set(key, {
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        });
+      }
     }
 
-    const productIds = [...quantityByProductId.keys()];
+    const productIds = [...new Set([...requested.values()].map((r) => r.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, visibility: ProductVisibility.PUBLIC },
+      include: { variants: true },
     });
 
     if (products.length !== productIds.length) {
@@ -645,15 +705,30 @@ export class PublicService {
       );
     }
 
-    // Price each line from the database record.
-    const lines = products.map((product) => {
-      const quantity = quantityByProductId.get(product.id)!;
+    const productById = new Map(products.map((p) => [p.id, p]));
 
-      if (product.stock < quantity) {
+    // Stock is held per product, not per variant, so all lines of one product
+    // are summed before the check.
+    const drawByProductId = new Map<string, number>();
+    for (const row of requested.values()) {
+      drawByProductId.set(
+        row.productId,
+        (drawByProductId.get(row.productId) ?? 0) + row.quantity,
+      );
+    }
+    for (const [productId, draw] of drawByProductId) {
+      const product = productById.get(productId)!;
+      if (product.stock < draw) {
         throw new BadRequestException(
           `Only ${product.stock} × "${product.name}" left in stock`,
         );
       }
+    }
+
+    // Price each line from the database record.
+    const lines = [...requested.values()].map((row) => {
+      const product = productById.get(row.productId)!;
+      const variant = resolveOrderVariant(product, row.variantId);
 
       const price = Number(product.price);
       const discount = product.discount ?? 0;
@@ -663,9 +738,10 @@ export class PublicService {
 
       return {
         product,
-        quantity,
+        variantName: variant?.name ?? null,
+        quantity: row.quantity,
         unitPrice,
-        lineTotal: round2(unitPrice * quantity),
+        lineTotal: round2(unitPrice * row.quantity),
       };
     });
 
@@ -709,6 +785,7 @@ export class PublicService {
               name: l.product.name,
               // The real SKU — this is the join key for all sales reporting.
               sku: l.product.sku,
+              variantName: l.variantName,
               quantity: l.quantity,
               unitPrice: new Prisma.Decimal(l.unitPrice),
             })),
@@ -733,6 +810,12 @@ export class PublicService {
       return created;
     });
 
+    // `NotificationsService.emit` existed with a doc comment naming "new order"
+    // as its trigger, but nothing ever called it — which is why the admin
+    // console showed no activity for orders placed by customers.
+    await this.notifyNewOrder(order.orderNumber, customer.fullName, total);
+    await this.notifyLowStock(lines);
+
     return {
       success: true,
       data: {
@@ -746,6 +829,7 @@ export class PublicService {
           productId: l.product.id,
           name: l.product.name,
           sku: l.product.sku,
+          variantName: l.variantName,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           lineTotal: l.lineTotal,
@@ -757,6 +841,71 @@ export class PublicService {
         createdAt: order.createdAt,
       },
     };
+  }
+
+  /**
+   * Broadcast (userId: null) so every admin sees it — a customer order isn't
+   * owned by one staff member.
+   *
+   * Emitted outside the order transaction on purpose: a notification failure
+   * must never roll back a paid order. Both helpers swallow their own errors
+   * for the same reason.
+   */
+  private async notifyNewOrder(
+    orderNumber: string,
+    customerName: string,
+    total: number,
+  ) {
+    try {
+      await this.notifications.emit({
+        type: NotificationType.SUCCESS,
+        category: NotificationCategory.ORDERS,
+        title: `New order ${orderNumber}`,
+        description: `${customerName} placed an order totalling €${total.toFixed(2)}.`,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit new-order notification for ${orderNumber}`,
+        error as Error,
+      );
+    }
+  }
+
+  /**
+   * Flags stock that the order just pushed to a low or empty level, so the
+   * admin finds out from the console rather than from the inventory screen.
+   */
+  private async notifyLowStock(
+    lines: { product: { id: string; name: string }; quantity: number }[],
+  ) {
+    try {
+      const affected = await this.prisma.product.findMany({
+        where: { id: { in: lines.map((l) => l.product.id) } },
+        select: { name: true, stock: true },
+      });
+
+      for (const product of affected) {
+        if (product.stock > LOW_STOCK_THRESHOLD) continue;
+
+        await this.notifications.emit({
+          type:
+            product.stock === 0
+              ? NotificationType.ERROR
+              : NotificationType.WARNING,
+          category: NotificationCategory.INVENTORY,
+          title:
+            product.stock === 0
+              ? `${product.name} is out of stock`
+              : `${product.name} is running low`,
+          description:
+            product.stock === 0
+              ? 'The last unit has just been sold. Restock to keep it on sale.'
+              : `Only ${product.stock} left after the latest order.`,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Failed to emit low-stock notification', error as Error);
+    }
   }
 
   /**

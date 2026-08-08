@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   BadgeCheck,
   CalendarDays,
+  Camera,
   Loader2,
   Lock,
   Mail,
@@ -16,6 +17,7 @@ import {
 import { AccountShell } from "@/components/account/AccountShell";
 import { AccountPageHeader } from "@/components/account/AccountPageHeader";
 import { SectionCard } from "@/components/account/SectionCard";
+import { AvatarUploader } from "@/components/account/AvatarUploader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/ui/field";
@@ -131,6 +133,12 @@ export default function ProfilePage() {
         title="Profile"
         description="Update your personal details and account password."
       />
+
+      {/* Profile picture — its own card because it saves on pick, with no
+          Save button, unlike the form below. */}
+      <SectionCard title="Profile Picture" icon={Camera}>
+        <AvatarUploader fullName={user.fullName} avatarUrl={user.avatarUrl} />
+      </SectionCard>
 
       {/* Personal information */}
       <SectionCard title="Personal Information" icon={User}>

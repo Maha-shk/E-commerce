@@ -1,5 +1,11 @@
-import { post, get, patch } from "@/lib/api/request";
-import type { AuthUser, LoginResponse, PaginatedResponse } from "@/lib/api/types";
+import { post, get, patch, del } from "@/lib/api/request";
+import { api } from "@/lib/api/client";
+import type {
+  ApiResponse,
+  AuthUser,
+  LoginResponse,
+  PaginatedResponse,
+} from "@/lib/api/types";
 
 /** Thin, typed wrappers over the backend's /auth endpoints. */
 
@@ -94,6 +100,22 @@ export const authApi = {
   /** Self-service profile update. Returns the same shape as `me()`. */
   updateProfile: (payload: UpdateProfilePayload) =>
     patch<AuthUser>("/auth/me", payload),
+
+  /**
+   * Uploads a profile picture. Returns the updated user, so callers can write
+   * the result straight into the session store.
+   *
+   * Sent as multipart; the Content-Type header is deliberately left unset so
+   * the browser adds the multipart boundary itself.
+   */
+  uploadAvatar: async (file: File): Promise<AuthUser> => {
+    const body = new FormData();
+    body.append("file", file);
+    const { data } = await api.post<ApiResponse<AuthUser>>("/auth/me/avatar", body);
+    return data.data;
+  },
+
+  removeAvatar: () => del<AuthUser>("/auth/me/avatar"),
 
   getOrders: (params?: {
     page?: number;

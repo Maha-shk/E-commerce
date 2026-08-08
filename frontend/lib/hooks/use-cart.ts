@@ -27,9 +27,9 @@ export function useCart() {
   const mergeGuestCart = useCartStore((s) => s.mergeGuestCart);
 
   const addItem = useCallback(
-    async (productId: string, quantity = 1, color?: string, size?: string) => {
+    async (productId: string, quantity = 1, variantId?: string) => {
       try {
-        await storeAddItem(productId, quantity, color, size);
+        await storeAddItem(productId, quantity, variantId);
         toast.success("Added to cart");
       } catch (err) {
         // The store already normalised the message onto `error`.

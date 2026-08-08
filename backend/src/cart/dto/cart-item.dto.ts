@@ -8,10 +8,23 @@ export class CreateCartItemDto {
   @Min(1)
   quantity: number;
 
+  /**
+   * Which `ProductVariant` the shopper selected.
+   *
+   * Required whenever the product defines variants — enforced in the service,
+   * not here, because the rule depends on the product being added. Products
+   * with no variants must omit it.
+   */
+  @IsOptional()
+  @IsString()
+  variantId?: string;
+
+  /** @deprecated Superseded by `variantId`. Accepted so older clients keep working. */
   @IsOptional()
   @IsString()
   color?: string;
 
+  /** @deprecated Superseded by `variantId`. */
   @IsOptional()
   @IsString()
   size?: string;
@@ -35,6 +48,11 @@ export class CartItemResponseDto {
   image: string | null;
   quantity: number;
   unitPrice: number;
+  /** Selected variant, when the product has any. */
+  variantId?: string;
+  variantName?: string;
+  /** Every variant the product offers, so the cart can render a switcher. */
+  availableVariants?: { id: string; name: string }[];
   color?: string;
   size?: string;
   inStock: boolean;

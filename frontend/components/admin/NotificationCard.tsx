@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 import { StatusDot, type StatusTone } from "@/components/admin/StatusDot";
 import type { Notification, NotificationType } from "@/lib/api/models";
-import { CheckCircle2, Info, TriangleAlert, AlertCircle } from "lucide-react";
+import { CheckCircle2, Info, TriangleAlert, AlertCircle, X } from "lucide-react";
+import { formatDateTime, formatRelative } from "@/lib/admin/format";
 
 /** Icon per notification type. */
 const icons: Record<NotificationType, React.ComponentType<{ className?: string }>> = {
@@ -30,7 +31,10 @@ export function NotificationCard({
   const Icon = icons[notification.type];
   const { chip, tone } = typeConfig[notification.type];
 
-  const time = new Date(notification.createdAt).toLocaleDateString();
+  // "2 hours ago" beats a bare date on a feed where the newest entries are the
+  // point — and it falls back to a formatted date past 30 days.
+  const time = formatRelative(notification.createdAt);
+  const exactTime = formatDateTime(notification.createdAt);
 
   return (
     <div
@@ -50,15 +54,23 @@ export function NotificationCard({
             {!notification.read && <StatusDot tone={tone} className="size-1.5" />}
           </p>
           <div className="flex items-center gap-2">
-            <span className="shrink-0 text-xs whitespace-nowrap text-subtle">{time}</span>
+            <time
+              dateTime={notification.createdAt}
+              title={exactTime}
+              className="shrink-0 text-xs whitespace-nowrap text-subtle"
+            >
+              {time}
+            </time>
             {onDelete && (
+              // Was a bare "×" character in a 0-padding button: a ~10px target
+              // with no hit area and no icon alignment.
               <button
                 type="button"
                 onClick={onDelete}
-                className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 aria-label="Delete notification"
               >
-                ×
+                <X className="size-3.5" aria-hidden />
               </button>
             )}
           </div>

@@ -183,3 +183,41 @@ export const staffApi = {
   update: (id: string, body: unknown) => patch<StaffMember>(`/admin/staff/${id}`, body),
   remove: (id: string) => del<{ message: string }>(`/admin/staff/${id}`),
 };
+
+/* ---- Banners ---- */
+
+/** Mirrors the backend `Banner` model. */
+export type Banner = {
+  id: string;
+  type: "HERO" | "PROMOTIONAL" | "SIDEBAR";
+  title: string;
+  description: string | null;
+  imageUrl: string;
+  mobileImageUrl: string | null;
+  linkUrl: string | null;
+  linkText: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BannerQuery = PaginationQuery & {
+  type?: string;
+  isActive?: boolean;
+};
+
+export const bannersApi = {
+  list: (params?: BannerQuery) => getPaginated<Banner>("/admin/banners", params),
+  detail: (id: string) => get<Banner>(`/admin/banners/${id}`),
+  create: (body: unknown) => post<Banner>("/admin/banners", body),
+  update: (id: string, body: unknown) => patch<Banner>(`/admin/banners/${id}`, body),
+  setActive: (id: string, isActive: boolean) =>
+    patch<Banner>(`/admin/banners/${id}/active`, { isActive }),
+  /** `ids` in display order — index becomes `displayOrder`. */
+  reorder: (ids: string[]) =>
+    patch<{ message: string }>("/admin/banners/reorder", { ids }),
+  remove: (id: string) => del<{ message: string }>(`/admin/banners/${id}`),
+};

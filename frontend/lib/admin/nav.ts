@@ -2,6 +2,7 @@ export type AdminNavIconKey =
   | "dashboard"
   | "product"
   | "category"
+  | "banners"
   | "inventory"
   | "customers"
   | "orders"
@@ -24,6 +25,7 @@ export const adminNav: AdminNavItem[] = [
   { name: "Dashboard", href: "/admin/dashboard", icon: "dashboard", exact: true },
   { name: "Product", href: "/admin/products", icon: "product" },
   { name: "Category", href: "/admin/categories", icon: "category" },
+  { name: "Banners", href: "/admin/banners", icon: "banners" },
   { name: "Inventory", href: "/admin/inventory", icon: "inventory" },
   { name: "Customers", href: "/admin/customers", icon: "customers" },
   { name: "Orders", href: "/admin/orders", icon: "orders" },

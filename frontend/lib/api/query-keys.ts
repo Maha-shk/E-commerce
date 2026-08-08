@@ -32,6 +32,12 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.categories.all, "detail", id] as const,
   },
 
+  banners: {
+    all: ["banners"] as const,
+    list: (params?: unknown) => [...queryKeys.banners.all, "list", params] as const,
+    detail: (id: string) => [...queryKeys.banners.all, "detail", id] as const,
+  },
+
   inventory: {
     all: ["inventory"] as const,
     list: (params?: unknown) => [...queryKeys.inventory.all, "list", params] as const,
