@@ -46,10 +46,15 @@ const statusVariant: Record<Discount["status"], "success" | "info" | "secondary"
   Expired: "secondary",
 };
 
-// ARCHIVED is intentionally absent: it was offered as a filter but nothing in
-// the admin can archive a discount, so selecting it only ever showed an empty
-// table.
-const statusOptions: DiscountCategory[] = ["ACTIVE", "SCHEDULED"];
+/**
+ * The three states the table actually displays.
+ *
+ * These are derived from each campaign date window, not the stored `category`
+ * column. Filtering on `category` could return a row whose badge said
+ * something else — and it offered ARCHIVED, which nothing in the admin can set.
+ */
+const statusOptions = ["Active", "Scheduled", "Expired"] as const;
+type DiscountStatusFilter = (typeof statusOptions)[number];
 
 function formatDiscountValue(discount: Discount): string {
   return discount.type === "PERCENTAGE"
@@ -94,7 +99,7 @@ function DiscountCode({ code }: { code: string }) {
 
 export default function DiscountsPage() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"All" | DiscountCategory>("All");
+  const [status, setStatus] = useState<"All" | DiscountStatusFilter>("All");
   const [page, setPage] = useState(1);
   const [modalTarget, setModalTarget] = useState<Discount | "new" | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Discount | null>(null);
@@ -105,7 +110,7 @@ export default function DiscountsPage() {
     page,
     limit: PAGE_SIZE,
     search: debouncedSearch || undefined,
-    category: status === "All" ? undefined : status,
+    status: status === "All" ? undefined : status,
   });
 
   /*
@@ -115,8 +120,8 @@ export default function DiscountsPage() {
    * all-pages "Total Campaigns" as if the three were comparable.
    */
   const { data: allCount, isLoading: countsLoading } = useDiscounts({ limit: 1 });
-  const { data: activeCount } = useDiscounts({ limit: 1, category: "ACTIVE" });
-  const { data: scheduledCount } = useDiscounts({ limit: 1, category: "SCHEDULED" });
+  const { data: activeCount } = useDiscounts({ limit: 1, status: "Active" });
+  const { data: scheduledCount } = useDiscounts({ limit: 1, status: "Scheduled" });
 
   const createDiscount = useCreateDiscount();
   const updateDiscount = useUpdateDiscount();
@@ -157,7 +162,7 @@ export default function DiscountsPage() {
     );
   }
 
-  function filterByCategory(next: DiscountCategory) {
+  function filterByCategory(next: DiscountStatusFilter) {
     setStatus(next);
     setSearch("");
     setPage(1);
@@ -205,7 +210,7 @@ export default function DiscountsPage() {
 
         <button
           type="button"
-          onClick={() => filterByCategory("ACTIVE")}
+          onClick={() => filterByCategory("Active")}
           className="rounded-xl text-left transition-shadow hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <AdminStatCard
@@ -223,7 +228,7 @@ export default function DiscountsPage() {
 
         <button
           type="button"
-          onClick={() => filterByCategory("SCHEDULED")}
+          onClick={() => filterByCategory("Scheduled")}
           className="rounded-xl text-left transition-shadow hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <AdminStatCard
@@ -253,13 +258,13 @@ export default function DiscountsPage() {
               className="h-10 w-auto min-w-36"
               value={status}
               onChange={(e) =>
-                withPageReset(setStatus)(e.target.value as "All" | DiscountCategory)
+                withPageReset(setStatus)(e.target.value as "All" | DiscountStatusFilter)
               }
             >
               <option value="All">All statuses</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {titleCase(s)}
+                  {s}
                 </option>
               ))}
             </NativeSelect>

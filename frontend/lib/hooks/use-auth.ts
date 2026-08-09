@@ -167,6 +167,9 @@ export function useUpdateProfile() {
     onSuccess: (user) => {
       setUser(user);
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      // The admin profile card reads a different query (profile.me), so it
+      // kept showing the old picture until a hard reload.
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
       toast.success("Profile updated");
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -187,6 +190,9 @@ export function useUploadAvatar() {
     onSuccess: (user) => {
       setUser(user);
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      // The admin profile card reads a different query (profile.me), so it
+      // kept showing the old picture until a hard reload.
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
       toast.success("Profile picture updated");
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -202,6 +208,9 @@ export function useRemoveAvatar() {
     onSuccess: (user) => {
       setUser(user);
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.me });
+      // The admin profile card reads a different query (profile.me), so it
+      // kept showing the old picture until a hard reload.
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
       toast.success("Profile picture removed");
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),

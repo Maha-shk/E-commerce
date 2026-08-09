@@ -5,9 +5,10 @@ import { PublicService } from './public.service';
 import { ProductsModule } from '../products/products.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { MessagesModule } from '../messages/messages.module';
+import { DiscountsModule } from '../discounts/discounts.module';
 
 @Module({
-  imports: [ProductsModule, CategoriesModule, MessagesModule],
+  imports: [ProductsModule, CategoriesModule, MessagesModule, DiscountsModule],
   controllers: [PublicController, PublicOrdersController],
   providers: [PublicService],
   exports: [PublicService],

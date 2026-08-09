@@ -120,7 +120,12 @@ export const customersApi = {
 };
 
 /* ---- Discounts ---- */
-export type DiscountQuery = PaginationQuery & { category?: string; type?: string };
+export type DiscountQuery = PaginationQuery & {
+  /** Derived from the date window — matches the badge shown in the table. */
+  status?: "Active" | "Scheduled" | "Expired";
+  category?: string;
+  type?: string;
+};
 
 export const discountsApi = {
   list: (params?: DiscountQuery) => getPaginated<Discount>("/admin/discounts", params),

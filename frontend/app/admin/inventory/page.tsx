@@ -65,10 +65,11 @@ function StockLevel({ stock, threshold }: { stock: number; threshold: number }) 
     stock === 0 ? "bg-destructive" : stock <= threshold ? "bg-warning" : "bg-success";
 
   return (
-    <div className="flex items-center justify-end gap-2.5">
-      <span className="w-16 font-medium tabular-nums text-foreground">
-        {stock.toLocaleString()}
-      </span>
+    // Bar first, figure last. The column header is right-aligned, so the
+    // rightmost thing in the cell has to be the number — it previously sat to
+    // the LEFT of the bar in a fixed-width box, which left the digits floating
+    // mid-cell and never lining up with the header or with each other.
+    <div className="flex items-center justify-end gap-3">
       <span
         className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted"
         role="img"
@@ -78,6 +79,11 @@ function StockLevel({ stock, threshold }: { stock: number; threshold: number }) 
           className={cn("block h-full rounded-full transition-all duration-300", tone)}
           style={{ width: `${Math.max(pct, stock > 0 ? 4 : 0)}%` }}
         />
+      </span>
+      {/* Fixed width + tabular figures so the ones column lines up down the
+          table however many digits each row has. */}
+      <span className="w-12 text-right font-medium tabular-nums text-foreground">
+        {stock.toLocaleString()}
       </span>
     </div>
   );

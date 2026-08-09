@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -80,6 +81,22 @@ export class DiscountQueryDto extends PaginationQueryDto {
   @IsEnum(DiscountCategory)
   @IsOptional()
   category?: DiscountCategory;
+
+  /**
+   * Filters on the status the table actually displays.
+   *
+   * `category` above is a stored column; the badge shows a status DERIVED from
+   * the date window, so the two could disagree — filtering "ACTIVE" could
+   * return rows labelled "Expired". This filters on the same rule the badge
+   * uses, which is why "Expired" is offered here and not on `category`.
+   */
+  @ApiPropertyOptional({
+    enum: ['Active', 'Scheduled', 'Expired'],
+    description: 'Derived from the campaign date window',
+  })
+  @IsIn(['Active', 'Scheduled', 'Expired'])
+  @IsOptional()
+  status?: 'Active' | 'Scheduled' | 'Expired';
 
   @ApiPropertyOptional({ enum: DiscountType })
   @IsEnum(DiscountType)

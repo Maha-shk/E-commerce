@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ChevronLeft, Loader2, Lock, Package, Truck } from "lucide-react";
 import { CustomerPageShell } from "@/components/customer/CustomerPageShell";
 import { ProductImage } from "@/components/customer/ProductImage";
+import { CouponField, type AppliedCoupon } from "@/components/customer/CouponField";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -123,6 +124,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   // The header's cart badge is owned by CustomerPageShell now.
   const { cart, subtotal, shipping, tax, fetchCart, clearCart } = useCart();
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const { user, isAuthenticated } = useSession();
   const { data: addresses = [] } = useAddresses();
 
@@ -233,7 +235,20 @@ export default function CheckoutPage() {
    * server's pricing) and tax is included.
    */
   const shippingCost = deliveryMethod === "express" ? EXPRESS_SHIPPING : shipping;
-  const total = subtotal + shippingCost + tax;
+
+  /*
+   * Coupon reduction shown here is a PREVIEW. The order posts only the code and
+   * the server recomputes the amount, so a tampered figure cannot change what
+   * is actually charged.
+   */
+  const discount = coupon
+    ? Math.min(
+        coupon.type === "PERCENTAGE" ? (subtotal * coupon.value) / 100 : coupon.value,
+        subtotal,
+      )
+    : 0;
+
+  const total = subtotal + shippingCost + tax - discount;
 
   const deliveryOptions = [
     {
@@ -298,6 +313,8 @@ export default function CheckoutPage() {
             salePrice: item.salePrice,
             image: item.image,
           })),
+          // Only the code — the server resolves and applies the reduction.
+          couponCode: coupon?.code,
           subtotal,
           shippingCost,
           total,
@@ -644,6 +661,26 @@ export default function CheckoutPage() {
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-muted-foreground">Tax</span>
                       <span className="font-medium tabular-nums">{formatMoney(tax)}</span>
+                    </div>
+
+                    {discount > 0 ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-muted-foreground">Discount</span>
+                        <span className="font-medium tabular-nums text-success">
+                          −{formatMoney(discount)}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {/* The storefront had nowhere to enter a promo code, even
+                        though the admin can create campaigns. */}
+                    <div className="pt-1">
+                      <CouponField
+                        applied={coupon}
+                        onApply={setCoupon}
+                        onRemove={() => setCoupon(null)}
+                        disabled={isProcessing}
+                      />
                     </div>
 
                     <div className="mt-1 flex items-center justify-between gap-4 border-t border-border pt-4">

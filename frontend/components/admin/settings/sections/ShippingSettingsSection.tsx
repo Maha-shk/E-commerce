@@ -109,15 +109,6 @@ export function ShippingSettingsSection({ data, onChange }: ShippingSettingsSect
 
       <Divider />
 
-      <ToggleRow
-        id="international-shipping"
-        label="International shipping"
-        description="Allow orders to be shipped outside your home country."
-        defaultChecked
-        checked={getToggleValue("international-shipping", true)}
-        onChange={handleChange}
-      />
-
       {/* Shipping regions */}
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Shipping Regions</p>

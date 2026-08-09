@@ -84,6 +84,20 @@ export class PublicController {
     return this.publicService.getFeaturedProducts({ section, limit });
   }
 
+  /**
+   * Checks a promo code at checkout.
+   *
+   * The only validator lived on `/admin/discounts/validate/:code`, which is
+   * admin-gated — so a customer had no way to check a code, and the checkout
+   * had nowhere to send one. Brute-forcing codes is bounded by the global
+   * ThrottlerGuard, and the response never reveals anything beyond whether the
+   * code is usable and what it is worth.
+   */
+  @Get('discounts/validate/:code')
+  async validateDiscount(@Param('code') code: string) {
+    return this.publicService.validateDiscountCode(code);
+  }
+
   @Get('brands')
   async getBrands() {
     return this.publicService.getBrands();

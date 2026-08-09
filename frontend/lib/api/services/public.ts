@@ -151,6 +151,20 @@ export const publicService = {
    * Sends a contact-form message. Creates (or appends to) the customer's
    * support conversation, which the admin console reads.
    */
+  /**
+   * Checks a promo code before checkout. Returns the campaign terms so the
+   * summary can preview the reduction; the server re-applies it on the order.
+   */
+  async validateDiscount(code: string): Promise<
+    | { valid: true; code: string; type: "PERCENTAGE" | "FIXED_AMOUNT"; value: number }
+    | { valid: false; reason: string }
+  > {
+    const { data } = await api.get<ApiResponse<any>>(
+      `/public/discounts/validate/${encodeURIComponent(code)}`,
+    );
+    return data.data;
+  },
+
   async submitContact(payload: {
     name: string;
     email: string;

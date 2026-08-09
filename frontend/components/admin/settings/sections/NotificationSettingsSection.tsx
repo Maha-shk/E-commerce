@@ -1,8 +1,7 @@
 import { Bell } from "lucide-react";
 import { SettingsSection } from "@/components/admin/settings/SettingsSection";
 import { ToggleRowGroup } from "@/components/admin/settings/ToggleRow";
-import { Divider } from "@/components/admin/settings/Divider";
-import { customerNotifications, adminNotifications } from "@/lib/admin/settings";
+import { adminNotifications } from "@/lib/admin/settings";
 
 interface NotificationSettingsSectionProps {
   data?: Record<string, unknown>;
@@ -20,11 +19,6 @@ export function NotificationSettingsSection({ data, onChange }: NotificationSett
     return defaultValue;
   };
 
-  const customerTogglesWithValues = customerNotifications.map((toggle) => ({
-    ...toggle,
-    defaultChecked: getToggleValue(toggle.id, toggle.defaultChecked),
-  }));
-
   const adminTogglesWithValues = adminNotifications.map((toggle) => ({
     ...toggle,
     defaultChecked: getToggleValue(toggle.id, toggle.defaultChecked),
@@ -35,25 +29,11 @@ export function NotificationSettingsSection({ data, onChange }: NotificationSett
       id="notifications"
       icon={Bell}
       title="Notification Settings"
-      description="Choose which alerts are sent to customers and to your team."
+      description="Choose which alerts are sent to your team."
     >
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">Customer Notifications</p>
-        <ToggleRowGroup
-          items={customerTogglesWithValues}
-          onChange={handleChange}
-        />
-      </div>
-
-      <Divider />
-
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">Admin Notifications</p>
-        <ToggleRowGroup
-          items={adminTogglesWithValues}
-          onChange={handleChange}
-        />
-      </div>
+      {/* The "Customer Notifications" group is gone: customer-facing emails are
+          driven by the order and support flows, not by a toggle here. */}
+      <ToggleRowGroup items={adminTogglesWithValues} onChange={handleChange} />
     </SettingsSection>
   );
 }

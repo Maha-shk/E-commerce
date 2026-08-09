@@ -7,6 +7,7 @@ import {
 import { ProductsService } from '../products/products.service';
 import { CategoriesService } from '../categories/categories.service';
 import { MessagesService } from '../messages/messages.service';
+import { DiscountsService } from '../discounts/discounts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BannerType,
@@ -140,6 +141,7 @@ export class PublicService {
     private readonly messagesService: MessagesService,
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly discounts: DiscountsService,
   ) {}
 
   /**
@@ -566,6 +568,58 @@ export class PublicService {
     };
   }
 
+  /**
+   * Public promo-code check for the checkout page.
+   *
+   * Returns only what the shopper needs — never the campaign's internal record.
+   */
+  async validateDiscountCode(code: string) {
+    const result = await this.discounts.validateCode(code);
+
+    if (!result.valid || !result.discount) {
+      return {
+        success: true,
+        data: { valid: false as const, reason: result.reason ?? 'Invalid code' },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        valid: true as const,
+        code: result.discount.code,
+        type: result.discount.type,
+        value: Number(result.discount.value),
+      },
+    };
+  }
+
+  /**
+   * Resolves a promo code into a cash discount for an order subtotal.
+   *
+   * Pricing stays server-side: the checkout sends only the code, never an
+   * amount. An unusable code is a hard error rather than a silent zero, so a
+   * shopper who saw a discount applied is never charged the full price.
+   */
+  private async resolveDiscount(
+    couponCode: string | undefined,
+    subtotal: number,
+  ): Promise<{ amount: number; code: string | null }> {
+    if (!couponCode?.trim()) return { amount: 0, code: null };
+
+    const result = await this.discounts.validateCode(couponCode);
+    if (!result.valid || !result.discount) {
+      throw new BadRequestException(result.reason ?? 'That promo code is not valid');
+    }
+
+    const { type, value, code } = result.discount;
+    const raw =
+      type === 'PERCENTAGE' ? (subtotal * Number(value)) / 100 : Number(value);
+
+    // Never let a discount exceed the goods total and turn into a refund.
+    return { amount: round2(Math.min(raw, subtotal)), code };
+  }
+
   async getBrands() {
     // Fetch all products to extract unique brands
     const queryParams = {
@@ -791,7 +845,9 @@ export class PublicService {
 
     const subtotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
     const shippingCost = resolveShippingCost(subtotal, deliveryMethod);
-    const total = round2(subtotal + shippingCost);
+    // Re-validated and re-priced here; the client only ever sends the code.
+    const discount = await this.resolveDiscount(dto.couponCode, subtotal);
+    const total = round2(subtotal + shippingCost - discount.amount);
 
     const customer = await this.resolveOrderCustomer(contactInfo, shippingAddress);
 
@@ -822,7 +878,7 @@ export class PublicService {
               ? 'Express Delivery (DHL)'
               : 'Standard Delivery (BRT)',
           shippingCost: new Prisma.Decimal(shippingCost),
-          discount: new Prisma.Decimal(0),
+          discount: new Prisma.Decimal(discount.amount),
           items: {
             create: lines.map((l) => ({
               productId: l.product.id,
@@ -880,6 +936,8 @@ export class PublicService {
         })),
         subtotal,
         shippingCost,
+        discount: discount.amount,
+        discountCode: discount.code,
         total,
         estimatedDelivery,
         createdAt: order.createdAt,

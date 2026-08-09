@@ -113,6 +113,17 @@ export class CreatePublicOrderDto {
   @Type(() => OrderItemDto)
   items!: OrderItemDto[];
 
+  /**
+   * Promo code entered at checkout. Only the CODE is accepted — the discount
+   * amount is resolved and applied server-side, so a crafted request cannot
+   * invent its own reduction.
+   */
+  @ApiPropertyOptional({ example: "WELCOME10" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  couponCode?: string;
+
   /* ---- Client-computed money: accepted, logged if wrong, never trusted ----
    *
    * The browser still posts these. They are declared only so the request

@@ -11,15 +11,11 @@ import { StoreInformationSection } from "@/components/admin/settings/sections/St
 import { CustomerAccountSection } from "@/components/admin/settings/sections/CustomerAccountSection";
 import { OrderSettingsSection } from "@/components/admin/settings/sections/OrderSettingsSection";
 import { ShippingSettingsSection } from "@/components/admin/settings/sections/ShippingSettingsSection";
-import { PaymentSettingsSection } from "@/components/admin/settings/sections/PaymentSettingsSection";
 import { TaxSettingsSection } from "@/components/admin/settings/sections/TaxSettingsSection";
-import { DiscountsPromotionsSection } from "@/components/admin/settings/sections/DiscountsPromotionsSection";
 import { InventorySettingsSection } from "@/components/admin/settings/sections/InventorySettingsSection";
 import { NotificationSettingsSection } from "@/components/admin/settings/sections/NotificationSettingsSection";
 import { SecuritySettingsSection } from "@/components/admin/settings/sections/SecuritySettingsSection";
-import { SeoWebsiteSection } from "@/components/admin/settings/sections/SeoWebsiteSection";
 import { EmailConfigurationSection } from "@/components/admin/settings/sections/EmailConfigurationSection";
-import { AppearanceSettingsSection } from "@/components/admin/settings/sections/AppearanceSettingsSection";
 import { LegalPoliciesSection } from "@/components/admin/settings/sections/LegalPoliciesSection";
 import { BackupSystemSection } from "@/components/admin/settings/sections/BackupSystemSection";
 import { settingsNavItems } from "@/lib/admin/settings";
@@ -44,15 +40,11 @@ const SECTIONS: Record<string, ComponentType<SectionProps>> = {
   "customer-accounts": CustomerAccountSection,
   orders: OrderSettingsSection,
   shipping: ShippingSettingsSection,
-  payments: PaymentSettingsSection,
   tax: TaxSettingsSection,
-  "discounts-promotions": DiscountsPromotionsSection,
   inventory: InventorySettingsSection,
   notifications: NotificationSettingsSection,
   security: SecuritySettingsSection,
-  "seo-website": SeoWebsiteSection,
   email: EmailConfigurationSection,
-  appearance: AppearanceSettingsSection,
   legal: LegalPoliciesSection,
   backup: BackupSystemSection,
 };

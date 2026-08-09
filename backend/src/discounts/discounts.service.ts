@@ -20,8 +20,18 @@ export class DiscountsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: DiscountQueryDto) {
+    const now = new Date();
+
+    // Mirrors `deriveStatus` in SQL so the filter agrees with the badge.
+    const statusWindow: Record<string, Prisma.DiscountWhereInput> = {
+      Scheduled: { startDate: { gt: now } },
+      Expired: { endDate: { lt: now } },
+      Active: { startDate: { lte: now }, endDate: { gte: now } },
+    };
+
     const where: Prisma.DiscountWhereInput = {
       ...(query.category && { category: query.category }),
+      ...(query.status && statusWindow[query.status]),
       ...(query.type && { type: query.type }),
       ...(query.search && {
         OR: [

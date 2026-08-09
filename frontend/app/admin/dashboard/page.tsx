@@ -238,7 +238,15 @@ function RecentOrders() {
         </Badge>
       </div>
 
-      <div className="flex-1">
+      {/*
+       * Scrolls internally instead of growing the card.
+       *
+       * This sits in a grid beside the performance chart. Letting the list set
+       * its own height meant every extra order made the column taller than the
+       * chart and knocked the row out of alignment — the taller each order row
+       * rendered (long order numbers, long customer names), the worse it got.
+       */}
+      <div className="max-h-80 flex-1 overflow-y-auto">
         {isError ? (
           <div className="px-5 py-5">
             <ErrorState error={error} onRetry={() => refetch()} />

@@ -17,15 +17,15 @@ export const settingsNavItems: SettingsNavItem[] = [
   { id: "customer-accounts", label: "Customer Accounts" },
   { id: "orders", label: "Order Settings" },
   { id: "shipping", label: "Shipping" },
-  { id: "payments", label: "Payment Settings" },
+  
   { id: "tax", label: "Tax Settings" },
-  { id: "discounts-promotions", label: "Discounts & Promotions" },
+  
   { id: "inventory", label: "Inventory" },
   { id: "notifications", label: "Notifications" },
   { id: "security", label: "Security" },
-  { id: "seo-website", label: "SEO & Website" },
+  
   { id: "email", label: "Email Configuration" },
-  { id: "appearance", label: "Appearance" },
+  
   { id: "legal", label: "Legal & Policies" },
   { id: "backup", label: "Backup & System" },
 ];
@@ -64,22 +64,10 @@ export const customerAccountToggles: ToggleSetting[] = [
     defaultChecked: true,
   },
   {
-    id: "social-login",
-    label: "Enable social login",
-    description: "Let customers sign in with Google, Apple, or Facebook.",
-    defaultChecked: false,
-  },
-  {
     id: "profile-editing",
     label: "Allow customers to edit profile",
     description: "Customers can update their name, address, and contact details.",
     defaultChecked: true,
-  },
-  {
-    id: "account-deletion",
-    label: "Allow account deletion requests",
-    description: "Customers can request permanent deletion of their account and data.",
-    defaultChecked: false,
   },
 ];
 
@@ -93,18 +81,6 @@ export const cancellationWindowOptions = ["1 hour", "6 hours", "24 hours", "48 h
 export const returnPeriodOptions = ["7 days", "14 days", "30 days", "60 days"];
 
 export const orderToggles: ToggleSetting[] = [
-  {
-    id: "auto-confirm",
-    label: "Auto-confirm orders",
-    description: "Skip manual review and confirm orders as soon as payment succeeds.",
-    defaultChecked: false,
-  },
-  {
-    id: "allow-cancellation",
-    label: "Allow order cancellation",
-    description: "Customers can cancel an order themselves within the time limit below.",
-    defaultChecked: true,
-  },
   {
     id: "order-tracking",
     label: "Enable order tracking",
@@ -142,20 +118,6 @@ export const shippingMethods: ShippingMethod[] = [
     name: "Express Shipping",
     description: "Delivered in 1–2 business days",
     price: "€9.99",
-    defaultChecked: true,
-  },
-  {
-    id: "next-day",
-    name: "Next-Day Delivery",
-    description: "Order before 2 PM for next-day arrival",
-    price: "€14.99",
-    defaultChecked: false,
-  },
-  {
-    id: "pickup",
-    name: "Local Pickup",
-    description: "Collect the order from a service hub",
-    price: "Free",
     defaultChecked: true,
   },
 ];
@@ -347,12 +309,6 @@ export const adminNotifications: ToggleSetting[] = [
     label: "Customer registration alerts",
     description: "Notify admins when a new customer account is created.",
     defaultChecked: false,
-  },
-  {
-    id: "payment-failure-alerts",
-    label: "Payment failure alerts",
-    description: "Immediate alert whenever a payment attempt fails.",
-    defaultChecked: true,
   },
 ];
 

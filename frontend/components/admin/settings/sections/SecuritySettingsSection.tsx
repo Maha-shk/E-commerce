@@ -3,7 +3,6 @@ import { SettingsSection } from "@/components/admin/settings/SettingsSection";
 import { SettingsSelectField } from "@/components/admin/settings/SettingsSelectField";
 import { ToggleRowGroup } from "@/components/admin/settings/ToggleRow";
 import { Divider } from "@/components/admin/settings/Divider";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loginAttemptOptions, passwordExpiryOptions, securityToggles, trustedDevices } from "@/lib/admin/settings";
@@ -42,27 +41,6 @@ export function SecuritySettingsSection({ data, onChange }: SecuritySettingsSect
       title="Security Settings"
       description="Protect admin and customer accounts from unauthorized access."
     >
-      <label
-        htmlFor="two-factor-auth"
-        className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-input bg-muted/30 p-3.5"
-      >
-        <span>
-          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            Two-factor authentication
-            <Badge variant="warning">Recommended</Badge>
-          </span>
-          <span className="mt-0.5 block text-xs leading-relaxed text-subtle">
-            Require a one-time code in addition to a password for admin sign-in.
-          </span>
-        </span>
-        <Switch
-          id="two-factor-auth"
-          checked={getToggleValue("two-factor-auth", false)}
-          onCheckedChange={(checked) => handleChange("two-factor-auth", checked)}
-          className="mt-0.5 shrink-0"
-        />
-      </label>
-
       <div className="grid gap-5 sm:grid-cols-2">
         <SettingsSelectField
           id="login-attempts"
