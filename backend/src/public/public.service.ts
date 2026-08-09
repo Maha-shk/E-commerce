@@ -620,6 +620,32 @@ export class PublicService {
     return { amount: round2(Math.min(raw, subtotal)), code };
   }
 
+  /**
+   * Admin-edited body for one legal page.
+   *
+   * The Settings screen stores these under the `legal` key as
+   * `{ [documentId]: { body, updatedAt } }`. Anything else in that key is
+   * ignored, and a missing document returns null so the storefront falls back
+   * to its own built-in copy rather than rendering an empty page.
+   */
+  async getLegalDocument(id: string) {
+    const row = await this.prisma.setting.findUnique({ where: { key: 'legal' } });
+    const group = (row?.value ?? {}) as Record<string, unknown>;
+    const doc = group[id];
+
+    if (
+      !doc ||
+      typeof doc !== 'object' ||
+      typeof (doc as { body?: unknown }).body !== 'string' ||
+      !(doc as { body: string }).body.trim()
+    ) {
+      return { success: true, data: null };
+    }
+
+    const { body, updatedAt } = doc as { body: string; updatedAt?: string };
+    return { success: true, data: { body, updatedAt: updatedAt ?? null } };
+  }
+
   async getBrands() {
     // Fetch all products to extract unique brands
     const queryParams = {

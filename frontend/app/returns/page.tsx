@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LegalPage, type LegalSection } from "@/components/customer/LegalPage";
+import { type LegalSection } from "@/components/customer/LegalPage";
+import { LegalDocument } from "@/components/customer/LegalDocument";
 import { site } from "@/lib/site";
 
 const SECTIONS: LegalSection[] = [
@@ -152,10 +153,11 @@ const SECTIONS: LegalSection[] = [
 
 export default function ReturnsPage() {
   return (
-    <LegalPage
+    <LegalDocument
+      id="returns"
       title="Returns & Refunds"
       intro={`Not right? You have ${site.returnWindowDays} days to send most items back. Here's how it works.`}
-      sections={SECTIONS}
+      fallbackSections={SECTIONS}
     />
   );
 }

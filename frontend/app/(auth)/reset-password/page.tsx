@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Check, Circle, Loader2 } from "lucide-react";
@@ -50,18 +50,20 @@ function ResetPasswordForm() {
     register,
     handleSubmit,
     control,
-    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { code: "", newPassword: "", confirmPassword: "" },
   });
 
-  const password = watch("newPassword") ?? "";
+  // `useWatch` rather than `watch()`: the latter returns a fresh function on
+  // every render, so the React Compiler bails out of memoizing this whole
+  // component. `useWatch` subscribes to the single field instead.
+  const password = useWatch({ control, name: "newPassword" }) ?? "";
 
   return (
     <AuthCard>
-      <h1 className="font-display text-2xl font-semibold text-foreground">Create new password</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Create a new password</h1>
       <p className="mt-1.5 text-sm text-muted-foreground">
         Enter the code sent to{" "}
         {email ? <span className="font-semibold text-foreground">{email}</span> : "your email"} and
@@ -90,9 +92,7 @@ function ResetPasswordForm() {
         noValidate
       >
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-subtle">
-            Verification code
-          </p>
+          <p className="eyebrow">Verification code</p>
           <Controller
             control={control}
             name="code"
@@ -137,8 +137,8 @@ function ResetPasswordForm() {
         />
 
         <div className="rounded-xl bg-muted/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-subtle">
-            Security checklist
+          <p className="text-xs font-medium text-muted-foreground">
+            Your password needs
           </p>
           <ul className="mt-3 space-y-2.5">
             {rules.map((rule) => {
@@ -152,9 +152,9 @@ function ResetPasswordForm() {
                   )}
                 >
                   {passed ? (
-                    <Check className="size-4 shrink-0" />
+                    <Check className="size-4 shrink-0" aria-hidden />
                   ) : (
-                    <Circle className="size-4 shrink-0 text-subtle" />
+                    <Circle className="size-4 shrink-0 text-border" aria-hidden />
                   )}
                   {rule.label}
                 </li>
@@ -166,20 +166,22 @@ function ResetPasswordForm() {
         <Button
           type="submit"
           size="xl"
-          className="w-full uppercase tracking-wider"
+          className="w-full"
           disabled={!email || resetPassword.isPending}
         >
-          {resetPassword.isPending && <Loader2 className="animate-spin" />}
-          {resetPassword.isPending ? "Updating…" : "Update Password"}
+          {resetPassword.isPending ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : null}
+          {resetPassword.isPending ? "Updating…" : "Update password"}
         </Button>
       </form>
 
       <Link
         href="/login"
-        className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+        className="mt-6 flex items-center justify-center gap-2 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <ArrowLeft className="size-4" />
-        Return to login
+        <ArrowLeft className="size-4" aria-hidden />
+        Back to sign in
       </Link>
     </AuthCard>
   );
@@ -187,11 +189,11 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <AuthShell footer="Trouble resetting? Contact concierge">
+    <AuthShell>
       <Suspense
         fallback={
           <AuthCard className="flex justify-center py-16">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden />
           </AuthCard>
         }
       >

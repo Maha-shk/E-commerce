@@ -98,6 +98,18 @@ export class PublicController {
     return this.publicService.validateDiscountCode(code);
   }
 
+  /**
+   * Admin-edited body for a legal page (privacy, terms, returns, shipping).
+   *
+   * Returns null when the admin has never edited it, which is the storefront's
+   * signal to render its own built-in copy. Without this the Settings editor
+   * wrote to a value nothing could read, so edits never reached the page.
+   */
+  @Get('legal/:id')
+  async getLegalDocument(@Param('id') id: string) {
+    return this.publicService.getLegalDocument(id);
+  }
+
   @Get('brands')
   async getBrands() {
     return this.publicService.getBrands();

@@ -1,73 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { ShieldCheck, ArrowRight, Lock, ShoppingBag } from "lucide-react";
+import { ArrowRight, ShieldCheck, ShoppingBag } from "lucide-react";
 import { AuthShell, AuthCard } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { useSession } from "@/lib/hooks/use-auth";
 
 export default function VerifiedPage() {
-  const { isAuthenticated } = useSession();
+  const { isAuthenticated, hydrated } = useSession();
 
-  // If user is not authenticated (just verified but no session), redirect to login
-  if (!isAuthenticated) {
-    return (
-      <AuthShell showLogo={false} footer="Privacy · Support">
-        <AuthCard className="text-center">
-          <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-success-muted text-success">
-            <ShieldCheck className="size-8" />
-          </span>
+  /*
+   * One card, two destinations.
+   *
+   * This file previously rendered the entire card twice — an if/else whose two
+   * arms differed only in one sentence and the button. It also claimed
+   * "Encrypted session established" in BOTH arms, including the branch that
+   * exists precisely because there is no session yet.
+   *
+   * `hydrated` matters: before the persisted store loads, `isAuthenticated` is
+   * false, so an already-signed-in user would briefly be told to sign in.
+   */
+  const signedIn = hydrated && isAuthenticated;
 
-          <h1 className="mt-5 font-display text-2xl font-semibold text-foreground">Account verified</h1>
-          <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
-            Your email has been successfully verified. Please sign in to continue.
-          </p>
-
-          <Button asChild size="xl" className="mt-6 w-full uppercase tracking-wider">
-            <Link href="/login">
-              Sign In
-              <ArrowRight />
-            </Link>
-          </Button>
-
-          <Separator className="my-6" />
-
-          <p className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wider text-subtle">
-            <Lock className="size-3.5" />
-            Encrypted session established
-          </p>
-        </AuthCard>
-      </AuthShell>
-    );
-  }
-
-  // All users (customers only) go to account page
   return (
-    <AuthShell showLogo={false} footer="Privacy · Support">
+    <AuthShell showBackToStore={false}>
       <AuthCard className="text-center">
         <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-success-muted text-success">
-          <ShieldCheck className="size-8" />
+          <ShieldCheck className="size-8" aria-hidden />
         </span>
 
-        <h1 className="mt-5 font-display text-2xl font-semibold text-foreground">Account verified</h1>
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight">Account verified</h1>
         <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
-          Your account has been successfully verified. Welcome to CENTO Servizi!
+          {signedIn
+            ? "Your email address is confirmed. You're all set."
+            : "Your email address is confirmed. Sign in to continue."}
         </p>
 
-        <Button asChild size="xl" className="mt-6 w-full uppercase tracking-wider">
-          <Link href="/account">
-            Go to My Account
-            <ShoppingBag className="ml-2" />
-          </Link>
+        <Button asChild size="xl" className="mt-6 w-full">
+          {signedIn ? (
+            <Link href="/account">
+              Go to my account
+              <ShoppingBag className="size-4" aria-hidden />
+            </Link>
+          ) : (
+            <Link href="/login">
+              Sign in
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          )}
         </Button>
 
-        <Separator className="my-6" />
-
-        <p className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wider text-subtle">
-          <Lock className="size-3.5" />
-          Encrypted session established
-        </p>
+        <Button asChild variant="ghost" className="mt-2 w-full">
+          <Link href="/products">Continue shopping</Link>
+        </Button>
       </AuthCard>
     </AuthShell>
   );

@@ -165,6 +165,16 @@ export const publicService = {
     return data.data;
   },
 
+  /** Admin-edited body for a legal page, or null to use the built-in copy. */
+  async getLegalDocument(
+    id: string,
+  ): Promise<{ body: string; updatedAt: string | null } | null> {
+    const { data } = await api.get<
+      ApiResponse<{ body: string; updatedAt: string | null } | null>
+    >(`/public/legal/${encodeURIComponent(id)}`);
+    return data.data;
+  },
+
   async submitContact(payload: {
     name: string;
     email: string;

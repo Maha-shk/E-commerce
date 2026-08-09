@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LegalPage, type LegalSection } from "@/components/customer/LegalPage";
+import { type LegalSection } from "@/components/customer/LegalPage";
+import { LegalDocument } from "@/components/customer/LegalDocument";
 import { site, siteAddressLine } from "@/lib/site";
 
 /**
@@ -203,10 +204,11 @@ const SECTIONS: LegalSection[] = [
 
 export default function PrivacyPage() {
   return (
-    <LegalPage
+    <LegalDocument
+      id="privacy"
       title="Privacy Policy"
       intro={`How ${site.name} collects, uses and protects your personal information.`}
-      sections={SECTIONS}
+      fallbackSections={SECTIONS}
     />
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LegalPage, type LegalSection } from "@/components/customer/LegalPage";
+import { type LegalSection } from "@/components/customer/LegalPage";
+import { LegalDocument } from "@/components/customer/LegalDocument";
 import { site, siteAddressLine } from "@/lib/site";
 
 /**
@@ -199,10 +200,11 @@ const SECTIONS: LegalSection[] = [
 
 export default function TermsPage() {
   return (
-    <LegalPage
+    <LegalDocument
+      id="terms"
       title="Terms of Service"
       intro={`The terms that apply when you shop with ${site.name}.`}
-      sections={SECTIONS}
+      fallbackSections={SECTIONS}
     />
   );
 }

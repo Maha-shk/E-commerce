@@ -26,11 +26,11 @@ export default function ForgotPasswordPage() {
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   return (
-    <AuthShell footer="Secure authentication portal © 2024">
+    <AuthShell>
       <AuthCard>
-        <h1 className="font-display text-2xl font-semibold text-foreground">Forgot password</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Forgot your password?</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Enter your email address and we&apos;ll send you a 6-digit code to reset your password.
+          Enter your email address and we&apos;ll send you a 6-digit code to reset it.
         </p>
 
         <form
@@ -42,7 +42,9 @@ export default function ForgotPasswordPage() {
             label="Email address"
             id="email"
             type="email"
-            placeholder="e.g. julian.vane@cento.tech"
+            // Was "e.g. julian.vane@cento.tech" — a fictional person at a
+            // domain the store doesn't own.
+            placeholder="name@example.com"
             autoComplete="email"
             icon={<Mail />}
             error={errors.email?.message}
@@ -51,11 +53,13 @@ export default function ForgotPasswordPage() {
           <Button
             type="submit"
             size="xl"
-            className="w-full uppercase tracking-wider"
+            className="w-full"
             disabled={forgotPassword.isPending}
           >
-            {forgotPassword.isPending && <Loader2 className="animate-spin" />}
-            {forgotPassword.isPending ? "Sending…" : "Send Reset Code"}
+            {forgotPassword.isPending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : null}
+            {forgotPassword.isPending ? "Sending…" : "Send reset code"}
           </Button>
         </form>
 
@@ -63,10 +67,10 @@ export default function ForgotPasswordPage() {
 
         <Link
           href="/login"
-          className="flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          className="flex items-center justify-center gap-2 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          <ArrowLeft className="size-4" />
-          Return to sign in
+          <ArrowLeft className="size-4" aria-hidden />
+          Back to sign in
         </Link>
       </AuthCard>
     </AuthShell>

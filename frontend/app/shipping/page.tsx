@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LegalPage, type LegalSection } from "@/components/customer/LegalPage";
+import { type LegalSection } from "@/components/customer/LegalPage";
+import { LegalDocument } from "@/components/customer/LegalDocument";
 import { formatMoney } from "@/lib/format";
 import { site } from "@/lib/site";
 
@@ -147,10 +148,11 @@ const SECTIONS: LegalSection[] = [
 
 export default function ShippingPage() {
   return (
-    <LegalPage
+    <LegalDocument
+      id="shipping"
       title="Shipping"
       intro="Delivery options, costs and timeframes, and what to do if something goes wrong."
-      sections={SECTIONS}
+      fallbackSections={SECTIONS}
     />
   );
 }

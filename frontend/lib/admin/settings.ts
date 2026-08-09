@@ -361,15 +361,6 @@ export const secondaryColorSwatches = ["#F4F3EF", "#E7F4EC", "#FBF1DA", "#E6F0F9
 
 /* ---- Legal & policies ---- */
 
-export type LegalDocument = { id: string; name: string; lastUpdated: string };
-
-export const legalDocuments: LegalDocument[] = [
-  { id: "privacy", name: "Privacy Policy", lastUpdated: "Sep 12, 2024" },
-  { id: "terms", name: "Terms & Conditions", lastUpdated: "Sep 12, 2024" },
-  { id: "returns", name: "Return Policy", lastUpdated: "Aug 03, 2024" },
-  { id: "shipping-policy", name: "Shipping Policy", lastUpdated: "Aug 03, 2024" },
-  { id: "cookies", name: "Cookie Policy", lastUpdated: "Jun 21, 2024" },
-];
 
 /* ---- Backup & system ---- */
 
