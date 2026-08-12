@@ -7,6 +7,7 @@ import {
   Param,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { WishlistService } from './wishlist.service';
 import { AddToWishlistDto } from './dto/wishlist-item.dto';
 import { WishlistResponseDto } from './dto/wishlist.dto';
@@ -23,8 +24,11 @@ export class WishlistController {
    */
   @Get()
   @ApiOperation({ summary: 'Get user wishlist' })
-  async getWishlist(@CurrentUser('id') userId: string): Promise<WishlistResponseDto> {
-    return this.wishlistService.getWishlist(userId);
+  async getWishlist(
+    @CurrentTenant('id') tenantId: string,
+    @CurrentUser('id') userId: string,
+  ): Promise<WishlistResponseDto> {
+    return this.wishlistService.getWishlist(tenantId, userId);
   }
 
   /**
@@ -33,10 +37,11 @@ export class WishlistController {
   @Post('items')
   @ApiOperation({ summary: 'Add product to wishlist' })
   async addItem(
+    @CurrentTenant('id') tenantId: string,
     @CurrentUser('id') userId: string,
     @Body() dto: AddToWishlistDto,
   ): Promise<WishlistResponseDto> {
-    return this.wishlistService.addItem(userId, dto);
+    return this.wishlistService.addItem(tenantId, userId, dto);
   }
 
   /**
@@ -45,10 +50,11 @@ export class WishlistController {
   @Delete('items/:id')
   @ApiOperation({ summary: 'Remove item from wishlist' })
   async removeItem(
+    @CurrentTenant('id') tenantId: string,
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
   ): Promise<WishlistResponseDto> {
-    return this.wishlistService.removeItem(userId, id);
+    return this.wishlistService.removeItem(tenantId, userId, id);
   }
 
   /**
@@ -56,8 +62,11 @@ export class WishlistController {
    */
   @Delete()
   @ApiOperation({ summary: 'Clear entire wishlist' })
-  async clearWishlist(@CurrentUser('id') userId: string): Promise<WishlistResponseDto> {
-    return this.wishlistService.clearWishlist(userId);
+  async clearWishlist(
+    @CurrentTenant('id') tenantId: string,
+    @CurrentUser('id') userId: string,
+  ): Promise<WishlistResponseDto> {
+    return this.wishlistService.clearWishlist(tenantId, userId);
   }
 
   /**
@@ -65,7 +74,10 @@ export class WishlistController {
    */
   @Get('count')
   @ApiOperation({ summary: 'Get wishlist item count' })
-  async getWishlistCount(@CurrentUser('id') userId: string): Promise<{ count: number }> {
-    return this.wishlistService.getWishlistCount(userId);
+  async getWishlistCount(
+    @CurrentTenant('id') tenantId: string,
+    @CurrentUser('id') userId: string,
+  ): Promise<{ count: number }> {
+    return this.wishlistService.getWishlistCount(tenantId, userId);
   }
 }

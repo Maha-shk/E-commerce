@@ -17,6 +17,8 @@ import {
   Lock,
   Clock,
   ChevronRight,
+  FolderTree,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,19 +26,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { NativeSelect } from "@/components/ui/select-native";
-import { Loader2 } from "lucide-react";
-import { useCategories, useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-admin";
-import type { Product, ProductVisibility, StockStatus } from "@/lib/api/models";
+import { toast } from "sonner";
+import { CatalogPicker } from "@/components/admin/catalog/CatalogPicker";
+import { useCreateProduct, useUpdateProduct } from "@/lib/hooks/use-admin";
+import { useCatalogNode } from "@/lib/hooks/use-catalog";
+import { uploadsApi } from "@/lib/api/services/admin";
+import { getApiErrorMessage } from "@/lib/api/client";
+import type { Product, ProductVisibility } from "@/lib/api/models";
 import { cn } from "@/lib/utils";
 
 type ProductFormProps = {
   mode: "add" | "edit";
   /** Existing product data — omit for "add" so every field starts empty. */
   product?: Product;
+  /** Pre-selected model, from "New product" on a model's page. */
+  initialModelId?: string;
 };
 
-type ImageItem = { id: string; url: string };
+type ImageItem = { id: string; url: string; uploading?: boolean };
 
 const visibilityOptions: {
   value: ProductVisibility;
@@ -49,20 +56,31 @@ const visibilityOptions: {
   { value: "SCHEDULED", label: "Scheduled", description: "Publish on date", icon: Clock },
 ];
 
-export function ProductForm({ mode, product }: ProductFormProps) {
+export function ProductForm({ mode, product, initialModelId }: ProductFormProps) {
   const router = useRouter();
-
-  const { data: categoriesData } = useCategories({ limit: 100 });
-  const categories = categoriesData?.data ?? [];
 
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct(product?.id ?? "");
   const saving = createProduct.isPending || updateProduct.isPending;
 
   const [name, setName] = useState(product?.name ?? "");
-  const [brand, setBrand] = useState(product?.brand ?? "");
-  const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+  /*
+   * A product attaches to a Model, and nothing else. `brand` and `categoryId`
+   * are gone: the Company two levels up *is* the brand, and the Category is
+   * implied by where the Model sits. Only `modelId` is submitted.
+   */
+  const [modelId, setModelId] = useState(product?.modelId ?? initialModelId ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
+
+  /*
+   * The picker needs the whole path, not just the leaf: a bare model id leaves
+   * the three selects above it empty, and each one gates the next. An edit
+   * already carries the trail on the product; arriving from a model's page
+   * with `?modelId=` does not, so it is fetched once.
+   */
+  const seedModel = useCatalogNode("models", product || !initialModelId ? "" : initialModelId);
+  const seedTrail = product?.breadcrumb ?? seedModel.data?.breadcrumb;
+  const seedPending = Boolean(initialModelId) && !product && seedModel.isPending;
 
   const [images, setImages] = useState<ImageItem[]>(() =>
     (product?.images ?? []).map((url, i) => ({ id: `existing-${i}-${url}`, url })),
@@ -98,13 +116,39 @@ export function ProductForm({ mode, product }: ProductFormProps) {
     return { netPrice: net, tax: taxAmount, total: net + taxAmount };
   }, [basePrice, discount]);
 
-  function addImageFiles(files: FileList | null) {
+  /**
+   * Uploads each file and keeps the returned CDN URL.
+   *
+   * Previously this stored `URL.createObjectURL(file)` and submitted that:
+   * a `blob:` URL is a handle into the tab that created it, so every image
+   * saved on this form was a dead link the moment the page was closed. The
+   * upload endpoint already existed — the form just never called it.
+   *
+   * The local blob is still shown while the request is in flight, so the
+   * thumbnail appears immediately rather than after the round-trip.
+   */
+  async function addImageFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const next: ImageItem[] = Array.from(files).map((file, i) => ({
-      id: `${file.name}-${file.size}-${Date.now()}-${i}`,
-      url: URL.createObjectURL(file),
-    }));
-    setImages((prev) => [...prev, ...next]);
+
+    for (const [index, file] of Array.from(files).entries()) {
+      const tempId = `${file.name}-${file.size}-${Date.now()}-${index}`;
+      const previewUrl = URL.createObjectURL(file);
+      setImages((prev) => [...prev, { id: tempId, url: previewUrl, uploading: true }]);
+
+      try {
+        const uploaded = await uploadsApi.image(file, "products");
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === tempId ? { id: tempId, url: uploaded.url } : img,
+          ),
+        );
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        setImages((prev) => prev.filter((img) => img.id !== tempId));
+      } finally {
+        URL.revokeObjectURL(previewUrl);
+      }
+    }
   }
 
   function removeImage(id: string) {
@@ -139,31 +183,45 @@ export function ProductForm({ mode, product }: ProductFormProps) {
     setTags((prev) => prev.filter((t) => t !== value));
   }
 
+  const isUploading = images.some((img) => img.uploading);
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    const stockValue = parseInt(stock) || 0;
+    if (!modelId) {
+      toast.error("Choose where this product sits in the catalogue");
+      return;
+    }
+    if (visibility === "SCHEDULED" && !scheduledDate) {
+      toast.error("A scheduled product needs a publish date");
+      return;
+    }
 
     const productData = {
-      name,
-      brand,
-      categoryId: categoryId || null,
-      description,
-      sku,
-      stock: stockValue,
-      price: parseFloat(basePrice) || 0,
-      discount: parseFloat(discount) || 0,
+      name: name.trim(),
+      // The whole classification, in one field.
+      modelId,
+      description: description.trim(),
+      sku: sku.trim(),
+      stock: parseInt(stock, 10) || 0,
+      price: Number((Number(basePrice) || 0).toFixed(2)),
+      // The API takes a whole-number percentage; parseFloat let "7.5" through
+      // to be rejected as a non-integer.
+      discount: parseInt(discount, 10) || 0,
       visibility,
       scheduledDate: visibility === "SCHEDULED" ? scheduledDate : null,
       tags,
-      images: images.map(img => img.url),
+      // Both replace the existing set on PATCH rather than appending.
+      images: images.map((img) => img.url),
       variants,
     };
 
+    const onSuccess = () => router.push("/admin/products");
+
     if (mode === "add") {
-      createProduct.mutate(productData);
+      createProduct.mutate(productData, { onSuccess });
     } else {
-      updateProduct.mutate(productData);
+      updateProduct.mutate(productData, { onSuccess });
     }
   }
 
@@ -185,8 +243,9 @@ export function ProductForm({ mode, product }: ProductFormProps) {
           <Button asChild variant="outline" size="xl">
             <Link href="/admin/products">Cancel</Link>
           </Button>
-          <Button type="submit" size="xl">
-            Save Product
+          <Button type="submit" size="xl" disabled={saving || isUploading}>
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            {saving ? "Saving…" : isUploading ? "Uploading images…" : "Save Product"}
           </Button>
         </div>
       </div>
@@ -219,45 +278,6 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="brand"
-                    className="text-xs font-semibold uppercase tracking-wider text-subtle"
-                  >
-                    Brand
-                  </Label>
-                  <Input
-                    id="brand"
-                    className="h-11 rounded-lg bg-card"
-                    placeholder="e.g. Cento Design"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="category"
-                    className="text-xs font-semibold uppercase tracking-wider text-subtle"
-                  >
-                    Category
-                  </Label>
-                  <NativeSelect
-                    id="category"
-                    className="h-11 rounded-lg bg-card"
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                  >
-                    <option value="">Uncategorised</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <Label
                   htmlFor="description"
@@ -274,6 +294,55 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Classification — where the product sits in the hierarchy.
+              Its own card rather than two fields in General Information:
+              picking a model is four dependent choices, and it is the one
+              thing a product cannot be saved without. */}
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">
+                <FolderTree className="size-4 text-primary" />
+                Catalogue placement
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Every product belongs to a model. The company is the brand, and
+                the category follows from where the model sits — so there is
+                nothing else to set.
+              </p>
+
+              {seedPending ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-16 animate-pulse rounded-lg bg-muted" />
+                  ))}
+                </div>
+              ) : (
+                <CatalogPicker
+                  // Remounts once the trail resolves, so all four selects
+                  // re-seed from it rather than keeping their empty state.
+                  key={seedTrail?.map((crumb) => crumb.id).join("/") ?? "blank"}
+                  value={modelId}
+                  onChange={setModelId}
+                  initialBreadcrumb={seedTrail}
+                  disabled={saving}
+                />
+              )}
+
+              {mode === "edit" && product ? (
+                <p className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
+                  Currently filed under{" "}
+                  <span className="font-medium text-foreground">
+                    {product.category.name} › {product.company.name} ›{" "}
+                    {product.productType.name} › {product.model.name}
+                  </span>
+                  . Changing the model above moves it.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -295,7 +364,7 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                 onDrop={(e) => {
                   e.preventDefault();
                   setDragActive(false);
-                  addImageFiles(e.dataTransfer.files);
+                  void addImageFiles(e.dataTransfer.files);
                 }}
                 className={cn(
                   "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors",
@@ -325,7 +394,7 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                   accept="image/png,image/jpeg,image/webp"
                   multiple
                   className="hidden"
-                  onChange={(e) => addImageFiles(e.target.files)}
+                  onChange={(e) => void addImageFiles(e.target.files)}
                 />
               </div>
 
@@ -336,16 +405,22 @@ export function ProductForm({ mode, product }: ProductFormProps) {
                       key={img.id}
                       className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-border"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview, not an optimizable remote asset */}
+                      {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN host, plus a local blob while uploading */}
                       <img src={img.url} alt="" className="size-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(img.id)}
-                        aria-label="Remove image"
-                        className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/70 text-background opacity-0 transition-opacity group-hover:opacity-100"
-                      >
-                        <X className="size-3" />
-                      </button>
+                      {img.uploading ? (
+                        <span className="absolute inset-0 flex items-center justify-center bg-background/70">
+                          <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img.id)}
+                          aria-label="Remove image"
+                          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-foreground/70 text-background opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
                     </div>
                   ))}
                   <button

@@ -5,7 +5,7 @@ export class AddToWishlistDto {
   productId: string;
 }
 
-export class CategoryDto {
+export class CatalogRefDto {
   id: string;
   name: string;
   slug: string;
@@ -15,6 +15,7 @@ export class WishlistItemResponseDto {
   id: string;
   productId: string;
   name: string;
+  /** Company name — what the removed `Product.brand` column used to hold. */
   brand: string;
   sku: string;
   price: number;
@@ -25,5 +26,6 @@ export class WishlistItemResponseDto {
   lowStock: boolean;
   stock: number;
   addedAt: string;
-  category: CategoryDto | null;
+  category: CatalogRefDto | null;
+  model: CatalogRefDto | null;
 }

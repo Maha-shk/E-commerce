@@ -7,6 +7,22 @@ export default () => ({
   port: parseInt(process.env.PORT ?? '4000', 10),
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
 
+  tenancy: {
+    /**
+     * Store to fall back to when a storefront request identifies no tenant of
+     * its own — no matching domain, no X-Tenant-Slug header, no ?tenant=.
+     *
+     * Without it, adding a second tenant would break every request coming from
+     * a host that isn't mapped yet (localhost above all), because "the only
+     * tenant" is no longer an unambiguous answer. Server-configured, never
+     * caller-supplied, so it cannot be used to reach across tenants.
+     *
+     * Leave unset in a true multi-tenant deployment: an unidentified request
+     * should then be an error rather than land in someone's store.
+     */
+    fallbackSlug: process.env.TENANT_FALLBACK_SLUG ?? 'default',
+  },
+
   database: {
     url: process.env.DATABASE_URL,
   },

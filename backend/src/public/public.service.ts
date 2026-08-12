@@ -5,14 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProductsService } from '../products/products.service';
-import { CategoriesService } from '../categories/categories.service';
+import { CatalogService } from '../catalog/catalog.service';
+import { CATEGORY_SPEC } from '../catalog/catalog.constants';
 import { MessagesService } from '../messages/messages.service';
 import { DiscountsService } from '../discounts/discounts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BannerType,
-  CategoryStatus,
-  CategoryVisibility,
+  CatalogStatus,
+  CatalogVisibility,
   FeaturedSection,
   MessageDirection,
   NotificationCategory,
@@ -115,11 +116,14 @@ function resolveOrderVariant(
  * of time. Runs inside the order transaction so the read and the insert can't
  * interleave with another checkout.
  */
-async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
+async function nextOrderNumber(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+): Promise<string> {
   const prefix = `ORD-${new Date().getFullYear()}-`;
 
   const latest = await tx.order.findFirst({
-    where: { orderNumber: { startsWith: prefix } },
+    where: { tenantId, orderNumber: { startsWith: prefix } },
     orderBy: { orderNumber: 'desc' },
     select: { orderNumber: true },
   });
@@ -137,7 +141,7 @@ export class PublicService {
 
   constructor(
     private readonly productsService: ProductsService,
-    private readonly categoriesService: CategoriesService,
+    private readonly catalog: CatalogService,
     private readonly messagesService: MessagesService,
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -152,15 +156,19 @@ export class PublicService {
    * `displayOrder` first — the homepage takes `[0]` as the hero, so that column
    * is what decides which one wins.
    */
-  async getBanners(params?: {
-    type?: string;
-    isActive?: boolean;
-    limit?: number;
-  }) {
+  async getBanners(
+    tenantId: string,
+    params?: {
+      type?: string;
+      isActive?: boolean;
+      limit?: number;
+    },
+  ) {
     const now = new Date();
 
     const banners = await this.prisma.banner.findMany({
       where: {
+        tenantId,
         ...(params?.type && { type: params.type as BannerType }),
         ...(params?.isActive !== undefined && { isActive: params.isActive }),
         // `null` means "no bound", so each side is an OR against null.
@@ -188,13 +196,17 @@ export class PublicService {
     };
   }
 
-  async getCategories(params?: any) {
-    const result = await this.categoriesService.findAll({
-      ...params,
+  async getCategories(tenantId: string, params?: any) {
+    const result = await this.catalog.list(tenantId, CATEGORY_SPEC, {
+      page: Number(params?.page) || 1,
+      limit: Number(params?.limit) || 100,
+      sortBy: 'position',
+      sortOrder: 'asc',
+      withCounts: true,
       // Same rule as products: an archived or hidden category is an admin-side
       // state and must never reach the storefront. Not caller controlled.
-      status: CategoryStatus.ACTIVE,
-      visibility: CategoryVisibility.VISIBLE,
+      status: CatalogStatus.ACTIVE,
+      visibility: CatalogVisibility.VISIBLE,
     });
 
     return {
@@ -204,13 +216,16 @@ export class PublicService {
         name: cat.name,
         slug: cat.slug,
         description: cat.description || '',
+        icon: cat.icon || null,
+        imageUrl: cat.imageUrl || null,
         thumbnailName: cat.thumbnailName || null,
-        productCount: cat.products || 0,
+        companyCount: cat.childCount ?? 0,
+        productCount: cat.productCount ?? 0,
       })),
     };
   }
 
-  async getProducts(params?: any) {
+  async getProducts(tenantId: string, params?: any) {
     // Ensure pagination params have defaults
     const page = params?.page ? Number(params.page) : 1;
     const limit = params?.limit ? Number(params.limit) : 20;
@@ -229,6 +244,9 @@ export class PublicService {
       sortBy: 'createdAt' as const,
       sortOrder: 'desc' as const,
       ...(params?.categoryId && { categoryId: params.categoryId }),
+      ...(params?.companyId && { companyId: params.companyId }),
+      ...(params?.productTypeId && { productTypeId: params.productTypeId }),
+      ...(params?.modelId && { modelId: params.modelId }),
       ...(params?.search && { search: params.search }),
       // The storefront only ever shows PUBLIC products. This is not caller
       // controlled: the admin's PRIVATE and SCHEDULED products were previously
@@ -236,7 +254,7 @@ export class PublicService {
       visibility: ProductVisibility.PUBLIC,
     };
 
-    const products = await this.productsService.findAll(queryParams);
+    const products = await this.productsService.findAll(tenantId, queryParams);
     let rows = products.data;
     let total = products.meta?.total ?? rows.length;
 
@@ -249,7 +267,7 @@ export class PublicService {
         rows = rows.slice(0, NEW_ARRIVALS_WINDOW);
       }
       if (params?.bestsellers) {
-        rows = await this.rankBySalesVolume(rows);
+        rows = await this.rankBySalesVolume(tenantId, rows);
       }
 
       total = rows.length;
@@ -260,44 +278,7 @@ export class PublicService {
 
     return {
       success: true,
-      data: rows.map((product: any) => {
-        const discount = product.discount || 0;
-        const price = Number(product.price) || 0;
-        const stock = product.stock || 0;
-        const salePrice = price - (price * (discount / 100));
-        const images = product.images || [];
-        const variants = product.variants || [];
-
-        return {
-          id: product.id,
-          name: product.name,
-          brand: product.brand || '',
-          description: product.description || '',
-          sku: product.sku || '',
-          stock: stock,
-          status: product.status || 'IN_STOCK',
-          price: price,
-          discount: discount,
-          visibility: product.visibility || 'PUBLIC',
-          scheduledDate: product.scheduledDate || null,
-          tags: product.tags || [],
-          categoryId: product.categoryId || null,
-          category: product.category ? {
-            id: product.category.id,
-            name: product.category.name,
-            slug: product.category.slug,
-          } : null,
-          images: images,
-          variants: variants,
-          variantCount: variants.length,
-          inStock: stock > 0,
-          lowStock: stock > 0 && stock <= 10,
-          salePrice: salePrice,
-          discountPercent: discount,
-          createdAt: product.createdAt,
-          updatedAt: product.updatedAt,
-        };
-      }),
+      data: rows.map((product: any) => this.toStorefrontProduct(product)),
       meta: { ...products.meta, total },
     };
   }
@@ -318,7 +299,10 @@ export class PublicService {
    * on SKU. Only PAID-or-later orders count, so an abandoned PENDING order
    * can't inflate a ranking.
    */
-  private async rankBySalesVolume<T extends { sku?: string }>(rows: T[]): Promise<T[]> {
+  private async rankBySalesVolume<T extends { sku?: string }>(
+    tenantId: string,
+    rows: T[],
+  ): Promise<T[]> {
     const skus = rows.map((r) => r.sku).filter(Boolean) as string[];
     if (skus.length === 0) return [];
 
@@ -328,6 +312,7 @@ export class PublicService {
         sku: { in: skus },
         // A cancelled or unpaid order is not a sale.
         order: {
+          tenantId,
           paymentStatus: PaymentStatus.PAID,
           status: { notIn: [OrderStatus.CANCELLED, OrderStatus.RETURNED] },
         },
@@ -352,13 +337,13 @@ export class PublicService {
       .map((entry) => entry.row);
   }
 
-  async getProduct(params: { id?: string; slug?: string }) {
+  async getProduct(tenantId: string, params: { id?: string; slug?: string }) {
     if (!params.id) {
       // Was a bare Error, which surfaced as a 500 for what is a client mistake.
       throw new BadRequestException('Product ID is required');
     }
 
-    const found = await this.productsService.findOne(params.id);
+    const found = await this.productsService.findOne(tenantId, params.id);
 
     // findOne is the admin lookup and ignores visibility. Without this check a
     // PRIVATE or SCHEDULED product's detail page is reachable by guessing an id.
@@ -370,45 +355,7 @@ export class PublicService {
     // ids rather than the flattened names.
     const [product] = await this.withVariantRows([found]);
 
-    const discount = product.discount || 0;
-    const price = Number(product.price) || 0;
-    const stock = product.stock || 0;
-    const salePrice = price - (price * (discount / 100));
-    const images = product.images || [];
-    const variants = product.variants || [];
-
-    return {
-      success: true,
-      data: {
-        id: product.id,
-        name: product.name,
-        brand: product.brand || '',
-        description: product.description || '',
-        sku: product.sku || '',
-        stock: stock,
-        status: product.status || 'IN_STOCK',
-        price: price,
-        discount: discount,
-        visibility: product.visibility || 'PUBLIC',
-        scheduledDate: product.scheduledDate || null,
-        tags: product.tags || [],
-        categoryId: product.categoryId || null,
-        category: product.category ? {
-          id: product.category.id,
-          name: product.category.name,
-          slug: product.category.slug,
-        } : null,
-        images: images,
-        variants: variants,
-        variantCount: variants.length,
-        inStock: stock > 0,
-        lowStock: stock > 0 && stock <= 10,
-        salePrice: salePrice,
-        discountPercent: discount,
-        createdAt: product.createdAt,
-        updatedAt: product.updatedAt,
-      },
-    };
+    return { success: true, data: this.toStorefrontProduct(product) };
   }
 
   /**
@@ -426,16 +373,19 @@ export class PublicService {
    * section has no curated rows the automatic ranking above is used, so the
    * homepage is never empty.
    */
-  async getFeaturedProducts(params: { section: string; limit?: number }) {
+  async getFeaturedProducts(
+    tenantId: string,
+    params: { section: string; limit?: number },
+  ) {
     const limit = Number(params.limit) || 4;
     const section = params.section as FeaturedSection;
 
-    const curated = await this.getCuratedSection(section, limit);
+    const curated = await this.getCuratedSection(tenantId, section, limit);
     if (curated.length > 0) {
       return { success: true, data: curated.map((p) => this.toStorefrontProduct(p)) };
     }
 
-    const products = await this.productsService.findAll({
+    const products = await this.productsService.findAll(tenantId, {
       page: 1,
       // Scan wide, then rank/filter — the interesting product may not be in
       // the newest `limit` rows.
@@ -451,7 +401,7 @@ export class PublicService {
     if (section === 'SALE') {
       filteredProducts = filteredProducts.filter((p: any) => (p.discount || 0) > 0);
     } else if (section === 'BEST_SELLERS') {
-      filteredProducts = await this.rankBySalesVolume(filteredProducts);
+      filteredProducts = await this.rankBySalesVolume(tenantId, filteredProducts);
     }
     // NEW_ARRIVALS needs no extra work: the query is already newest-first.
 
@@ -470,11 +420,16 @@ export class PublicService {
    * Returns `[]` when the section has not been curated, which is the signal to
    * fall back to the automatic ranking.
    */
-  private async getCuratedSection(section: FeaturedSection, limit: number) {
+  private async getCuratedSection(
+    tenantId: string,
+    section: FeaturedSection,
+    limit: number,
+  ) {
     if (!Object.values(FeaturedSection).includes(section)) return [];
 
     const featured = await this.prisma.featuredProduct.findMany({
       where: {
+        tenantId,
         section,
         isActive: true,
         // A curated pick still has to be publicly visible, or the admin could
@@ -484,7 +439,19 @@ export class PublicService {
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'desc' }],
       take: limit,
       include: {
-        product: { include: { images: true, category: true, variants: true } },
+        product: {
+          include: {
+            images: true,
+            variants: true,
+            model: {
+              include: {
+                productType: {
+                  include: { company: { include: { category: true } } },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -527,18 +494,38 @@ export class PublicService {
     }));
   }
 
-  /** Single shape for every storefront product payload. */
+  /**
+   * Single shape for every storefront product payload.
+   *
+   * Accepts both shapes a product arrives in: the flattened view from
+   * `ProductsService.toProductView` (which already splits the chain into
+   * `model` / `productType` / `company` / `category`) and a raw Prisma row with
+   * the `model.productType.company.category` relation loaded, which is what the
+   * curated-rail query returns.
+   */
   private toStorefrontProduct(product: any) {
     const discount = product.discount || 0;
     const price = Number(product.price) || 0;
     const stock = product.stock || 0;
-    const images = product.images || [];
+    const images = (product.images || []).map((image: any) =>
+      typeof image === 'string' ? image : image.url,
+    );
     const variants = product.variants || [];
+
+    const model = product.model ?? null;
+    const productType = product.productType ?? model?.productType ?? null;
+    const company = product.company ?? productType?.company ?? null;
+    const category = product.category ?? company?.category ?? null;
+
+    const ref = (node: any) =>
+      node ? { id: node.id, name: node.name, slug: node.slug } : null;
 
     return {
       id: product.id,
       name: product.name,
-      brand: product.brand || '',
+      // The Company is the brand now; kept under the old key so the storefront
+      // filter and product cards keep working unchanged.
+      brand: company?.name ?? '',
       description: product.description || '',
       sku: product.sku || '',
       stock,
@@ -548,14 +535,26 @@ export class PublicService {
       visibility: product.visibility || 'PUBLIC',
       scheduledDate: product.scheduledDate || null,
       tags: product.tags || [],
-      categoryId: product.categoryId || null,
-      category: product.category
-        ? {
-            id: product.category.id,
-            name: product.category.name,
-            slug: product.category.slug,
-          }
+
+      // The full classification, so a product card can link back up the tree.
+      categoryId: category?.id ?? null,
+      category: ref(category),
+      company: company
+        ? { ...ref(company), imageUrl: company.imageUrl ?? null }
         : null,
+      productType: ref(productType),
+      model: ref(model),
+      breadcrumb: [
+        category && { level: 'CATEGORY', segment: 'categories', ...ref(category) },
+        company && { level: 'COMPANY', segment: 'companies', ...ref(company) },
+        productType && {
+          level: 'PRODUCT_TYPE',
+          segment: 'product-types',
+          ...ref(productType),
+        },
+        model && { level: 'MODEL', segment: 'models', ...ref(model) },
+      ].filter(Boolean),
+
       images,
       variants,
       variantCount: variants.length,
@@ -573,8 +572,8 @@ export class PublicService {
    *
    * Returns only what the shopper needs — never the campaign's internal record.
    */
-  async validateDiscountCode(code: string) {
-    const result = await this.discounts.validateCode(code);
+  async validateDiscountCode(tenantId: string, code: string) {
+    const result = await this.discounts.validateCode(tenantId, code);
 
     if (!result.valid || !result.discount) {
       return {
@@ -602,12 +601,13 @@ export class PublicService {
    * shopper who saw a discount applied is never charged the full price.
    */
   private async resolveDiscount(
+    tenantId: string,
     couponCode: string | undefined,
     subtotal: number,
   ): Promise<{ amount: number; code: string | null }> {
     if (!couponCode?.trim()) return { amount: 0, code: null };
 
-    const result = await this.discounts.validateCode(couponCode);
+    const result = await this.discounts.validateCode(tenantId, couponCode);
     if (!result.valid || !result.discount) {
       throw new BadRequestException(result.reason ?? 'That promo code is not valid');
     }
@@ -646,35 +646,44 @@ export class PublicService {
     return { success: true, data: { body, updatedAt: updatedAt ?? null } };
   }
 
-  async getBrands() {
-    // Fetch all products to extract unique brands
-    const queryParams = {
-      page: 1,
-      limit: 1000, // Get all products to extract brands
-      skip: 0,
-      sortBy: 'name' as const,
-      sortOrder: 'asc' as const,
-      // A brand that only appears on unreleased products would otherwise leak
-      // through the storefront's brand filter.
-      visibility: ProductVisibility.PUBLIC,
-    };
+  /**
+   * Brands, which are now first-class Company rows rather than a free-text
+   * column scraped off every product.
+   *
+   * Only companies that actually have something to sell are returned, so the
+   * storefront filter never offers a brand that yields an empty result.
+   */
+  async getBrands(tenantId: string, params?: { categoryId?: string }) {
+    const companies = await this.prisma.company.findMany({
+      where: {
+        tenantId,
+        status: CatalogStatus.ACTIVE,
+        visibility: CatalogVisibility.VISIBLE,
+        ...(params?.categoryId && { categoryId: params.categoryId }),
+        productTypes: {
+          some: {
+            models: {
+              some: {
+                products: { some: { visibility: ProductVisibility.PUBLIC } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ position: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        categoryId: true,
+      },
+    });
 
-    const products = await this.productsService.findAll(queryParams);
-
-    // Extract unique brands and filter out null/empty values
-    const brands = [...new Set(
-      products.data
-        .map((product: any) => product.brand)
-        .filter((brand: string) => brand && brand.trim().length > 0)
-    )].sort(); // Sort alphabetically
-
-    return {
-      success: true,
-      data: brands,
-    };
+    return { success: true, data: companies };
   }
 
-  async submitContactForm(data: ContactFormDto) {
+  async submitContactForm(tenantId: string, data: ContactFormDto) {
     // `Conversation.customerId` is required, so a contact submission from a
     // stranger has to be attached to a User row. That placeholder is NOT a
     // registered account: it has no usable password and has never accepted
@@ -689,6 +698,7 @@ export class PublicService {
     // Check if a customer with this email already exists
     let customer = await this.prisma.user.findFirst({
       where: {
+        tenantId,
         email,
         role: Role.CUSTOMER,
       },
@@ -699,6 +709,7 @@ export class PublicService {
     if (!customer) {
       customer = await this.prisma.user.create({
         data: {
+          tenantId,
           email,
           fullName: data.name,
           role: Role.CUSTOMER,
@@ -717,7 +728,7 @@ export class PublicService {
 
     // Check if there's an existing conversation for this customer
     const existingConversation = await this.prisma.conversation.findFirst({
-      where: { customerId: customer.id },
+      where: { tenantId, customerId: customer.id },
       select: { id: true },
     });
 
@@ -754,6 +765,7 @@ export class PublicService {
       // Create new conversation with the message
       const conversation = await this.prisma.conversation.create({
         data: {
+          tenantId,
           customerId: customer.id,
           messages: {
             create: {
@@ -790,7 +802,7 @@ export class PublicService {
    * Runs in one transaction: stock is re-checked and decremented alongside the
    * insert so two shoppers can't both buy the last unit.
    */
-  async createOrder(dto: CreatePublicOrderDto) {
+  async createOrder(tenantId: string, dto: CreatePublicOrderDto) {
     const { contactInfo, shippingAddress, deliveryMethod, items } = dto;
 
     // A line is identified by (product, variant): two variants of the same
@@ -817,8 +829,23 @@ export class PublicService {
 
     const productIds = [...new Set([...requested.values()].map((r) => r.productId))];
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, visibility: ProductVisibility.PUBLIC },
-      include: { variants: true },
+      where: {
+        tenantId,
+        id: { in: productIds },
+        visibility: ProductVisibility.PUBLIC,
+      },
+      include: {
+        variants: true,
+        // Loaded so each order line can snapshot where the product sat in
+        // the catalog at the time of sale.
+        model: {
+          include: {
+            productType: {
+              include: { company: { include: { category: true } } },
+            },
+          },
+        },
+      },
     });
 
     if (products.length !== productIds.length) {
@@ -872,10 +899,14 @@ export class PublicService {
     const subtotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
     const shippingCost = resolveShippingCost(subtotal, deliveryMethod);
     // Re-validated and re-priced here; the client only ever sends the code.
-    const discount = await this.resolveDiscount(dto.couponCode, subtotal);
+    const discount = await this.resolveDiscount(tenantId, dto.couponCode, subtotal);
     const total = round2(subtotal + shippingCost - discount.amount);
 
-    const customer = await this.resolveOrderCustomer(contactInfo, shippingAddress);
+    const customer = await this.resolveOrderCustomer(
+      tenantId,
+      contactInfo,
+      shippingAddress,
+    );
 
     const addressLines = [
       `${shippingAddress.firstName} ${shippingAddress.lastName}`,
@@ -895,7 +926,8 @@ export class PublicService {
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: {
-          orderNumber: await nextOrderNumber(tx),
+          tenantId,
+          orderNumber: await nextOrderNumber(tx, tenantId),
           customerId: customer.id,
           status: OrderStatus.PENDING,
           shippingAddress: addressLines,
@@ -912,6 +944,12 @@ export class PublicService {
               // The real SKU — this is the join key for all sales reporting.
               sku: l.product.sku,
               variantName: l.variantName,
+              // Classification frozen at the moment of sale, so reports stay
+              // truthful even if the catalog is reorganised afterwards.
+              modelName: l.product.model.name,
+              productTypeName: l.product.model.productType.name,
+              companyName: l.product.model.productType.company.name,
+              categoryName: l.product.model.productType.company.category.name,
               quantity: l.quantity,
               unitPrice: new Prisma.Decimal(l.unitPrice),
             })),
@@ -923,7 +961,7 @@ export class PublicService {
       // order that already took the last unit fail here rather than oversell.
       for (const line of lines) {
         const claimed = await tx.product.updateMany({
-          where: { id: line.product.id, stock: { gte: line.quantity } },
+          where: { id: line.product.id, tenantId, stock: { gte: line.quantity } },
           data: { stock: { decrement: line.quantity } },
         });
         if (claimed.count === 0) {
@@ -939,8 +977,8 @@ export class PublicService {
     // `NotificationsService.emit` existed with a doc comment naming "new order"
     // as its trigger, but nothing ever called it — which is why the admin
     // console showed no activity for orders placed by customers.
-    await this.notifyNewOrder(order.orderNumber, customer.fullName, total);
-    await this.notifyLowStock(lines);
+    await this.notifyNewOrder(tenantId, order.orderNumber, customer.fullName, total);
+    await this.notifyLowStock(tenantId, lines);
 
     return {
       success: true,
@@ -980,12 +1018,13 @@ export class PublicService {
    * for the same reason.
    */
   private async notifyNewOrder(
+    tenantId: string,
     orderNumber: string,
     customerName: string,
     total: number,
   ) {
     try {
-      await this.notifications.emit({
+      await this.notifications.emit(tenantId, {
         type: NotificationType.SUCCESS,
         category: NotificationCategory.ORDERS,
         title: `New order ${orderNumber}`,
@@ -1004,18 +1043,19 @@ export class PublicService {
    * admin finds out from the console rather than from the inventory screen.
    */
   private async notifyLowStock(
+    tenantId: string,
     lines: { product: { id: string; name: string }; quantity: number }[],
   ) {
     try {
       const affected = await this.prisma.product.findMany({
-        where: { id: { in: lines.map((l) => l.product.id) } },
+        where: { tenantId, id: { in: lines.map((l) => l.product.id) } },
         select: { name: true, stock: true },
       });
 
       for (const product of affected) {
         if (product.stock > LOW_STOCK_THRESHOLD) continue;
 
-        await this.notifications.emit({
+        await this.notifications.emit(tenantId, {
           type:
             product.stock === 0
               ? NotificationType.ERROR
@@ -1045,12 +1085,15 @@ export class PublicService {
    * the real owner from ever registering that address.
    */
   private async resolveOrderCustomer(
+    tenantId: string,
     contactInfo: OrderContactDto,
     shippingAddress: OrderAddressDto,
   ) {
     const email = contactInfo.email.toLowerCase().trim();
 
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    const existing = await this.prisma.user.findFirst({
+      where: { tenantId, email },
+    });
     if (existing) {
       // Fill in a phone number we didn't have; never overwrite a real one.
       if (!existing.phone && contactInfo.phone) {
@@ -1064,6 +1107,7 @@ export class PublicService {
 
     return this.prisma.user.create({
       data: {
+        tenantId,
         email,
         fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`.trim(),
         phone: contactInfo.phone,
@@ -1075,9 +1119,10 @@ export class PublicService {
       },
     });
   }
-  async getOrderByNumber(orderNumber: string) {
+  async getOrderByNumber(tenantId: string, orderNumber: string) {
     const order = await this.prisma.order.findFirst({
       where: {
+        tenantId,
         orderNumber: orderNumber,
       },
       include: {

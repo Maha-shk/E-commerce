@@ -29,8 +29,8 @@ import {
   useInventory,
   useInventoryStats,
   useAdjustStock,
-  useCategories,
 } from "@/lib/hooks/use-admin";
+import { useCatalogList } from "@/lib/hooks/use-catalog";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { downloadCsv } from "@/lib/admin/csv";
 import { formatCompact, formatDate, formatEuro, formatRelative } from "@/lib/admin/format";
@@ -107,7 +107,14 @@ export default function InventoryPage() {
   });
 
   const { data: stats, isLoading: statsLoading } = useInventoryStats();
-  const { data: categoriesData } = useCategories({ limit: 100 });
+  // The filter still works on Category, three levels above a product — the
+  // inventory endpoint resolves the path down to it server-side.
+  const { data: categoriesData } = useCatalogList("categories", {
+    limit: 100,
+    withCounts: false,
+    sortBy: "name",
+    sortOrder: "asc",
+  });
   const adjustStock = useAdjustStock();
 
   const inventory = data?.data ?? [];
@@ -135,11 +142,23 @@ export default function InventoryPage() {
   function handleExport() {
     downloadCsv(
       "inventory.csv",
-      ["Name", "SKU", "Category", "Stock", "Unit value", "Status", "Last updated"],
+      [
+        "Name",
+        "SKU",
+        "Category",
+        "Company",
+        "Model",
+        "Stock",
+        "Unit value",
+        "Status",
+        "Last updated",
+      ],
       inventory.map((i) => [
         i.name,
         i.sku,
-        i.category || "",
+        i.category.name,
+        i.company.name,
+        i.model.name,
         String(i.stock),
         i.unitValue.toFixed(2),
         stockStatusLabel[i.status],
@@ -385,12 +404,17 @@ export default function InventoryPage() {
                         >
                           {item.name}
                         </Link>
+                        {/* Which model this part fits — on a stock screen that
+                            is usually what disambiguates two similar lines. */}
+                        <p className="max-w-xs truncate text-xs text-subtle">
+                          {item.company.name} · {item.model.name}
+                        </p>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
                         {item.sku}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
-                        {item.category || "—"}
+                        {item.category.name}
                       </td>
                       <td className="px-3 py-3">
                         <Badge variant={statusVariant[item.status]} className="h-6 px-2.5">

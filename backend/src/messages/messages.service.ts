@@ -24,9 +24,9 @@ export class MessagesService {
    * Backs the customer-facing inbox: admin replies previously existed only in
    * the admin console, so a customer had no way to read one.
    */
-  async findAllForCustomer(customerId: string) {
+  async findAllForCustomer(tenantId: string, customerId: string) {
     const conversations = await this.prisma.conversation.findMany({
-      where: { customerId },
+      where: { tenantId, customerId },
       orderBy: { lastMessageAt: 'desc' },
       include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
@@ -48,9 +48,14 @@ export class MessagesService {
   }
 
   /** Appends a customer follow-up to their own conversation. */
-  async addCustomerMessage(customerId: string, conversationId: string, text: string) {
+  async addCustomerMessage(
+    tenantId: string,
+    customerId: string,
+    conversationId: string,
+    text: string,
+  ) {
     const conversation = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, customerId },
+      where: { id: conversationId, tenantId, customerId },
       select: { id: true },
     });
     if (!conversation) {
@@ -75,8 +80,9 @@ export class MessagesService {
     return message;
   }
 
-  async findAll(query: ConversationQueryDto) {
+  async findAll(tenantId: string, query: ConversationQueryDto) {
     const where: Prisma.ConversationWhereInput = {
+      tenantId,
       ...(query.search && {
         customer: {
           OR: [
@@ -116,9 +122,9 @@ export class MessagesService {
   }
 
   /** Full thread plus the customer context panel shown beside it. */
-  async findOne(id: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
+  async findOne(tenantId: string, id: string) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, tenantId },
       include: {
         customer: {
           select: {
@@ -136,7 +142,7 @@ export class MessagesService {
     if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
 
     const orders = await this.prisma.order.findMany({
-      where: { customerId: conversation.customerId },
+      where: { tenantId, customerId: conversation.customerId },
       orderBy: { placedAt: 'desc' },
       take: 5,
       include: { items: { select: { quantity: true, unitPrice: true } } },
@@ -166,9 +172,9 @@ export class MessagesService {
     };
   }
 
-  async start(dto: StartConversationDto) {
+  async start(tenantId: string, dto: StartConversationDto) {
     const customer = await this.prisma.user.findFirst({
-      where: { id: dto.customerId, role: Role.CUSTOMER },
+      where: { id: dto.customerId, tenantId, role: Role.CUSTOMER },
       select: { id: true },
     });
     if (!customer) {
@@ -177,16 +183,17 @@ export class MessagesService {
 
     // One open conversation per customer keeps the inbox tidy.
     const existing = await this.prisma.conversation.findFirst({
-      where: { customerId: dto.customerId },
+      where: { tenantId, customerId: dto.customerId },
       select: { id: true },
     });
     if (existing) {
-      if (dto.text) await this.reply(existing.id, { text: dto.text });
-      return this.findOne(existing.id);
+      if (dto.text) await this.reply(tenantId, existing.id, { text: dto.text });
+      return this.findOne(tenantId, existing.id);
     }
 
     const conversation = await this.prisma.conversation.create({
       data: {
+        tenantId,
         customerId: dto.customerId,
         ...(dto.text && {
           messages: {
@@ -196,13 +203,13 @@ export class MessagesService {
       },
     });
 
-    return this.findOne(conversation.id);
+    return this.findOne(tenantId, conversation.id);
   }
 
   /** Admin reply. Sending also clears the unread counter. */
-  async reply(id: string, dto: SendMessageDto) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
+  async reply(tenantId: string, id: string, dto: SendMessageDto) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, tenantId },
       select: {
         id: true,
         customer: { select: { email: true, fullName: true } },
@@ -246,17 +253,19 @@ export class MessagesService {
     return message;
   }
 
-  async markRead(id: string) {
+  async markRead(tenantId: string, id: string) {
     const { count } = await this.prisma.conversation.updateMany({
-      where: { id },
+      where: { id, tenantId },
       data: { unreadCount: 0 },
     });
     if (!count) throw new NotFoundException(`Conversation ${id} not found`);
     return { message: 'Conversation marked as read' };
   }
 
-  async remove(id: string) {
-    const exists = await this.prisma.conversation.count({ where: { id } });
+  async remove(tenantId: string, id: string) {
+    const exists = await this.prisma.conversation.count({
+      where: { id, tenantId },
+    });
     if (!exists) throw new NotFoundException(`Conversation ${id} not found`);
     await this.prisma.conversation.delete({ where: { id } });
     return { message: 'Conversation deleted' };

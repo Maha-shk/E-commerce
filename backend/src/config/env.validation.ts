@@ -89,6 +89,18 @@ export class EnvironmentVariables {
   @IsOptional()
   MAIL_FROM = 'CENTO Admin <no-reply@cento.local>';
 
+  // --- Tenancy ---
+  /**
+   * Store a storefront request falls back to when it identifies no tenant of
+   * its own (no matching domain, no X-Tenant-Slug header, no ?tenant=).
+   *
+   * Set it to '' in a true multi-tenant deployment so an unidentified request
+   * is rejected instead of silently landing in one particular store.
+   */
+  @IsString()
+  @IsOptional()
+  TENANT_FALLBACK_SLUG = 'default';
+
   // --- Bootstrap: the initial super-admin created by the seed script ---
   // Consumed only by prisma/seed.ts. No defaults here on purpose — a hardcoded
   // fallback password would ship inside the build output.
@@ -103,6 +115,16 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   ADMIN_NAME?: string;
+
+  /**
+   * Email of the platform operator — a SUPER_ADMIN belonging to no tenant, who
+   * creates stores and can act inside any of them via X-Tenant-Slug.
+   * Defaults to platform@<domain of ADMIN_EMAIL>. Must differ from ADMIN_EMAIL:
+   * a tenant-scoped account with the same address would always win at login.
+   */
+  @IsString()
+  @IsOptional()
+  PLATFORM_ADMIN_EMAIL?: string;
 
   // --- Supabase ---
   @IsString()

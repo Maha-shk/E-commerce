@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ADMIN_ROLES, OWNER_ROLES } from '../common/constants/roles.constants';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { UsersService } from './users.service';
 import {
   CreateStaffDto,
@@ -67,29 +68,40 @@ export class StaffController {
 
   @Get()
   @ApiOperation({ summary: 'List staff accounts' })
-  findAll(@Query() query: StaffQueryDto) {
-    return this.users.findStaff(query);
+  findAll(
+    @CurrentTenant('id') tenantId: string,
+    @Query() query: StaffQueryDto,
+  ) {
+    return this.users.findStaff(tenantId, query);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a staff account' })
-  create(@Body() dto: CreateStaffDto) {
-    return this.users.createStaff(dto);
+  create(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: CreateStaffDto,
+  ) {
+    return this.users.createStaff(tenantId, dto);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a staff account (role/status/name)' })
   update(
+    @CurrentTenant('id') tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateStaffDto,
     @CurrentUser('id') actingUserId: string,
   ) {
-    return this.users.updateStaff(id, dto, actingUserId);
+    return this.users.updateStaff(tenantId, id, dto, actingUserId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Remove a staff account' })
-  remove(@Param('id') id: string, @CurrentUser('id') actingUserId: string) {
-    return this.users.removeStaff(id, actingUserId);
+  remove(
+    @CurrentTenant('id') tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser('id') actingUserId: string,
+  ) {
+    return this.users.removeStaff(tenantId, id, actingUserId);
   }
 }

@@ -107,7 +107,7 @@ export default function HomePage() {
                   className="group relative aspect-square overflow-hidden rounded-xl bg-muted transition-shadow duration-150 hover:shadow-card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <ProductImage
-                    src={category.thumbnailName}
+                    src={category.imageUrl}
                     sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 200px"
                     className="transition-transform duration-300 group-hover:scale-105"
                   />

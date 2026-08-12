@@ -46,8 +46,9 @@ export class OrdersService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async findAll(query: OrderQueryDto) {
+  async findAll(tenantId: string, query: OrderQueryDto) {
     const where: Prisma.OrderWhereInput = {
+      tenantId,
       ...(query.status && { status: query.status }),
       ...(query.customerId && { customerId: query.customerId }),
       ...((query.from || query.to) && {
@@ -79,10 +80,10 @@ export class OrdersService {
     return paginate(rows.map(toOrderView), total, query.page, query.limit);
   }
 
-  async findOne(id: string) {
+  async findOne(tenantId: string, id: string) {
     const order = await this.prisma.order.findFirst({
       // Accept either the internal id or the human-facing order number.
-      where: { OR: [{ id }, { orderNumber: id }] },
+      where: { tenantId, OR: [{ id }, { orderNumber: id }] },
       include: ORDER_INCLUDE,
     });
     if (!order) throw new NotFoundException(`Order ${id} not found`);
@@ -90,23 +91,24 @@ export class OrdersService {
   }
 
   /** Headline figures for the orders screen. */
-  async stats() {
+  async stats(tenantId: string) {
     const [byStatus, revenue, total] = await this.prisma.$transaction([
       this.prisma.order.groupBy({
         by: ['status'],
+        where: { tenantId },
         _count: true,
         orderBy: { status: 'asc' },
       }),
       this.prisma.order.aggregate({
-        where: { status: 'DELIVERED' },
+        where: { tenantId, status: 'DELIVERED' },
         _sum: { shippingCost: true, discount: true },
       }),
-      this.prisma.order.count(),
+      this.prisma.order.count({ where: { tenantId } }),
     ]);
 
     // Line-item revenue has to be summed separately (no direct aggregate on a relation).
     const items = await this.prisma.orderItem.findMany({
-      where: { order: { status: 'DELIVERED' } },
+      where: { order: { tenantId, status: 'DELIVERED' } },
       select: { quantity: true, unitPrice: true },
     });
     const gross = items.reduce((s, i) => s + i.quantity * Number(i.unitPrice), 0);
@@ -121,15 +123,18 @@ export class OrdersService {
     };
   }
 
-  async create(dto: CreateOrderDto) {
+  async create(tenantId: string, dto: CreateOrderDto) {
     if (dto.customerId) {
-      const exists = await this.prisma.user.count({ where: { id: dto.customerId } });
+      const exists = await this.prisma.user.count({
+        where: { id: dto.customerId, tenantId },
+      });
       if (!exists) throw new NotFoundException(`Customer ${dto.customerId} not found`);
     }
 
     const order = await this.prisma.order.create({
       data: {
-        orderNumber: await this.nextOrderNumber(),
+        tenantId,
+        orderNumber: await this.nextOrderNumber(tenantId),
         customerId: dto.customerId,
         ...(dto.status && { status: dto.status }),
         paymentMethod: dto.paymentMethod,
@@ -139,13 +144,7 @@ export class OrdersService {
         shippingCost: new Prisma.Decimal(dto.shippingCost ?? 0),
         discount: new Prisma.Decimal(dto.discount ?? 0),
         items: {
-          create: dto.items.map((i) => ({
-            productId: i.productId,
-            name: i.name,
-            sku: i.sku,
-            quantity: i.quantity,
-            unitPrice: new Prisma.Decimal(i.unitPrice),
-          })),
+          create: await this.buildOrderItems(tenantId, dto.items),
         },
       },
       include: ORDER_INCLUDE,
@@ -154,7 +153,7 @@ export class OrdersService {
     // Mirrors the customer checkout path so the console shows every new order,
     // whoever created it. Never allowed to fail the order itself.
     try {
-      await this.notifications.emit({
+      await this.notifications.emit(tenantId, {
         type: NotificationType.SUCCESS,
         category: NotificationCategory.ORDERS,
         title: `New order ${order.orderNumber}`,
@@ -169,9 +168,9 @@ export class OrdersService {
     return toOrderView(order);
   }
 
-  async updateStatus(id: string, dto: UpdateOrderStatusDto) {
+  async updateStatus(tenantId: string, id: string, dto: UpdateOrderStatusDto) {
     const order = await this.prisma.order.findFirst({
-      where: { OR: [{ id }, { orderNumber: id }] },
+      where: { tenantId, OR: [{ id }, { orderNumber: id }] },
     });
     if (!order) throw new NotFoundException(`Order ${id} not found`);
 
@@ -201,9 +200,9 @@ export class OrdersService {
     return toOrderView(updated);
   }
 
-  async remove(id: string) {
+  async remove(tenantId: string, id: string) {
     const order = await this.prisma.order.findFirst({
-      where: { OR: [{ id }, { orderNumber: id }] },
+      where: { tenantId, OR: [{ id }, { orderNumber: id }] },
       select: { id: true },
     });
     if (!order) throw new NotFoundException(`Order ${id} not found`);
@@ -211,12 +210,72 @@ export class OrdersService {
     return { message: 'Order deleted' };
   }
 
+  /**
+   * Builds order lines, stamping each with where its product sat in the
+   * catalog at the time of sale.
+   *
+   * Reports read those snapshots rather than walking
+   * Model → ProductType → Company → Category, so re-filing a product later —
+   * or deleting its model outright — cannot rewrite historical revenue.
+   */
+  private async buildOrderItems(
+    tenantId: string,
+    items: CreateOrderDto['items'],
+  ) {
+    const productIds = items
+      .map((i) => i.productId)
+      .filter((id): id is string => Boolean(id));
+
+    const products = await this.prisma.product.findMany({
+      where: { tenantId, id: { in: productIds } },
+      select: {
+        id: true,
+        model: {
+          select: {
+            name: true,
+            productType: {
+              select: {
+                name: true,
+                company: {
+                  select: { name: true, category: { select: { name: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const classification = new Map(
+      products.map((p) => [
+        p.id,
+        {
+          modelName: p.model.name,
+          productTypeName: p.model.productType.name,
+          companyName: p.model.productType.company.name,
+          categoryName: p.model.productType.company.category.name,
+        },
+      ]),
+    );
+
+    return items.map((i) => ({
+      productId: i.productId,
+      name: i.name,
+      sku: i.sku,
+      quantity: i.quantity,
+      unitPrice: new Prisma.Decimal(i.unitPrice),
+      ...(i.productId ? classification.get(i.productId) : undefined),
+    }));
+  }
+
   /** Sequential, human-readable order number: ORD-<year>-<counter>. */
-  private async nextOrderNumber(): Promise<string> {
+  private async nextOrderNumber(tenantId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `ORD-${year}-`;
+    // Numbering restarts per tenant: order numbers are unique per store, and a
+    // shared counter would leak how much business the other stores are doing.
     const latest = await this.prisma.order.findFirst({
-      where: { orderNumber: { startsWith: prefix } },
+      where: { tenantId, orderNumber: { startsWith: prefix } },
       orderBy: { orderNumber: 'desc' },
       select: { orderNumber: true },
     });

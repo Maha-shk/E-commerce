@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Param } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { PublicService } from './public.service';
 import { CreatePublicOrderDto } from './dto/create-order.dto';
 
@@ -16,13 +17,19 @@ export class PublicOrdersController {
    */
   @Post()
   @ApiOperation({ summary: 'Create customer order (public endpoint - no auth required)' })
-  async createOrder(@Body() dto: CreatePublicOrderDto) {
-    return this.publicService.createOrder(dto);
+  async createOrder(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: CreatePublicOrderDto,
+  ) {
+    return this.publicService.createOrder(tenantId, dto);
   }
 
   @Get(':orderNumber')
   @ApiOperation({ summary: 'Get order by order number (public endpoint - no auth required)' })
-  async getOrderByNumber(@Param('orderNumber') orderNumber: string) {
-    return this.publicService.getOrderByNumber(orderNumber);
+  async getOrderByNumber(
+    @CurrentTenant('id') tenantId: string,
+    @Param('orderNumber') orderNumber: string,
+  ) {
+    return this.publicService.getOrderByNumber(tenantId, orderNumber);
   }
 }

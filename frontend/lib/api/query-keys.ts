@@ -26,10 +26,23 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.products.all, "detail", id] as const,
   },
 
-  categories: {
-    all: ["categories"] as const,
-    list: (params?: unknown) => [...queryKeys.categories.all, "list", params] as const,
-    detail: (id: string) => [...queryKeys.categories.all, "detail", id] as const,
+  /**
+   * The catalog hierarchy. Keyed by level segment so invalidating
+   * `catalog.all` after any write refreshes every level, the tree and the
+   * stats at once — a create at one level changes the counts at every level
+   * above it.
+   */
+  catalog: {
+    all: ["catalog"] as const,
+    levels: () => [...queryKeys.catalog.all, "levels"] as const,
+    tree: (params?: unknown) => [...queryKeys.catalog.all, "tree", params] as const,
+    stats: () => [...queryKeys.catalog.all, "stats"] as const,
+    list: (segment: string, params?: unknown) =>
+      [...queryKeys.catalog.all, segment, "list", params] as const,
+    detail: (segment: string, id: string) =>
+      [...queryKeys.catalog.all, segment, "detail", id] as const,
+    children: (segment: string, id: string, params?: unknown) =>
+      [...queryKeys.catalog.all, segment, "children", id, params] as const,
   },
 
   banners: {

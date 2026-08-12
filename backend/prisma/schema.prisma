@@ -1,9 +1,22 @@
-// Prisma schema for the CENTO e-commerce Admin backend.
+// Prisma schema for the CENTO multi-tenant e-commerce backend.
 // Docs: https://www.prisma.io/docs
 //
-// The models below are the data foundation for the whole backend. Phase 2
-// (Admin Dashboard APIs) builds services/controllers on top of these models.
-// They mirror the domain the frontend already renders (see frontend/lib/admin/*).
+// Two rules shape everything below.
+//
+// 1. THE CATALOG HIERARCHY IS FIXED AND TOTAL:
+//
+//      Tenant → Category → Company → ProductType → Model → Product
+//
+//    Each level is its own table with a required foreign key to its parent, so
+//    the hierarchy is enforced by the database rather than by application code.
+//    A Product cannot exist without a Model, a Model cannot exist without a
+//    ProductType, and so on up to the Tenant. Orphans are structurally
+//    impossible, not merely discouraged.
+//
+// 2. EVERY BUSINESS ROW BELONGS TO EXACTLY ONE TENANT. Catalog and commerce
+//    tables all carry `tenantId`. Child tables (OrderItem, CartItem,
+//    ProductImage, …) inherit their tenant through their parent instead of
+//    duplicating the column, which is what stops the two from ever disagreeing.
 
 generator client {
   provider      = "prisma-client-js"
@@ -28,6 +41,8 @@ datasource db {
 
 /// Application roles. Drives RBAC. CUSTOMER is the storefront role; the rest
 /// are staff roles with access to the admin console (scoped per-permission).
+/// A SUPER_ADMIN with no tenant is the platform operator and may act across
+/// tenants; every other role is confined to its own tenant.
 enum Role {
   SUPER_ADMIN
   ADMIN
@@ -49,12 +64,21 @@ enum VerificationTokenType {
   PASSWORD_RESET
 }
 
-enum CategoryStatus {
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// Shared by all four catalog levels: archiving a node retires it from the
+/// admin's working set without deleting history.
+enum CatalogStatus {
   ACTIVE
   ARCHIVED
 }
 
-enum CategoryVisibility {
+/// Shared by all four catalog levels. Hiding a level hides everything beneath
+/// it from the storefront — enforced in the query layer, not by cascade.
+enum CatalogVisibility {
   VISIBLE
   HIDDEN
 }
@@ -136,6 +160,48 @@ enum FeaturedSection {
 }
 
 // ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// One storefront + admin workspace. Everything a tenant owns hangs off this
+/// row, and every tenant-scoped query filters on `tenantId` before anything
+/// else, so one tenant can never read or write another's data.
+model Tenant {
+  id     String       @id @default(cuid())
+  name   String
+  /// Stable identifier used in URLs and the X-Tenant-Slug header.
+  slug   String       @unique
+  /// Host that maps to this tenant, e.g. "parts.example.com". The storefront
+  /// resolves its tenant from the request Host header via this column.
+  domain String?      @unique
+  status TenantStatus @default(ACTIVE)
+
+  logoUrl      String?
+  contactEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                User[]
+  categories           Category[]
+  companies            Company[]
+  productTypes         ProductType[]
+  models               Model[]
+  products             Product[]
+  orders               Order[]
+  discounts            Discount[]
+  banners              Banner[]
+  featuredProducts     FeaturedProduct[]
+  carts                Cart[]
+  wishlists            Wishlist[]
+  conversations        Conversation[]
+  notifications        Notification[]
+  inventoryAdjustments InventoryAdjustment[]
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
 // Auth & users
 // ---------------------------------------------------------------------------
 
@@ -143,7 +209,14 @@ enum FeaturedSection {
 /// The admin "Customers" screen is simply `where role = CUSTOMER`.
 model User {
   id            String     @id @default(cuid())
-  email         String     @unique
+  /// Null only for the platform operator (a SUPER_ADMIN who administers every
+  /// tenant). Every other account, staff or customer, belongs to one tenant.
+  tenantId      String?
+  /// Cascade, like every other tenant-owned table: deleting a store removes the
+  /// accounts that only existed inside it. The delete endpoint spells out how
+  /// many accounts that is and demands the slug as confirmation first.
+  tenant        Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email         String
   passwordHash  String
   fullName      String
   phone         String?
@@ -168,8 +241,13 @@ model User {
   notifications      Notification[]
   inventoryLogs      InventoryAdjustment[]
 
+  /// Scoped to the tenant, not global: the same person may hold an account on
+  /// two different storefronts, exactly as they would with two separate shops.
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
   @@index([role])
   @@index([status])
+  @@index([email])
 }
 
 /// Hashed refresh tokens (rotating). One row per active session/device.
@@ -216,42 +294,208 @@ model Address {
 }
 
 // ---------------------------------------------------------------------------
-// Catalog
+// Catalog hierarchy — Category > Company > ProductType > Model > Product
+//
+// The four taxonomy levels share a deliberate shape (name, slug, description,
+// imageUrl, status, visibility, position, SEO), so the admin CRUD, the DTOs and
+// the frontend screens for them are all structurally identical. What differs is
+// only the parent each one requires.
+//
+// Slugs are unique per parent rather than globally: "chairs" may exist under
+// both IKEA and WoodCraft, and two tenants may both have "electronics".
+// Deletes are Restrict everywhere — the API refuses to remove a level that
+// still has children or products, and offers an explicit cascade instead.
 // ---------------------------------------------------------------------------
 
+/// Level 1. Top of the tree, e.g. "Electronics", "Furniture", "Hardware".
 model Category {
-  id            String             @id @default(cuid())
-  name          String
-  slug          String             @unique
-  description   String             @default("")
-  icon          String             @default("home")
-  status        CategoryStatus     @default(ACTIVE)
-  visibility    CategoryVisibility @default(VISIBLE)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  slug        String
+  description String  @default("")
+  /// Icon key rendered by the frontend (lucide name).
+  icon        String?
+  imageUrl    String?
+  /// Filename/size of the uploaded tile image, shown in the admin form.
   thumbnailName String?
   thumbnailSize String?
-  products      Product[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
 
-  @@index([status])
+  status     CatalogStatus     @default(ACTIVE)
+  visibility CatalogVisibility @default(VISIBLE)
+  /// Sort order among siblings; drives storefront menu order.
+  position   Int               @default(0)
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// True for rows the hierarchy migration invented so existing products had a
+  /// parent to hang from (the "Unclassified" category, "General" companies,
+  /// product types and models). They are a to-do list, not real catalog: filter
+  /// on this to build a "needs filing" view, and clear the flag once a human
+  /// has confirmed the node is genuine.
+  isPlaceholder Boolean @default(false)
+
+  companies Company[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@index([tenantId, isPlaceholder])
+  @@index([tenantId, position])
 }
 
+/// Level 2. A brand inside one category, e.g. "Samsung" under Electronics.
+model Company {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name        String
+  slug        String
+  description String  @default("")
+  /// Brand logo.
+  imageUrl    String?
+
+  status     CatalogStatus     @default(ACTIVE)
+  visibility CatalogVisibility @default(VISIBLE)
+  position   Int               @default(0)
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// True for rows the hierarchy migration invented so existing products had a
+  /// parent to hang from (the "Unclassified" category, "General" companies,
+  /// product types and models). They are a to-do list, not real catalog: filter
+  /// on this to build a "needs filing" view, and clear the flag once a human
+  /// has confirmed the node is genuine.
+  isPlaceholder Boolean @default(false)
+
+  productTypes ProductType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, slug])
+  @@index([tenantId])
+  @@index([categoryId, position])
+  @@index([tenantId, status])
+  @@index([tenantId, isPlaceholder])
+}
+
+/// Level 3. A product line inside one company, e.g. "Mobile Phones", "Chairs".
+model ProductType {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  name        String
+  slug        String
+  description String  @default("")
+  imageUrl    String?
+
+  status     CatalogStatus     @default(ACTIVE)
+  visibility CatalogVisibility @default(VISIBLE)
+  position   Int               @default(0)
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// True for rows the hierarchy migration invented so existing products had a
+  /// parent to hang from (the "Unclassified" category, "General" companies,
+  /// product types and models). They are a to-do list, not real catalog: filter
+  /// on this to build a "needs filing" view, and clear the flag once a human
+  /// has confirmed the node is genuine.
+  isPlaceholder Boolean @default(false)
+
+  models Model[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, slug])
+  @@index([tenantId])
+  @@index([companyId, position])
+  @@index([tenantId, status])
+  @@index([tenantId, isPlaceholder])
+}
+
+/// Level 4. A specific model inside one product type, e.g. "Galaxy S25",
+/// "AB8". Products (spare parts, components, accessories) hang off this.
+model Model {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  productTypeId String
+  productType   ProductType @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
+
+  name        String
+  slug        String
+  description String  @default("")
+  imageUrl    String?
+
+  status     CatalogStatus     @default(ACTIVE)
+  visibility CatalogVisibility @default(VISIBLE)
+  position   Int               @default(0)
+
+  /// Optional release year, useful for sorting long model lists (iPhone 6 … 17).
+  releaseYear Int?
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// True for rows the hierarchy migration invented so existing products had a
+  /// parent to hang from (the "Unclassified" category, "General" companies,
+  /// product types and models). They are a to-do list, not real catalog: filter
+  /// on this to build a "needs filing" view, and clear the flag once a human
+  /// has confirmed the node is genuine.
+  isPlaceholder Boolean @default(false)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productTypeId, slug])
+  @@index([tenantId])
+  @@index([productTypeId, position])
+  @@index([tenantId, status])
+  @@index([tenantId, isPlaceholder])
+}
+
+/// Level 5. A sellable item, always inside exactly one Model. `modelId` is
+/// required: there is no such thing as an unclassified product.
 model Product {
-  id               String                @id @default(cuid())
-  name             String
-  brand            String                @default("")
-  categoryId       String?
-  category         Category?             @relation(fields: [categoryId], references: [id])
-  description      String                @default("")
-  sku              String                @unique
-  stock            Int                   @default(0)
-  status           StockStatus           @default(IN_STOCK)
-  price            Decimal               @db.Decimal(12, 2)
-  discount         Int                   @default(0)
-  visibility       ProductVisibility     @default(PUBLIC)
-  scheduledDate    DateTime?
-  tags             String[]
-  unitValue        Decimal?              @db.Decimal(12, 2)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  modelId String
+  model   Model  @relation(fields: [modelId], references: [id], onDelete: Restrict)
+
+  name          String
+  description   String            @default("")
+  sku           String
+  stock         Int               @default(0)
+  status        StockStatus       @default(IN_STOCK)
+  price         Decimal           @db.Decimal(12, 2)
+  discount      Int               @default(0)
+  visibility    ProductVisibility @default(PUBLIC)
+  scheduledDate DateTime?
+  tags          String[]
+  unitValue     Decimal?          @db.Decimal(12, 2)
+
   images           ProductImage[]
   variants         ProductVariant[]
   orderItems       OrderItem[]
@@ -259,12 +503,17 @@ model Product {
   wishlistItems    WishlistItem[]
   inventoryLogs    InventoryAdjustment[]
   featuredProducts FeaturedProduct[]
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
 
-  @@index([categoryId])
-  @@index([status])
-  @@index([visibility])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// SKUs only have to be unique within a tenant — two shops may legitimately
+  /// use the same part number.
+  @@unique([tenantId, sku])
+  @@index([tenantId, modelId])
+  @@index([modelId])
+  @@index([tenantId, status])
+  @@index([tenantId, visibility])
 }
 
 model ProductImage {
@@ -291,6 +540,8 @@ model ProductVariant {
 /// Audit trail for stock changes, powering the Inventory screen's history.
 model InventoryAdjustment {
   id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   delta     Int
@@ -300,6 +551,7 @@ model InventoryAdjustment {
   createdAt DateTime @default(now())
 
   @@index([productId])
+  @@index([tenantId])
 }
 
 // ---------------------------------------------------------------------------
@@ -308,13 +560,16 @@ model InventoryAdjustment {
 
 model Cart {
   id        String     @id @default(cuid())
-  userId    String?    // Null for guest carts
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String? // Null for guest carts
   user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessionId String?    @unique // For guest cart tracking via cookie/localStorage
   items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
+  @@index([tenantId])
   @@index([userId])
   @@index([sessionId])
 }
@@ -333,8 +588,8 @@ model CartItem {
   /// someone's cart.
   variantId String?
   variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  color     String?  // Legacy free-text variant, superseded by variantId
-  size      String?  // Legacy free-text variant, superseded by variantId
+  color     String? // Legacy free-text variant, superseded by variantId
+  size      String? // Legacy free-text variant, superseded by variantId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -349,12 +604,15 @@ model CartItem {
 
 model Wishlist {
   id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId    String
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     WishlistItem[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  @@index([tenantId])
   @@index([userId])
 }
 
@@ -377,6 +635,8 @@ model WishlistItem {
 
 model Banner {
   id             String     @id @default(cuid())
+  tenantId       String
+  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type           BannerType
   title          String
   description    String?
@@ -391,12 +651,14 @@ model Banner {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
+  @@index([tenantId, type, isActive])
   @@index([displayOrder])
-  @@index([type, isActive])
 }
 
 model FeaturedProduct {
   id           String          @id @default(cuid())
+  tenantId     String
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   section      FeaturedSection
   productId    String
   product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -406,8 +668,8 @@ model FeaturedProduct {
   updatedAt    DateTime        @updatedAt
 
   @@unique([section, productId, displayOrder])
+  @@index([tenantId, section, isActive])
   @@index([displayOrder])
-  @@index([section, isActive])
 }
 
 // ---------------------------------------------------------------------------
@@ -416,8 +678,10 @@ model FeaturedProduct {
 
 model Order {
   id               String        @id @default(cuid())
-  /// Human-facing order number, e.g. "ORD-2024-8841".
-  orderNumber      String        @unique
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Human-facing order number, e.g. "ORD-2024-8841". Unique per tenant.
+  orderNumber      String
   customerId       String?
   customer         User?         @relation(fields: [customerId], references: [id])
   status           OrderStatus   @default(PENDING)
@@ -433,8 +697,9 @@ model Order {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status])
   @@index([customerId])
-  @@index([status])
   @@index([paymentStatus])
 }
 
@@ -450,6 +715,13 @@ model OrderItem {
   /// text rather than a relation so renaming or deleting a variant can never
   /// rewrite what a customer actually ordered.
   variantName String?
+  /// Snapshot of where the product sat in the catalog when it was ordered.
+  /// Reports read these instead of walking Model→ProductType→Company→Category,
+  /// so restructuring the catalog can never rewrite historical figures.
+  categoryName    String?
+  companyName     String?
+  productTypeName String?
+  modelName       String?
   quantity  Int
   unitPrice Decimal  @db.Decimal(12, 2)
 
@@ -462,8 +734,10 @@ model OrderItem {
 
 model Discount {
   id         String           @id @default(cuid())
+  tenantId   String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name       String
-  code       String           @unique
+  code       String
   type       DiscountType
   value      Decimal          @db.Decimal(12, 2)
   category   DiscountCategory @default(ACTIVE)
@@ -475,7 +749,8 @@ model Discount {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
 
-  @@index([category])
+  @@unique([tenantId, code])
+  @@index([tenantId, category])
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +759,8 @@ model Discount {
 
 model Conversation {
   id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customerId    String
   customer      User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   lastMessageAt DateTime  @default(now())
@@ -492,6 +769,7 @@ model Conversation {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  @@index([tenantId])
   @@index([customerId])
 }
 
@@ -512,7 +790,9 @@ model Message {
 
 model Notification {
   id          String               @id @default(cuid())
-  /// Target admin user. Null = broadcast to all admins.
+  tenantId    String
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Target admin user. Null = broadcast to every admin of the tenant.
   userId      String?
   user        User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
   type        NotificationType
@@ -522,12 +802,14 @@ model Notification {
   read        Boolean              @default(false)
   createdAt   DateTime             @default(now())
 
+  @@index([tenantId, read])
   @@index([userId])
-  @@index([read])
 }
 
 // ---------------------------------------------------------------------------
 // Settings (flexible key/value store for the Settings screen)
+//
+// Platform-level and therefore deliberately NOT tenant-scoped.
 // ---------------------------------------------------------------------------
 
 model Setting {

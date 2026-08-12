@@ -15,33 +15,37 @@ export class WishlistService {
   /**
    * Get or create wishlist for user
    */
-  private async getWishlistForUser(userId: string) {
-    let wishlist = await this.prisma.wishlist.findFirst({
-      where: { userId },
+  private async getWishlistForUser(tenantId: string, userId: string) {
+    const existing = await this.prisma.wishlist.findFirst({
+      where: { tenantId, userId },
     });
+    if (existing) return existing;
 
-    if (!wishlist) {
-      wishlist = await this.prisma.wishlist.create({
-        data: { userId },
-      });
-    }
-
-    return wishlist;
+    return this.prisma.wishlist.create({ data: { tenantId, userId } });
   }
 
   /**
    * Get user's wishlist with full product details
    */
-  async getWishlist(userId: string): Promise<WishlistResponseDto> {
+  async getWishlist(
+    tenantId: string,
+    userId: string,
+  ): Promise<WishlistResponseDto> {
     const wishlist = await this.prisma.wishlist.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
       include: {
         items: {
           include: {
             product: {
               include: {
                 images: true,
-                category: true,
+                model: {
+                  include: {
+                    productType: {
+                      include: { company: { include: { category: true } } },
+                    },
+                  },
+                },
               },
             },
           },
@@ -70,12 +74,13 @@ export class WishlistService {
    * Add product to wishlist
    */
   async addItem(
+    tenantId: string,
     userId: string,
     dto: AddToWishlistDto,
   ): Promise<WishlistResponseDto> {
-    // Verify product exists
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
+    // Verify the product exists in this store
+    const product = await this.prisma.product.findFirst({
+      where: { id: dto.productId, tenantId },
     });
 
     if (!product) {
@@ -83,7 +88,7 @@ export class WishlistService {
     }
 
     // Get or create wishlist
-    const wishlist = await this.getWishlistForUser(userId);
+    const wishlist = await this.getWishlistForUser(tenantId, userId);
 
     // Check if product already exists in wishlist
     const existing = await this.prisma.wishlistItem.findUnique({
@@ -108,18 +113,19 @@ export class WishlistService {
     });
 
     // Return updated wishlist
-    return this.getWishlist(userId);
+    return this.getWishlist(tenantId, userId);
   }
 
   /**
    * Remove item from wishlist
    */
   async removeItem(
+    tenantId: string,
     userId: string,
     itemId: string,
   ): Promise<WishlistResponseDto> {
     const wishlist = await this.prisma.wishlist.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
     });
 
     if (!wishlist) {
@@ -145,15 +151,18 @@ export class WishlistService {
     });
 
     // Return updated wishlist
-    return this.getWishlist(userId);
+    return this.getWishlist(tenantId, userId);
   }
 
   /**
    * Clear entire wishlist
    */
-  async clearWishlist(userId: string): Promise<WishlistResponseDto> {
+  async clearWishlist(
+    tenantId: string,
+    userId: string,
+  ): Promise<WishlistResponseDto> {
     const wishlist = await this.prisma.wishlist.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
     });
 
     if (wishlist) {
@@ -162,15 +171,18 @@ export class WishlistService {
       });
     }
 
-    return this.getWishlist(userId);
+    return this.getWishlist(tenantId, userId);
   }
 
   /**
    * Get wishlist item count
    */
-  async getWishlistCount(userId: string): Promise<{ count: number }> {
+  async getWishlistCount(
+    tenantId: string,
+    userId: string,
+  ): Promise<{ count: number }> {
     const wishlist = await this.prisma.wishlist.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
     });
 
     if (!wishlist) {
@@ -205,7 +217,8 @@ export class WishlistService {
       id: item.id,
       productId: product.id,
       name: product.name,
-      brand: product.brand,
+      // The Company now carries what `brand` used to.
+      brand: product.model?.productType?.company?.name ?? '',
       sku: product.sku,
       price: Number(product.price),
       discount: product.discount,
@@ -215,11 +228,16 @@ export class WishlistService {
       lowStock: product.status === 'LOW_STOCK',
       stock: product.stock,
       addedAt: item.createdAt.toISOString(),
-      category: product.category ? {
-        id: product.category.id,
-        name: product.category.name,
-        slug: product.category.slug,
-      } : null,
+      category: product.model?.productType?.company?.category
+        ? {
+            id: product.model.productType.company.category.id,
+            name: product.model.productType.company.category.name,
+            slug: product.model.productType.company.category.slug,
+          }
+        : null,
+      model: product.model
+        ? { id: product.model.id, name: product.model.name, slug: product.model.slug }
+        : null,
     };
   }
 

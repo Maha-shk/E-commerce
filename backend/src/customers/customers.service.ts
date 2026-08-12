@@ -16,8 +16,9 @@ const SPEND_STATUSES: OrderStatus[] = [
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: CustomerQueryDto) {
+  async findAll(tenantId: string, query: CustomerQueryDto) {
     const where: Prisma.UserWhereInput = {
+      tenantId,
       role: Role.CUSTOMER,
       ...(query.status && { status: query.status }),
       ...(query.search && {
@@ -49,7 +50,7 @@ export class CustomersService {
     ]);
 
     // Aggregate order totals for the listed customers in one round-trip.
-    const totals = await this.spendByCustomer(rows.map((r) => r.id));
+    const totals = await this.spendByCustomer(tenantId, rows.map((r) => r.id));
 
     const items = rows.map((c) => ({
       ...c,
@@ -62,9 +63,9 @@ export class CustomersService {
     return paginate(items, total, query.page, query.limit);
   }
 
-  async findOne(id: string) {
+  async findOne(tenantId: string, id: string) {
     const customer = await this.prisma.user.findFirst({
-      where: { id, role: Role.CUSTOMER },
+      where: { id, tenantId, role: Role.CUSTOMER },
       select: {
         id: true,
         fullName: true,
@@ -80,13 +81,13 @@ export class CustomersService {
     if (!customer) throw new NotFoundException(`Customer ${id} not found`);
 
     const recentOrders = await this.prisma.order.findMany({
-      where: { customerId: id },
+      where: { tenantId, customerId: id },
       orderBy: { placedAt: 'desc' },
       take: 10,
       include: { items: { select: { quantity: true, unitPrice: true } } },
     });
 
-    const totals = await this.spendByCustomer([id]);
+    const totals = await this.spendByCustomer(tenantId, [id]);
     const summary = totals.get(id) ?? { orders: 0, spent: 0 };
 
     return {
@@ -109,9 +110,9 @@ export class CustomersService {
     };
   }
 
-  async update(id: string, dto: UpdateCustomerDto) {
+  async update(tenantId: string, id: string, dto: UpdateCustomerDto) {
     const customer = await this.prisma.user.findFirst({
-      where: { id, role: Role.CUSTOMER },
+      where: { id, tenantId, role: Role.CUSTOMER },
       select: { id: true },
     });
     if (!customer) throw new NotFoundException(`Customer ${id} not found`);
@@ -147,17 +148,17 @@ export class CustomersService {
   }
 
   /** Headline figures for the customers screen. */
-  async stats() {
+  async stats(tenantId: string) {
     const [total, active, inactive, suspended] = await this.prisma.$transaction([
-      this.prisma.user.count({ where: { role: Role.CUSTOMER } }),
+      this.prisma.user.count({ where: { tenantId, role: Role.CUSTOMER } }),
       this.prisma.user.count({
-        where: { role: Role.CUSTOMER, status: UserStatus.ACTIVE },
+        where: { tenantId, role: Role.CUSTOMER, status: UserStatus.ACTIVE },
       }),
       this.prisma.user.count({
-        where: { role: Role.CUSTOMER, status: UserStatus.INACTIVE },
+        where: { tenantId, role: Role.CUSTOMER, status: UserStatus.INACTIVE },
       }),
       this.prisma.user.count({
-        where: { role: Role.CUSTOMER, status: UserStatus.SUSPENDED },
+        where: { tenantId, role: Role.CUSTOMER, status: UserStatus.SUSPENDED },
       }),
     ]);
     return { total, active, inactive, suspended };
@@ -167,12 +168,12 @@ export class CustomersService {
    * Returns order count and lifetime spend per customer id.
    * Done in two queries rather than N+1 per customer.
    */
-  private async spendByCustomer(ids: string[]) {
+  private async spendByCustomer(tenantId: string, ids: string[]) {
     const result = new Map<string, { orders: number; spent: number }>();
     if (ids.length === 0) return result;
 
     const orders = await this.prisma.order.findMany({
-      where: { customerId: { in: ids }, status: { in: SPEND_STATUSES } },
+      where: { tenantId, customerId: { in: ids }, status: { in: SPEND_STATUSES } },
       select: {
         customerId: true,
         shippingCost: true,

@@ -8,7 +8,12 @@ import { LoadingState } from "@/components/customer/StateBlock";
 
 function ProductsPageContent() {
   const searchParams = useSearchParams();
-  const category = searchParams.get("category");
+  // `category` is the long-standing param name; `categoryId` matches the API
+  // and the rest of the hierarchy, so both are accepted.
+  const category = searchParams.get("categoryId") ?? searchParams.get("category");
+  const companyId = searchParams.get("companyId");
+  const productTypeId = searchParams.get("productTypeId");
+  const modelId = searchParams.get("modelId");
   const search = searchParams.get("search");
 
   return (
@@ -19,6 +24,9 @@ function ProductsPageContent() {
       }
       query={{
         categoryId: category || undefined,
+        companyId: companyId || undefined,
+        productTypeId: productTypeId || undefined,
+        modelId: modelId || undefined,
         search: search || undefined,
       }}
       emptyMessage={

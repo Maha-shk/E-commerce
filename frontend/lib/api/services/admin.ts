@@ -8,7 +8,6 @@ import type { ApiResponse, PaginationQuery } from "@/lib/api/types";
  */
 import type {
   AdminProfile,
-  Category,
   Conversation,
   ConversationDetail,
   CustomerDetail,
@@ -41,8 +40,18 @@ export const dashboardApi = {
     get<TopProduct[]>("/admin/dashboard/top-products", { limit }),
 };
 
-/* ---- Products ---- */
+/* ---- Products ----
+ *
+ * A product hangs off a Model. Filtering by any ancestor pulls everything
+ * beneath it, so one endpoint serves "this model's parts" and "everything
+ * Samsung makes" alike.
+ */
 export type ProductQuery = PaginationQuery & {
+  /** The direct parent. */
+  modelId?: string;
+  /** Ancestor filters — everything beneath the given node. */
+  productTypeId?: string;
+  companyId?: string;
   categoryId?: string;
   status?: string;
   visibility?: string;
@@ -50,26 +59,28 @@ export type ProductQuery = PaginationQuery & {
   sortOrder?: "asc" | "desc";
 };
 
+/** Server-enforced cap on one `reassign` call. Beyond it the request 400s. */
+export const REASSIGN_MAX_IDS = 200;
+
 export const productsApi = {
   list: (params?: ProductQuery) => getPaginated<Product>("/admin/products", params),
   detail: (id: string) => get<Product>(`/admin/products/${id}`),
   create: (body: unknown) => post<Product>("/admin/products", body),
   update: (id: string, body: unknown) => patch<Product>(`/admin/products/${id}`, body),
+  /**
+   * Bulk move to another model — the way to clear a node before deleting it.
+   *
+   * All-or-nothing, in one transaction: a 200 means every id moved. Duplicates
+   * are ignored rather than rejected, and a missing id rolls the whole move
+   * back with a 404 naming the offenders. Capped at
+   * {@link REASSIGN_MAX_IDS} per call.
+   */
+  reassign: (productIds: string[], modelId: string) =>
+    post<{ message: string; count: number; modelId: string }>(
+      "/admin/products/reassign",
+      { productIds, modelId },
+    ),
   remove: (id: string) => del<{ message: string }>(`/admin/products/${id}`),
-};
-
-/* ---- Categories ---- */
-export type CategoryQuery = PaginationQuery & {
-  status?: string;
-  visibility?: string;
-};
-
-export const categoriesApi = {
-  list: (params?: CategoryQuery) => getPaginated<Category>("/admin/categories", params),
-  detail: (id: string) => get<Category>(`/admin/categories/${id}`),
-  create: (body: unknown) => post<Category>("/admin/categories", body),
-  update: (id: string, body: unknown) => patch<Category>(`/admin/categories/${id}`, body),
-  remove: (id: string) => del<{ message: string }>(`/admin/categories/${id}`),
 };
 
 /* ---- Inventory ---- */

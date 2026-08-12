@@ -3,13 +3,106 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Search, ShoppingCart, User, Heart, Menu, X } from "lucide-react";
+import { ChevronDown, Search, ShoppingCart, User, Heart, Menu, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useSession } from "@/lib/hooks/use-auth";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
+import { useCatalogTree } from "@/lib/hooks/use-customer";
+import type { PublicCatalogNode } from "@/lib/api/services/public";
+
+/**
+ * Category → its brands, for the header menu.
+ *
+ * Driven off `/public/catalog/tree` rather than a hand-written list: the tree
+ * already strips archived and hidden branches server-side, so anything that
+ * reaches the menu is safe to show, and adding a category to the admin puts it
+ * in the navigation without a code change.
+ *
+ * Depth 1 — categories and their companies. Going deeper would pull every
+ * product type and model in the store into a drop-down nobody reads.
+ */
+function CategoryMenu({ categories }: { categories: PublicCatalogNode[] }) {
+  if (categories.length === 0) {
+    return (
+      <Link
+        href="/categories"
+        className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
+      >
+        Categories
+      </Link>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex items-center gap-1 font-medium text-gray-700 transition-colors hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        Categories
+        <ChevronDown className="size-4" aria-hidden />
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="start" className="w-136 p-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          {categories.map((category) => (
+            <div key={category.id} className="min-w-0">
+              <Link
+                href={`/categories/${category.slug}`}
+                className="block truncate text-sm font-semibold text-foreground hover:text-primary"
+              >
+                {category.name}
+              </Link>
+
+              {category.children.length > 0 ? (
+                <ul className="mt-1.5 space-y-1">
+                  {/* The brands inside it. A company filters the product list
+                      by id — brands are real nodes now, not free text. */}
+                  {category.children.slice(0, 5).map((company) => (
+                    <li key={company.id}>
+                      <Link
+                        href={`/products?companyId=${company.id}`}
+                        className="block truncate text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        {company.name}
+                      </Link>
+                    </li>
+                  ))}
+                  {category.children.length > 5 ? (
+                    <li>
+                      <Link
+                        href={`/categories/${category.slug}`}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        +{category.children.length - 5} more
+                      </Link>
+                    </li>
+                  ) : null}
+                </ul>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 border-t border-border pt-3">
+          <Link
+            href="/categories"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Browse all categories
+          </Link>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function SiteHeader() {
   const { isAuthenticated, isAdmin, hydrated } = useSession();
   const { wishlistItemIds } = useWishlist();
+  const { data: tree } = useCatalogTree(1);
+  const categories = tree ?? [];
   const profileHref = hydrated && isAuthenticated
     ? (isAdmin ? "/admin/dashboard" : "/account")
     : "/login";
@@ -37,9 +130,7 @@ export function SiteHeader() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/categories" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">
-              Categories
-            </Link>
+            <CategoryMenu categories={categories} />
             <Link href="/products" className="text-gray-700 hover:text-gray-900 font-medium transition-colors">
               Products
             </Link>
@@ -123,6 +214,22 @@ export function SiteHeader() {
               <Link href="/categories" className="text-gray-700 hover:text-gray-900 font-medium py-2">
                 Categories
               </Link>
+              {/* The categories themselves, indented — a drop-down is the wrong
+                  shape on mobile, but the list is still worth having. */}
+              {categories.length > 0 ? (
+                <ul className="space-y-1 border-l border-gray-100 pl-4">
+                  {categories.map((category) => (
+                    <li key={category.id}>
+                      <Link
+                        href={`/categories/${category.slug}`}
+                        className="block py-1 text-sm text-gray-600 hover:text-gray-900"
+                      >
+                        {category.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <Link href="/products" className="text-gray-700 hover:text-gray-900 font-medium py-2">
                 Products
               </Link>

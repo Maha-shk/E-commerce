@@ -11,7 +11,6 @@ import { getApiErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import {
   bannersApi,
-  categoriesApi,
   customersApi,
   dashboardApi,
   discountsApi,
@@ -24,7 +23,6 @@ import {
   reportsApi,
   settingsApi,
   type BannerQuery,
-  type CategoryQuery,
   type CustomerQuery,
   type DiscountQuery,
   type InventoryQuery,
@@ -125,34 +123,30 @@ export function useDeleteProduct() {
   });
 }
 
-/* ---- Categories ---- */
+/**
+ * Moves several products to another Model in one call.
+ *
+ * This is the way out of a blocked delete: a catalog node refuses to go while
+ * products sit beneath it, and re-filing them is the only alternative to
+ * deleting them — which would take their pricing and order history with them.
+ *
+ * Failures are left to the caller rather than toasted. The move is
+ * all-or-nothing and a 404 names the ids that were missing, which is only
+ * useful next to the selection it refers to — a toast outlives the dialog and
+ * strands the admin with a list of ids and nothing to match them against.
+ */
+export function useReassignProducts() {
+  const queryClient = useQueryClient();
 
-export function useCategories(params?: CategoryQuery) {
-  return useQuery({
-    queryKey: queryKeys.categories.list(params),
-    queryFn: () => categoriesApi.list(params),
-    placeholderData: (previous) => previous,
-  });
-}
-
-export function useCreateCategory() {
-  return useAdminMutation(categoriesApi.create, {
-    successMessage: "Category created",
-    invalidate: [queryKeys.categories.all],
-  });
-}
-
-export function useUpdateCategory() {
-  return useAdminMutation(
-    ({ id, body }: { id: string; body: unknown }) => categoriesApi.update(id, body),
-    { successMessage: "Category updated", invalidate: [queryKeys.categories.all] },
-  );
-}
-
-export function useDeleteCategory() {
-  return useAdminMutation((id: string) => categoriesApi.remove(id), {
-    successMessage: "Category deleted",
-    invalidate: [queryKeys.categories.all],
+  return useMutation({
+    mutationFn: ({ productIds, modelId }: { productIds: string[]; modelId: string }) =>
+      productsApi.reassign(productIds, modelId),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      [queryKeys.products.all, queryKeys.catalog.all, queryKeys.inventory.all].forEach(
+        (queryKey) => queryClient.invalidateQueries({ queryKey }),
+      );
+    },
   });
 }
 

@@ -21,14 +21,18 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Stat cards at the top of the admin dashboard. */
-  async stats() {
+  async stats(tenantId: string) {
     const [activeOrders, pendingOrders, customers, paidOrders, outOfStock] =
       await this.prisma.$transaction([
-        this.prisma.order.count({ where: { status: { in: ACTIVE_STATUSES } } }),
-        this.prisma.order.count({ where: { status: OrderStatus.PENDING } }),
-        this.prisma.user.count({ where: { role: Role.CUSTOMER } }),
+        this.prisma.order.count({
+          where: { tenantId, status: { in: ACTIVE_STATUSES } },
+        }),
+        this.prisma.order.count({
+          where: { tenantId, status: OrderStatus.PENDING },
+        }),
+        this.prisma.user.count({ where: { tenantId, role: Role.CUSTOMER } }),
         this.prisma.order.findMany({
-          where: { status: OrderStatus.DELIVERED },
+          where: { tenantId, status: OrderStatus.DELIVERED },
           select: {
             shippingCost: true,
             discount: true,
@@ -36,7 +40,7 @@ export class DashboardService {
           },
         }),
         this.prisma.product.count({
-          where: { status: StockStatus.OUT_OF_STOCK },
+          where: { tenantId, status: StockStatus.OUT_OF_STOCK },
         }),
       ]);
 
@@ -59,7 +63,7 @@ export class DashboardService {
    * Revenue and order counts for the last `months` calendar months,
    * oldest first — feeds the dashboard bar chart.
    */
-  async monthlyPerformance(months = 6) {
+  async monthlyPerformance(tenantId: string, months = 6) {
     const start = new Date();
     start.setUTCDate(1);
     start.setUTCHours(0, 0, 0, 0);
@@ -67,6 +71,7 @@ export class DashboardService {
 
     const orders = await this.prisma.order.findMany({
       where: {
+        tenantId,
         placedAt: { gte: start },
         status: { in: REVENUE_STATUSES },
       },
@@ -101,8 +106,9 @@ export class DashboardService {
   }
 
   /** Most recent orders shown in the dashboard side panel. */
-  async recentOrders(limit = 5) {
+  async recentOrders(tenantId: string, limit = 5) {
     const orders = await this.prisma.order.findMany({
+      where: { tenantId },
       orderBy: { placedAt: 'desc' },
       take: limit,
       select: {
@@ -128,9 +134,10 @@ export class DashboardService {
   }
 
   /** Best sellers by units sold. */
-  async topProducts(limit = 5) {
+  async topProducts(tenantId: string, limit = 5) {
     const grouped = await this.prisma.orderItem.groupBy({
       by: ['sku'],
+      where: { order: { tenantId } },
       _sum: { quantity: true },
       orderBy: { _sum: { quantity: 'desc' } },
       take: limit,
@@ -138,7 +145,7 @@ export class DashboardService {
 
     const skus = grouped.map((g) => g.sku);
     const products = await this.prisma.product.findMany({
-      where: { sku: { in: skus } },
+      where: { tenantId, sku: { in: skus } },
       select: { id: true, name: true, sku: true, price: true },
     });
     const bySku = new Map(products.map((p) => [p.sku, p]));

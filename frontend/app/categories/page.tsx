@@ -93,7 +93,7 @@ export default function CategoriesPage() {
             >
               <div className="relative aspect-16/10 overflow-hidden bg-muted">
                 <ProductImage
-                  src={category.thumbnailName}
+                  src={category.imageUrl}
                   sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 400px"
                   className="transition-transform duration-300 group-hover:scale-105"
                 />

@@ -14,20 +14,66 @@ export interface Banner {
   linkText?: string;
 }
 
+/** A node of the storefront hierarchy: Category → Company → Product Type → Model. */
+export interface CatalogNodeRef {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface StorefrontCrumb extends CatalogNodeRef {
+  level: 'CATEGORY' | 'COMPANY' | 'PRODUCT_TYPE' | 'MODEL';
+  segment: 'categories' | 'companies' | 'product-types' | 'models';
+}
+
 export interface Category {
   id: string;
   name: string;
   slug: string;
   description: string;
-  icon: string;
+  /** A lucide icon key, for tiles and nav where there is no artwork. */
+  icon: string | null;
+  /** The shared image field across all four levels. Backfilled from thumbnailName. */
+  imageUrl: string | null;
+  /** @deprecated Legacy upload metadata, backfilled into `imageUrl`. Do not read. */
   thumbnailName: string | null;
-  parentId: string | null;
+  /** Brands inside this category. */
+  companyCount: number;
   productCount: number;
+}
+
+/** A brand. `/public/brands` returns Company rows now, not bare strings. */
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl: string | null;
+  categoryId: string;
+}
+
+/** One level of the storefront tree, as returned by /public/catalog/tree. */
+export interface PublicCatalogNode {
+  id: string;
+  level: StorefrontCrumb['level'];
+  levelLabel: string;
+  depth: number;
+  name: string;
+  slug: string;
+  imageUrl: string | null;
+  icon: string | null;
+  productCount: number;
+  children: PublicCatalogNode[];
 }
 
 export interface Product {
   id: string;
   name: string;
+  /**
+   * The Company's name, flattened onto the product.
+   *
+   * Permanent, not a shim: a product card genuinely wants the brand inline,
+   * and making every consumer walk `product.company.name` would be worse.
+   */
   brand: string;
   description: string;
   sku: string;
@@ -38,12 +84,14 @@ export interface Product {
   discountPercent: number;
   visibility: 'PUBLIC' | 'PRIVATE' | 'SCHEDULED';
   tags: string[];
+  /** @deprecated Duplicates `category.id`; kept so the old filter kept working. */
   categoryId: string | null;
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-  } | null;
+  category: CatalogNodeRef | null;
+  /** The rest of the classification, for linking back up the tree. */
+  company: (CatalogNodeRef & { imageUrl: string | null }) | null;
+  productType: CatalogNodeRef | null;
+  model: CatalogNodeRef | null;
+  breadcrumb: StorefrontCrumb[];
   images: Array<{
     id: string;
     url: string;
@@ -102,10 +150,16 @@ export const publicService = {
   },
 
   /**
-   * Get products with filters
+   * Get products with filters.
+   *
+   * Any level of the hierarchy narrows the list, and the deeper ones pull
+   * everything beneath them — `companyId` is "everything this brand makes".
    */
   async getProducts(params?: {
     categoryId?: string;
+    companyId?: string;
+    productTypeId?: string;
+    modelId?: string;
     search?: string;
     bestsellers?: boolean;
     newArrivals?: boolean;
@@ -189,12 +243,43 @@ export const publicService = {
 
 
   /**
-   * Get all unique brands
+   * Get the brands that have something to sell.
+   *
+   * Returns Company objects, not strings — a brand is a real node now, so it
+   * has an id to filter by, a slug to link to and a logo. Only companies with
+   * at least one public product are listed, so a filter never offers a choice
+   * that yields nothing.
    */
-  async getBrands(): Promise<ApiResponse<string[]>> {
-    const { data } = await api.get<ApiResponse<string[]>>('/public/brands');
+  async getBrands(params?: { categoryId?: string }): Promise<ApiResponse<Brand[]>> {
+    const { data } = await api.get<ApiResponse<Brand[]>>('/public/brands', {
+      params,
+    });
     return data;
   },
+
+  /**
+   * The storefront navigation tree.
+   *
+   * Archived and hidden branches are stripped server-side, so whatever comes
+   * back is safe to render as a menu. `depth=1` is a top-level menu, `depth=3`
+   * the full drill-down.
+   */
+  async getCatalogTree(params?: {
+    depth?: number;
+    categoryId?: string;
+    search?: string;
+  }): Promise<ApiResponse<PublicCatalogNode[]>> {
+    const { data } = await api.get<ApiResponse<PublicCatalogNode[]>>(
+      '/public/catalog/tree',
+      { params },
+    );
+    return data;
+  },
+
+  // `/public/catalog/:level` and `/public/catalog/:level/:id` are available and
+  // would back brand and product-type landing pages, which the storefront does
+  // not have yet. Left unwrapped rather than shipping a client for a screen
+  // that doesn't exist — see the handover notes.
 
   /**
    * Get order details by order number

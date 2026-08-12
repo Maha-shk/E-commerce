@@ -17,12 +17,15 @@ export const PRICE_CEILING = 5000;
 
 export type FilterState = {
   categoryIds: string[];
+  /** Company ids. A brand is a real node now, so it filters by id, not name. */
+  companyIds: string[];
   price: PriceRange;
   inStockOnly: boolean;
 };
 
 export const DEFAULT_FILTERS: FilterState = {
   categoryIds: [],
+  companyIds: [],
   price: { min: PRICE_FLOOR, max: PRICE_CEILING },
   inStockOnly: false,
 };
@@ -138,29 +141,83 @@ function PriceRangeSlider({
   );
 }
 
+type FilterOption = { id: string; name: string; productCount?: number };
+
+/** A list of checkboxes with optional counts. Category and Brand are identical. */
+function CheckboxFacet({
+  idPrefix,
+  options,
+  selected,
+  onToggle,
+  emptyLabel,
+}: {
+  idPrefix: string;
+  options: FilterOption[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  emptyLabel: string;
+}) {
+  if (options.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+
+  return (
+    <ul className="max-h-64 space-y-2.5 overflow-y-auto">
+      {options.map((option) => {
+        const inputId = `${idPrefix}-${option.id}`;
+        return (
+          <li key={option.id} className="flex items-center gap-2.5">
+            <Checkbox
+              id={inputId}
+              checked={selected.includes(option.id)}
+              onCheckedChange={() => onToggle(option.id)}
+            />
+            <Label
+              htmlFor={inputId}
+              className="flex-1 justify-between gap-2 text-sm font-normal"
+            >
+              <span className="truncate">{option.name}</span>
+              {typeof option.productCount === "number" ? (
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {option.productCount}
+                </span>
+              ) : null}
+            </Label>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function ProductFilters({
   categories,
+  brands,
   value,
   onChange,
   onReset,
   resultCount,
 }: {
-  categories: { id: string; name: string; productCount?: number }[];
+  categories: FilterOption[];
+  /** Companies present in the current result set. */
+  brands: FilterOption[];
   value: FilterState;
   onChange: (next: FilterState) => void;
   onReset: () => void;
   resultCount: number;
 }) {
-  const toggleCategory = (id: string) =>
+  /** Adds or removes one id from a multi-select facet. */
+  const toggle = (key: "categoryIds" | "companyIds", id: string) =>
     onChange({
       ...value,
-      categoryIds: value.categoryIds.includes(id)
-        ? value.categoryIds.filter((c) => c !== id)
-        : [...value.categoryIds, id],
+      [key]: value[key].includes(id)
+        ? value[key].filter((existing) => existing !== id)
+        : [...value[key], id],
     });
 
   const isDirty =
     value.categoryIds.length > 0 ||
+    value.companyIds.length > 0 ||
     value.inStockOnly ||
     value.price.min !== PRICE_FLOOR ||
     value.price.max !== PRICE_CEILING;
@@ -178,35 +235,25 @@ export function ProductFilters({
 
       <div className="px-5 py-4">
         <FilterSection title="Category">
-          {categories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No categories yet.</p>
-          ) : (
-            <ul className="space-y-2.5">
-              {categories.map((category) => {
-                const id = `cat-${category.id}`;
-                return (
-                  <li key={category.id} className="flex items-center gap-2.5">
-                    <Checkbox
-                      id={id}
-                      checked={value.categoryIds.includes(category.id)}
-                      onCheckedChange={() => toggleCategory(category.id)}
-                    />
-                    <Label
-                      htmlFor={id}
-                      className="flex-1 justify-between gap-2 text-sm font-normal"
-                    >
-                      <span className="truncate">{category.name}</span>
-                      {typeof category.productCount === "number" ? (
-                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                          {category.productCount}
-                        </span>
-                      ) : null}
-                    </Label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <CheckboxFacet
+            idPrefix="cat"
+            options={categories}
+            selected={value.categoryIds}
+            onToggle={(id) => toggle("categoryIds", id)}
+            emptyLabel="No categories yet."
+          />
+        </FilterSection>
+
+        {/* Brand is a Company in the hierarchy — every brand shown here is a
+            real node with products behind it, so no option is a dead end. */}
+        <FilterSection title="Brand">
+          <CheckboxFacet
+            idPrefix="brand"
+            options={brands}
+            selected={value.companyIds}
+            onToggle={(id) => toggle("companyIds", id)}
+            emptyLabel="No brands to filter by."
+          />
         </FilterSection>
 
         <FilterSection title="Price range">

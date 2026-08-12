@@ -26,6 +26,9 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/** The store every seeded row belongs to. */
+const DEFAULT_TENANT_SLUG = 'default';
+
 const LOW_STOCK_THRESHOLD = 20;
 
 function stockStatus(stock: number): StockStatus {
@@ -54,336 +57,354 @@ function daysAgo(days: number): Date {
 // Reference data (mirrors frontend/lib/admin/*)
 // ---------------------------------------------------------------------------
 
-const CATEGORIES = [
-  {
-    name: 'UAV Systems',
-    icon: '',
-    description: 'Industrial drones and aerial survey systems.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Power Solutions',
-    icon: '',
-    description: 'Energy cells, inverters and field power gear.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1497440001374-f26997328c1?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Infrastructure',
-    icon: '',
-    description: 'IoT gateways and distributed sensor networks.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Furniture & Office',
-    icon: '',
-    description: 'Ergonomic seating and workspace essentials.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1503602642458-232111445840?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
+// ---------------------------------------------------------------------------
+// Catalog: Category > Company > ProductType > Model > Product
+//
+// Modelled on the client's own examples (Electronics/Samsung/Galaxy S25 and
+// Furniture/WoodCraft/AB8) plus a spare-parts category in the shape of the
+// reference screenshots. Products are the parts that make up a model, which is
+// what the fifth level is for.
+// ---------------------------------------------------------------------------
+
+interface PartSeed {
+  code: string;
+  name: string;
+  price: number;
+  stock: number;
+  discount?: number;
+  tags?: string[];
+  variants?: string[];
+}
+
+interface ModelSeed {
+  code: string;
+  name: string;
+  releaseYear?: number;
+  parts: PartSeed[];
+}
+
+interface ProductTypeSeed {
+  name: string;
+  description?: string;
+  models: ModelSeed[];
+}
+
+interface CompanySeed {
+  code: string;
+  name: string;
+  imageUrl?: string;
+  productTypes: ProductTypeSeed[];
+}
+
+interface CategorySeed {
+  name: string;
+  icon: string;
+  description: string;
+  thumbnail?: string;
+  companies: CompanySeed[];
+}
+
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Builds a part list from a template.
+ *
+ * Prices scale off the model's headline value so an iPhone 17 display costs
+ * more than a Redmi one without every row being written out by hand.
+ */
+function partsFrom(
+  template: { code: string; name: string; factor: number; stock: number }[],
+  base: number,
+  overrides: Partial<Record<string, Partial<PartSeed>>> = {},
+): PartSeed[] {
+  return template.map((t) => ({
+    code: t.code,
+    name: t.name,
+    price: round2(base * t.factor),
+    stock: t.stock,
+    ...overrides[t.code],
+  }));
+}
+
+const PHONE_PART_TEMPLATE = [
+  { code: 'LCD', name: 'LCD Display Assembly', factor: 1, stock: 42 },
+  { code: 'BAT', name: 'Battery', factor: 0.22, stock: 130 },
+  { code: 'CHG', name: 'Charging Port Flex', factor: 0.11, stock: 88 },
+  { code: 'RCAM', name: 'Rear Camera Module', factor: 0.54, stock: 26 },
+  { code: 'FCAM', name: 'Front Camera Module', factor: 0.27, stock: 47 },
+  { code: 'SPK', name: 'Loudspeaker', factor: 0.09, stock: 12 },
+  { code: 'MB', name: 'Motherboard', factor: 1.85, stock: 6 },
+];
+
+const TABLET_PART_TEMPLATE = [
+  { code: 'LCD', name: 'Display Assembly', factor: 1, stock: 22 },
+  { code: 'BAT', name: 'Battery', factor: 0.3, stock: 40 },
+  { code: 'CHG', name: 'Charging Port Flex', factor: 0.12, stock: 35 },
+  { code: 'SPK', name: 'Speaker Set', factor: 0.14, stock: 18 },
+];
+
+const LAPTOP_PART_TEMPLATE = [
+  { code: 'LCD', name: 'Retina Display Panel', factor: 1, stock: 9 },
+  { code: 'BAT', name: 'Battery Pack', factor: 0.28, stock: 24 },
+  { code: 'KBD', name: 'Keyboard Assembly', factor: 0.34, stock: 16 },
+  { code: 'TRK', name: 'Trackpad', factor: 0.21, stock: 11 },
+  { code: 'MB', name: 'Logic Board', factor: 2.4, stock: 4 },
+];
+
+const CHAIR_PART_TEMPLATE = [
+  { code: 'SEAT', name: 'Seat Cushion', factor: 1, stock: 60 },
+  { code: 'BACK', name: 'Back Support', factor: 0.85, stock: 45 },
+  { code: 'HNDL', name: 'Armrest Handle', factor: 0.3, stock: 90 },
+  { code: 'LEGS', name: 'Leg Set (4)', factor: 0.6, stock: 38 },
+];
+
+const TABLE_PART_TEMPLATE = [
+  { code: 'TOP', name: 'Table Top', factor: 1, stock: 20 },
+  { code: 'LEGS', name: 'Leg Set (4)', factor: 0.42, stock: 34 },
+  { code: 'HRDW', name: 'Fixing Hardware Kit', factor: 0.08, stock: 150 },
+];
+
+const DRILL_PART_TEMPLATE = [
+  { code: 'MOTOR', name: 'Replacement Motor', factor: 1, stock: 14 },
+  { code: 'CABLE', name: 'Power Cable', factor: 0.15, stock: 70 },
+  { code: 'SWITCH', name: 'Trigger Switch', factor: 0.12, stock: 55 },
+  { code: 'CHUCK', name: 'Keyless Chuck', factor: 0.35, stock: 26 },
+];
+
+const CATALOG: CategorySeed[] = [
   {
     name: 'Electronics',
-    icon: '',
-    description: 'Displays, peripherals and computing hardware.',
+    icon: 'electronics',
+    description: 'Spare parts and components for phones, tablets and laptops.',
     thumbnail:
       'https://images.unsplash.com/photo-1498049860654-af1a5c076218?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
+    companies: [
+      {
+        code: 'SAM',
+        name: 'Samsung',
+        productTypes: [
+          {
+            name: 'Mobile Phones',
+            models: [
+              {
+                code: 'S25',
+                name: 'Galaxy S25',
+                releaseYear: 2025,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 189, {
+                  LCD: { tags: ['NEW ARRIVAL'], variants: ['With Frame', 'Panel Only'] },
+                  MB: { discount: 5 },
+                }),
+              },
+              {
+                code: 'S24',
+                name: 'Galaxy S24',
+                releaseYear: 2024,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 154, {
+                  BAT: { discount: 10 },
+                }),
+              },
+              {
+                code: 'A56',
+                name: 'Galaxy A56',
+                releaseYear: 2025,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 89),
+              },
+            ],
+          },
+          {
+            name: 'Tablets',
+            models: [
+              {
+                code: 'TABS10',
+                name: 'Galaxy Tab S10',
+                releaseYear: 2024,
+                parts: partsFrom(TABLET_PART_TEMPLATE, 219),
+              },
+            ],
+          },
+          {
+            name: 'Smart Watches',
+            models: [
+              {
+                code: 'W7',
+                name: 'Galaxy Watch 7',
+                releaseYear: 2024,
+                parts: partsFrom(TABLET_PART_TEMPLATE, 96),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        code: 'APL',
+        name: 'Apple',
+        productTypes: [
+          {
+            name: 'Mobile Phones',
+            models: [
+              {
+                code: 'IP17PM',
+                name: 'iPhone 17 Pro Max',
+                releaseYear: 2025,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 279, {
+                  LCD: { tags: ['NEW ARRIVAL'], variants: ['Original', 'Aftermarket'] },
+                }),
+              },
+              {
+                code: 'IP16',
+                name: 'iPhone 16',
+                releaseYear: 2024,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 208),
+              },
+              {
+                code: 'IP13',
+                name: 'iPhone 13',
+                releaseYear: 2021,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 132, {
+                  LCD: { discount: 15 },
+                }),
+              },
+            ],
+          },
+          {
+            name: 'Laptops',
+            models: [
+              {
+                code: 'MBP14',
+                name: 'MacBook Pro 14"',
+                releaseYear: 2024,
+                parts: partsFrom(LAPTOP_PART_TEMPLATE, 449),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        code: 'XIA',
+        name: 'Xiaomi',
+        productTypes: [
+          {
+            name: 'Mobile Phones',
+            models: [
+              {
+                code: 'RN14',
+                name: 'Redmi Note 14',
+                releaseYear: 2025,
+                parts: partsFrom(PHONE_PART_TEMPLATE, 74, {
+                  SPK: { discount: 20 },
+                }),
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
-    name: 'Audio',
-    icon: '',
-    description: 'Studio monitoring and professional audio.',
+    name: 'Furniture',
+    icon: 'home',
+    description: 'Replacement components for chairs, tables and cabinets.',
     thumbnail:
-      'https://images.unsplash.com/photo-1545128485-c400e710279f?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
+      'https://images.unsplash.com/photo-1503602642458-232111445840?w=800&h=600&fit=crop',
+    companies: [
+      {
+        code: 'WCR',
+        name: 'WoodCraft',
+        productTypes: [
+          {
+            name: 'Chairs',
+            models: [
+              { code: 'AB8', name: 'AB8', parts: partsFrom(CHAIR_PART_TEMPLATE, 64) },
+              { code: 'J7', name: 'J7', parts: partsFrom(CHAIR_PART_TEMPLATE, 48) },
+              {
+                code: 'PREM',
+                name: 'Premium Series',
+                parts: partsFrom(CHAIR_PART_TEMPLATE, 118, {
+                  SEAT: { tags: ['NEW ARRIVAL'] },
+                }),
+              },
+            ],
+          },
+          {
+            name: 'Tables',
+            models: [
+              { code: 'LUX', name: 'Luxury Series', parts: partsFrom(TABLE_PART_TEMPLATE, 210) },
+              { code: 'OAK2', name: 'Oak Two', parts: partsFrom(TABLE_PART_TEMPLATE, 145) },
+            ],
+          },
+        ],
+      },
+      {
+        code: 'IKA',
+        name: 'IKEA',
+        productTypes: [
+          {
+            name: 'Chairs',
+            models: [
+              { code: 'MRK', name: 'Markus', parts: partsFrom(CHAIR_PART_TEMPLATE, 39) },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
-    name: 'Accessories',
-    icon: '',
-    description: 'Desk accessories, hubs and everyday extras.',
+    name: 'Hardware',
+    icon: 'automotive',
+    description: 'Power tool parts and workshop spares.',
     thumbnail:
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Health & Beauty',
-    icon: '',
-    description: 'Skincare, fitness equipment and wellness.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Sports & Outdoors',
-    icon: '',
-    description: 'Gear for hiking, cycling and team sports.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
-  },
-  {
-    name: 'Books & Media',
-    icon: '',
-    description: 'Bestsellers, audiobooks and digital media.',
-    thumbnail:
-      'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800&h=600&fit=crop',
-    thumbnailSize: '800x600',
+      'https://images.unsplash.com/photo-1581147036324-c1c88bb6efd6?w=800&h=600&fit=crop',
+    companies: [
+      {
+        code: 'BSH',
+        name: 'Bosch',
+        productTypes: [
+          {
+            name: 'Drilling Machines',
+            models: [
+              { code: 'X10', name: 'X10', releaseYear: 2023, parts: partsFrom(DRILL_PART_TEMPLATE, 88) },
+              { code: 'X20', name: 'X20', releaseYear: 2025, parts: partsFrom(DRILL_PART_TEMPLATE, 126) },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ];
 
-const PRODUCTS = [
-  {
-    sku: 'AS-900-PR',
-    name: 'AeroScan Precision Drone',
-    brand: 'Cento Aerial',
-    category: 'UAV Systems',
-    stock: 48,
-    price: 12499,
-    discount: 15,
-    unitValue: 9800,
-    tags: ['NEW ARRIVAL'],
-    variants: ['Standard', 'Extended Battery'],
-    description:
-      'High-altitude mapping system built for industrial survey work.',
-    images: [
-      'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'VP-5000-X',
-    name: 'Cento Volt-Pack',
-    brand: 'Cento Power',
-    category: 'Power Solutions',
-    stock: 6,
-    price: 4250,
-    discount: 5,
-    unitValue: 3100,
-    tags: [],
-    variants: ['5000mAh', '10000mAh'],
-    description: 'High-capacity energy cell for field deployments.',
-    images: [
-      'https://images.unsplash.com/photo-1497440001374-f26997328c1?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'ISH-42-GEN3',
-    name: 'Industrial Sensor Hub',
-    brand: 'Cento Systems',
-    category: 'Infrastructure',
-    stock: 120,
-    price: 1890,
-    discount: 12,
-    unitValue: 1240,
-    tags: ['ECO-FRIENDLY'],
-    variants: ['Gen 3'],
-    description: 'IoT infrastructure gateway for distributed sensor networks.',
-    images: [
-      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'CS-PRD-00123',
-    name: 'Premium Leather Ergonomic Chair',
-    brand: 'Cento Design',
-    category: 'Furniture & Office',
-    stock: 100,
-    price: 249,
-    discount: 10,
-    unitValue: 150,
-    tags: ['NEW ARRIVAL', 'ECO-FRIENDLY'],
-    variants: ['Matte Black', 'Carbon Gray', 'Arctic White'],
-    description:
-      'Premium ergonomic office chair in full-grain leather with adjustable lumbar support.',
-    images: [
-      'https://images.unsplash.com/photo-1598300042267-174c1e13cd2c?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'HS-220-AUD',
-    name: 'Halo Studio Headphones',
-    brand: 'Cento Audio',
-    category: 'Audio',
-    stock: 0,
-    price: 219,
-    discount: 8,
-    unitValue: 130,
-    tags: [],
-    variants: ['Black', 'Silver'],
-    description:
-      'Closed-back studio monitoring headphones with active noise cancellation.',
-    images: [
-      'https://images.unsplash.com/photo-1545128485-c400e710279f?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'NB-310-MON',
-    name: 'Lumen 27" 4K Monitor',
-    brand: 'Cento Displays',
-    category: 'Electronics',
-    stock: 34,
-    price: 429,
-    discount: 20,
-    unitValue: 300,
-    tags: [],
-    variants: [],
-    description: '27-inch 4K IPS display with USB-C power delivery.',
-    images: [
-      'https://images.unsplash.com/photo-1498049860654-af1a5c076218?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'PD-014-ACC',
-    name: 'Pulse Desk Mat — XL',
-    brand: 'Cento Design',
-    category: 'Accessories',
-    stock: 18,
-    price: 29,
-    discount: 5,
-    unitValue: 12,
-    tags: [],
-    variants: ['Navy', 'Sand'],
-    description: 'Extra-large stitched-edge desk mat.',
-    images: [
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'VX-077-HUB',
-    name: 'Vortex USB-C Hub',
-    brand: 'Cento Systems',
-    category: 'Accessories',
-    stock: 9,
-    price: 39,
-    discount: 15,
-    unitValue: 20,
-    tags: [],
-    variants: [],
-    description: '7-in-1 USB-C hub with HDMI 4K and 100W passthrough.',
-    images: [
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'AK-500-KEY',
-    name: 'Aurora Mechanical Keyboard',
-    brand: 'Cento Peripherals',
-    category: 'Electronics',
-    stock: 62,
-    price: 149,
-    discount: 18,
-    unitValue: 85,
-    tags: ['NEW ARRIVAL'],
-    variants: ['Ivory', 'Onyx'],
-    description: 'Hot-swappable mechanical keyboard with per-key RGB.',
-    images: [
-      'https://images.unsplash.com/photo-1595225476474-90129e84ea9b?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'NW-200-MOU',
-    name: 'Nebula Wireless Mouse',
-    brand: 'Cento Peripherals',
-    category: 'Electronics',
-    stock: 71,
-    price: 59,
-    discount: 10,
-    unitValue: 32,
-    tags: [],
-    variants: [],
-    description: 'Lightweight wireless mouse with 4000 DPI sensor.',
-    images: [
-      'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'PS-880-INF',
-    name: 'Perimeter Sensor Array',
-    brand: 'Cento Systems',
-    category: 'Infrastructure',
-    stock: 4,
-    price: 3120,
-    discount: 25,
-    unitValue: 2400,
-    tags: [],
-    variants: [],
-    description: 'Weatherproof perimeter sensing array with mesh networking.',
-    visibility: ProductVisibility.SCHEDULED,
-    scheduledDate: new Date('2026-08-01'),
-    images: [
-      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'GB-140-PWR',
-    name: 'Cento GridBox Inverter',
-    brand: 'Cento Power',
-    category: 'Power Solutions',
-    stock: 27,
-    price: 1580,
-    discount: 8,
-    unitValue: 1100,
-    tags: [],
-    variants: [],
-    description: 'Modular grid-tie inverter for solar deployments.',
-    images: [
-      'https://images.unsplash.com/photo-1497440001374-f26997328c1?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'QS-200-CAM',
-    name: 'Quantum Security Camera',
-    brand: 'Cento Security',
-    category: 'Electronics',
-    stock: 55,
-    price: 189,
-    discount: 12,
-    unitValue: 120,
-    tags: ['NEW ARRIVAL'],
-    variants: ['Indoor', 'Outdoor'],
-    description: '4K security camera with night vision and motion detection.',
-    images: [
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'ST-150-SPA',
-    name: 'SoundTower Bluetooth Speaker',
-    brand: 'Cento Audio',
-    category: 'Audio',
-    stock: 38,
-    price: 129,
-    discount: 15,
-    unitValue: 80,
-    tags: [],
-    variants: ['Black', 'White', 'Blue'],
-    description: 'Portable Bluetooth speaker with 360-degree sound.',
-    images: [
-      'https://images.unsplash.com/photo-1545128485-c400e710279f?w=800&h=600&fit=crop',
-    ],
-  },
-  {
-    sku: 'ER-300-WRT',
-    name: 'ErgoRest Wrist Support',
-    brand: 'Cento Design',
-    category: 'Accessories',
-    stock: 92,
-    price: 45,
-    discount: 20,
-    unitValue: 28,
-    tags: ['ECO-FRIENDLY'],
-    variants: ['Standard', 'XL'],
-    description: 'Memory foam wrist rest for keyboard and mouse.',
-    images: [
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop',
-    ],
-  },
-];
+/**
+ * Flattened product rows, one per part, each carrying the path to its Model.
+ * SKUs are deterministic (`<company>-<model>-<part>`) so the demo orders below
+ * can reference them by name.
+ */
+const PRODUCTS = CATALOG.flatMap((category) =>
+  category.companies.flatMap((company) =>
+    company.productTypes.flatMap((productType) =>
+      productType.models.flatMap((model) =>
+        model.parts.map((part) => ({
+          sku: `${company.code}-${model.code}-${part.code}`,
+          name: `${part.name} — ${company.name} ${model.name}`,
+          path: {
+            category: category.name,
+            company: company.name,
+            productType: productType.name,
+            model: model.name,
+          },
+          stock: part.stock,
+          price: part.price,
+          discount: part.discount ?? 0,
+          unitValue: round2(part.price * 0.62),
+          tags: part.tags ?? [],
+          variants: part.variants ?? [],
+          description: `Genuine replacement ${part.name.toLowerCase()} for the ${company.name} ${model.name}.`,
+          images: [] as string[],
+        })),
+      ),
+    ),
+  ),
+);
 
 const CUSTOMERS = [
   {
@@ -609,8 +630,8 @@ const ORDERS: Array<{
     status: OrderStatus.SHIPPED,
     payment: PaymentStatus.PAID,
     items: [
-      ['ISH-42-GEN3', 1],
-      ['PD-014-ACC', 3],
+      ['APL-IP17PM-LCD', 1],
+      ['XIA-RN14-CHG', 3],
     ],
     shipping: 39,
     discount: 0,
@@ -624,8 +645,8 @@ const ORDERS: Array<{
     status: OrderStatus.PENDING,
     payment: PaymentStatus.PENDING,
     items: [
-      ['PD-014-ACC', 2],
-      ['VX-077-HUB', 2],
+      ['XIA-RN14-CHG', 2],
+      ['BSH-X10-MOTOR', 2],
     ],
     shipping: 32.5,
     discount: 0,
@@ -639,8 +660,8 @@ const ORDERS: Array<{
     status: OrderStatus.PROCESSING,
     payment: PaymentStatus.PAID,
     items: [
-      ['AS-900-PR', 1],
-      ['VP-5000-X', 1],
+      ['SAM-S25-LCD', 1],
+      ['SAM-S25-BAT', 1],
     ],
     shipping: 46,
     discount: 10,
@@ -653,7 +674,7 @@ const ORDERS: Array<{
     days: 5,
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
-    items: [['CS-PRD-00123', 1]],
+    items: [['WCR-AB8-SEAT', 1]],
     shipping: 0,
     discount: 0,
     method: 'Standard Delivery (Poste)',
@@ -666,8 +687,8 @@ const ORDERS: Array<{
     status: OrderStatus.CANCELLED,
     payment: PaymentStatus.REFUNDED,
     items: [
-      ['VP-5000-X', 1],
-      ['NW-200-MOU', 1],
+      ['SAM-S25-BAT', 1],
+      ['WCR-PREM-HNDL', 1],
     ],
     shipping: 35,
     discount: 0,
@@ -681,8 +702,8 @@ const ORDERS: Array<{
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
     items: [
-      ['AK-500-KEY', 2],
-      ['PD-014-ACC', 1],
+      ['APL-MBP14-TRK', 2],
+      ['XIA-RN14-CHG', 1],
     ],
     shipping: 12,
     discount: 0,
@@ -695,7 +716,7 @@ const ORDERS: Array<{
     days: 10,
     status: OrderStatus.PROCESSING,
     payment: PaymentStatus.PAID,
-    items: [['NB-310-MON', 1]],
+    items: [['APL-IP16-LCD', 1]],
     shipping: 15,
     discount: 0,
     method: 'Express Delivery (DHL)',
@@ -707,7 +728,7 @@ const ORDERS: Array<{
     days: 12,
     status: OrderStatus.SHIPPED,
     payment: PaymentStatus.PAID,
-    items: [['NW-200-MOU', 4]],
+    items: [['WCR-PREM-HNDL', 4]],
     shipping: 24,
     discount: 0,
     method: 'Standard Delivery (SDA)',
@@ -719,7 +740,7 @@ const ORDERS: Array<{
     days: 15,
     status: OrderStatus.PENDING,
     payment: PaymentStatus.FAILED,
-    items: [['VX-077-HUB', 2]],
+    items: [['BSH-X10-MOTOR', 2]],
     shipping: 20,
     discount: 0,
     method: 'Standard Delivery (Poste)',
@@ -732,8 +753,8 @@ const ORDERS: Array<{
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
     items: [
-      ['GB-140-PWR', 1],
-      ['PD-014-ACC', 2],
+      ['SAM-S24-BAT', 1],
+      ['XIA-RN14-CHG', 2],
     ],
     shipping: 18,
     discount: 25,
@@ -746,7 +767,7 @@ const ORDERS: Array<{
     days: 25,
     status: OrderStatus.RETURNED,
     payment: PaymentStatus.REFUNDED,
-    items: [['HS-220-AUD', 3]],
+    items: [['APL-IP16-BAT', 3]],
     shipping: 15,
     discount: 0,
     method: 'Standard Delivery (BRT)',
@@ -758,7 +779,7 @@ const ORDERS: Array<{
     days: 35,
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
-    items: [['ISH-42-GEN3', 2]],
+    items: [['APL-IP17PM-LCD', 2]],
     shipping: 40,
     discount: 60,
     method: 'Freight Delivery (SDA)',
@@ -771,8 +792,8 @@ const ORDERS: Array<{
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
     items: [
-      ['CS-PRD-00123', 2],
-      ['AK-500-KEY', 1],
+      ['WCR-AB8-SEAT', 2],
+      ['APL-MBP14-TRK', 1],
     ],
     shipping: 22,
     discount: 0,
@@ -785,7 +806,7 @@ const ORDERS: Array<{
     days: 70,
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
-    items: [['AS-900-PR', 1]],
+    items: [['SAM-S25-LCD', 1]],
     shipping: 55,
     discount: 0,
     method: 'Freight Delivery (SDA)',
@@ -798,8 +819,8 @@ const ORDERS: Array<{
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
     items: [
-      ['GB-140-PWR', 2],
-      ['VP-5000-X', 2],
+      ['SAM-S24-BAT', 2],
+      ['SAM-S25-BAT', 2],
     ],
     shipping: 60,
     discount: 100,
@@ -813,8 +834,8 @@ const ORDERS: Array<{
     status: OrderStatus.DELIVERED,
     payment: PaymentStatus.PAID,
     items: [
-      ['NB-310-MON', 2],
-      ['NW-200-MOU', 2],
+      ['APL-IP16-LCD', 2],
+      ['WCR-PREM-HNDL', 2],
     ],
     shipping: 28,
     discount: 0,
@@ -837,6 +858,21 @@ async function main() {
   // Required rather than defaulted: a fallback password here would be a literal
   // credential in the repo, and would silently create a reachable admin account
   // with a publicly known password.
+  // --- Tenant ---------------------------------------------------------------
+  // Everything below belongs to one store. A second tenant can be created
+  // through POST /api/platform/tenants; nothing here is shared between them.
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: DEFAULT_TENANT_SLUG },
+    update: {},
+    create: {
+      id: 'tenant_default',
+      name: 'Default Store',
+      slug: DEFAULT_TENANT_SLUG,
+    },
+  });
+  const tenantId = tenant.id;
+  console.log(`[seed] Tenant: ${tenant.slug} (${tenantId})`);
+
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
     throw new Error(
@@ -845,25 +881,40 @@ async function main() {
     );
   }
 
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      passwordHash: await bcrypt.hash(adminPassword, 12),
-      fullName: adminName,
-      role: Role.SUPER_ADMIN,
-      status: UserStatus.ACTIVE,
-      emailVerified: true,
-    },
+  // The bootstrap SUPER_ADMIN is the PLATFORM operator: tenantId stays null so
+  // it belongs to no store, which is what lets it create tenants and act inside
+  // any of them via the X-Tenant-Slug header. A store's own top-level account is
+  // an ADMIN scoped to that store (admin@gmail.com below).
+  // Deliberately a different address from ADMIN_EMAIL: that one is the default
+  // store's own SUPER_ADMIN, and two accounts sharing an email would make the
+  // storefront login ambiguous (the tenant-scoped row always wins).
+  const platformEmail =
+    process.env.PLATFORM_ADMIN_EMAIL ?? `platform@${adminEmail.split('@')[1]}`;
+
+  const existingAdmin = await prisma.user.findFirst({
+    where: { email: platformEmail, tenantId: null },
   });
-  console.log(`[seed] Super-admin: ${admin.email}`);
+  const admin =
+    existingAdmin ??
+    (await prisma.user.create({
+      data: {
+        tenantId: null,
+        email: platformEmail,
+        passwordHash: await bcrypt.hash(adminPassword, 12),
+        fullName: `${adminName} (Platform)`,
+        role: Role.SUPER_ADMIN,
+        status: UserStatus.ACTIVE,
+        emailVerified: true,
+      },
+    }));
+  console.log(`[seed] Platform super-admin: ${admin.email} (no tenant)`);
 
   // --- Default admin user ---------------------------------------------------
   const defaultAdmin = await prisma.user.upsert({
-    where: { email: 'admin@gmail.com' },
+    where: { tenantId_email: { tenantId, email: 'admin@gmail.com' } },
     update: {},
     create: {
+      tenantId,
       email: 'admin@gmail.com',
       passwordHash: await bcrypt.hash('Admin123', 12),
       fullName: 'Admin',
@@ -889,9 +940,10 @@ async function main() {
     },
   ]) {
     await prisma.user.upsert({
-      where: { email: staff.email },
+      where: { tenantId_email: { tenantId, email: staff.email } },
       update: {},
       create: {
+        tenantId,
         ...staff,
         passwordHash: demoPassword,
         status: UserStatus.ACTIVE,
@@ -900,54 +952,118 @@ async function main() {
     });
   }
 
-  // --- Categories -----------------------------------------------------------
-  const categoryIds = new Map<string, string>();
-  for (const c of CATEGORIES) {
+  // --- Catalog hierarchy ----------------------------------------------------
+  // Created top-down, because each level needs its parent's id. Every upsert is
+  // keyed on the same compound unique the API enforces, so re-running the seed
+  // updates rather than duplicates.
+  const modelIds = new Map<string, string>();
+  let companyCount = 0;
+  let productTypeCount = 0;
+
+  for (const [categoryIndex, c] of CATALOG.entries()) {
     const category = await prisma.category.upsert({
-      where: { slug: slugify(c.name) },
-      update: {
-        description: c.description,
-        icon: c.icon,
-        thumbnailName: c.thumbnail,
-        thumbnailSize: c.thumbnailSize,
-      },
+      where: { tenantId_slug: { tenantId, slug: slugify(c.name) } },
+      update: { description: c.description, icon: c.icon },
       create: {
+        tenantId,
         name: c.name,
         slug: slugify(c.name),
         description: c.description,
         icon: c.icon,
+        position: categoryIndex,
         thumbnailName: c.thumbnail,
-        thumbnailSize: c.thumbnailSize,
+        imageUrl: c.thumbnail,
       },
     });
-    categoryIds.set(c.name, category.id);
+
+    for (const [companyIndex, co] of c.companies.entries()) {
+      const company = await prisma.company.upsert({
+        where: { categoryId_slug: { categoryId: category.id, slug: slugify(co.name) } },
+        update: {},
+        create: {
+          tenantId,
+          categoryId: category.id,
+          name: co.name,
+          slug: slugify(co.name),
+          position: companyIndex,
+          imageUrl: co.imageUrl,
+        },
+      });
+      companyCount++;
+
+      for (const [typeIndex, pt] of co.productTypes.entries()) {
+        const productType = await prisma.productType.upsert({
+          where: { companyId_slug: { companyId: company.id, slug: slugify(pt.name) } },
+          update: {},
+          create: {
+            tenantId,
+            companyId: company.id,
+            name: pt.name,
+            slug: slugify(pt.name),
+            description: pt.description ?? '',
+            position: typeIndex,
+          },
+        });
+        productTypeCount++;
+
+        for (const [modelIndex, m] of pt.models.entries()) {
+          const model = await prisma.model.upsert({
+            where: {
+              productTypeId_slug: {
+                productTypeId: productType.id,
+                slug: slugify(m.name),
+              },
+            },
+            update: {},
+            create: {
+              tenantId,
+              productTypeId: productType.id,
+              name: m.name,
+              slug: slugify(m.name),
+              position: modelIndex,
+              releaseYear: m.releaseYear,
+            },
+          });
+          modelIds.set(`${c.name}/${co.name}/${pt.name}/${m.name}`, model.id);
+        }
+      }
+    }
   }
-  console.log(`[seed] Categories: ${categoryIds.size}`);
+  console.log(
+    `[seed] Catalog: ${CATALOG.length} categories, ${companyCount} companies, ` +
+      `${productTypeCount} product types, ${modelIds.size} models`,
+  );
 
   // --- Products -------------------------------------------------------------
   const productIds = new Map<string, string>();
   for (const p of PRODUCTS) {
-    const existing = await prisma.product.findUnique({ where: { sku: p.sku } });
+    const modelKey = `${p.path.category}/${p.path.company}/${p.path.productType}/${p.path.model}`;
+    const modelId = modelIds.get(modelKey);
+    if (!modelId) throw new Error(`Seed error: no model for ${modelKey}`);
+
+    const existing = await prisma.product.findFirst({
+      where: { tenantId, sku: p.sku },
+    });
     if (existing) {
       productIds.set(p.sku, existing.id);
       continue;
     }
+
     const product = await prisma.product.create({
       data: {
+        tenantId,
+        modelId,
         sku: p.sku,
         name: p.name,
-        brand: p.brand,
         description: p.description,
-        categoryId: categoryIds.get(p.category),
         stock: p.stock,
         status: stockStatus(p.stock),
         price: new Prisma.Decimal(p.price),
         unitValue: new Prisma.Decimal(p.unitValue),
         discount: p.discount,
         tags: p.tags,
-        visibility: p.visibility ?? ProductVisibility.PUBLIC,
-        scheduledDate: p.scheduledDate ?? null,
-        images: { create: (p.images || []).map((url) => ({ url })) },
+        visibility: ProductVisibility.PUBLIC,
+        images: { create: p.images.map((url) => ({ url })) },
         variants: { create: p.variants.map((name) => ({ name })) },
       },
     });
@@ -955,14 +1071,29 @@ async function main() {
   }
   console.log(`[seed] Products: ${productIds.size}`);
 
+  // Order lines snapshot where a product sat when it sold; precomputed here so
+  // the demo orders below carry the same data a real checkout would write.
+  const classificationBySku = new Map(
+    PRODUCTS.map((p) => [
+      p.sku,
+      {
+        categoryName: p.path.category,
+        companyName: p.path.company,
+        productTypeName: p.path.productType,
+        modelName: p.path.model,
+      },
+    ]),
+  );
+
   // --- Customers ------------------------------------------------------------
   const customerPassword = await bcrypt.hash('Customer123!', 12);
   const customerIds: string[] = [];
   for (const c of CUSTOMERS) {
     const customer = await prisma.user.upsert({
-      where: { email: c.email },
+      where: { tenantId_email: { tenantId, email: c.email } },
       update: {},
       create: {
+        tenantId,
         email: c.email,
         fullName: c.fullName,
         phone: c.phone,
@@ -972,6 +1103,7 @@ async function main() {
         emailVerified: true,
         createdAt: daysAgo(c.joined),
         addresses: { create: { lines: c.address, isDefault: true } },
+        wishlists: { create: { tenantId } },
       },
     });
     customerIds.push(customer.id);
@@ -985,7 +1117,9 @@ async function main() {
 
   for (const o of ORDERS) {
     const orderNumber = `ORD-2026-${orderSeq++}`;
-    const existing = await prisma.order.findUnique({ where: { orderNumber } });
+    const existing = await prisma.order.findFirst({
+      where: { tenantId, orderNumber },
+    });
     if (existing) continue;
 
     const customerId = customerIds[o.customer];
@@ -993,6 +1127,7 @@ async function main() {
 
     await prisma.order.create({
       data: {
+        tenantId,
         orderNumber,
         customerId,
         status: o.status,
@@ -1012,6 +1147,8 @@ async function main() {
             sku,
             quantity: qty,
             unitPrice: new Prisma.Decimal(priceBySku.get(sku)!),
+            // Classification snapshot, mirroring what checkout writes.
+            ...classificationBySku.get(sku),
           })),
         },
       },
@@ -1022,9 +1159,10 @@ async function main() {
   // --- Discounts ------------------------------------------------------------
   for (const d of DISCOUNTS) {
     await prisma.discount.upsert({
-      where: { code: d.code },
+      where: { tenantId_code: { tenantId, code: d.code } },
       update: {},
       create: {
+        tenantId,
         code: d.code,
         name: d.name,
         type: d.type,
@@ -1041,9 +1179,9 @@ async function main() {
   console.log(`[seed] Discounts: ${DISCOUNTS.length}`);
 
   // --- Notifications (broadcast to all admins) -------------------------------
-  if ((await prisma.notification.count()) === 0) {
+  if ((await prisma.notification.count({ where: { tenantId } })) === 0) {
     await prisma.notification.createMany({
-      data: [
+      data: ([
         {
           type: NotificationType.SUCCESS,
           category: NotificationCategory.ORDERS,
@@ -1108,13 +1246,13 @@ async function main() {
           read: true,
           createdAt: daysAgo(6),
         },
-      ],
+      ] as const).map((n) => ({ ...n, tenantId })),
     });
     console.log('[seed] Notifications: 8');
   }
 
   // --- Conversations --------------------------------------------------------
-  if ((await prisma.conversation.count()) === 0) {
+  if ((await prisma.conversation.count({ where: { tenantId } })) === 0) {
     const threads = [
       {
         customer: 0,
@@ -1197,6 +1335,7 @@ async function main() {
     for (const thread of threads) {
       await prisma.conversation.create({
         data: {
+          tenantId,
           customerId: customerIds[thread.customer],
           unreadCount: thread.unread,
           lastMessageAt: new Date(),

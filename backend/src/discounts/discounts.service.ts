@@ -19,7 +19,7 @@ export type DiscountStatus = 'Active' | 'Scheduled' | 'Expired';
 export class DiscountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: DiscountQueryDto) {
+  async findAll(tenantId: string, query: DiscountQueryDto) {
     const now = new Date();
 
     // Mirrors `deriveStatus` in SQL so the filter agrees with the badge.
@@ -30,6 +30,7 @@ export class DiscountsService {
     };
 
     const where: Prisma.DiscountWhereInput = {
+      tenantId,
       ...(query.category && { category: query.category }),
       ...(query.status && statusWindow[query.status]),
       ...(query.type && { type: query.type }),
@@ -54,23 +55,26 @@ export class DiscountsService {
     return paginate(rows.map(toDiscountView), total, query.page, query.limit);
   }
 
-  async findOne(id: string) {
-    const discount = await this.prisma.discount.findUnique({ where: { id } });
+  async findOne(tenantId: string, id: string) {
+    const discount = await this.prisma.discount.findFirst({
+      where: { id, tenantId },
+    });
     if (!discount) throw new NotFoundException(`Discount ${id} not found`);
     return toDiscountView(discount);
   }
 
-  async create(dto: CreateDiscountDto) {
+  async create(tenantId: string, dto: CreateDiscountDto) {
     const code = dto.code.trim().toUpperCase();
     this.assertValid(dto);
 
-    const clash = await this.prisma.discount.findUnique({ where: { code } });
+    const clash = await this.prisma.discount.findFirst({ where: { tenantId, code } });
     if (clash) {
       throw new BadRequestException(`The code "${code}" is already in use`);
     }
 
     const discount = await this.prisma.discount.create({
       data: {
+        tenantId,
         name: dto.name.trim(),
         code,
         type: dto.type,
@@ -85,8 +89,10 @@ export class DiscountsService {
     return toDiscountView(discount);
   }
 
-  async update(id: string, dto: UpdateDiscountDto) {
-    const existing = await this.prisma.discount.findUnique({ where: { id } });
+  async update(tenantId: string, id: string, dto: UpdateDiscountDto) {
+    const existing = await this.prisma.discount.findFirst({
+      where: { id, tenantId },
+    });
     if (!existing) throw new NotFoundException(`Discount ${id} not found`);
 
     this.assertValid({
@@ -100,7 +106,7 @@ export class DiscountsService {
     if (dto.code) {
       code = dto.code.trim().toUpperCase();
       const clash = await this.prisma.discount.findFirst({
-        where: { code, NOT: { id } },
+        where: { tenantId, code, NOT: { id } },
         select: { id: true },
       });
       if (clash) {
@@ -125,17 +131,17 @@ export class DiscountsService {
     return toDiscountView(discount);
   }
 
-  async remove(id: string) {
-    const exists = await this.prisma.discount.count({ where: { id } });
+  async remove(tenantId: string, id: string) {
+    const exists = await this.prisma.discount.count({ where: { id, tenantId } });
     if (!exists) throw new NotFoundException(`Discount ${id} not found`);
     await this.prisma.discount.delete({ where: { id } });
     return { message: 'Discount deleted' };
   }
 
   /** Validates a code at checkout time and reports why it is unusable. */
-  async validateCode(code: string) {
-    const discount = await this.prisma.discount.findUnique({
-      where: { code: code.trim().toUpperCase() },
+  async validateCode(tenantId: string, code: string) {
+    const discount = await this.prisma.discount.findFirst({
+      where: { tenantId, code: code.trim().toUpperCase() },
     });
     if (!discount) return { valid: false, reason: 'Unknown discount code' };
 

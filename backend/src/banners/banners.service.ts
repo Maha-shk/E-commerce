@@ -26,8 +26,9 @@ import {
 export class BannersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: BannerQueryDto) {
+  async findAll(tenantId: string, query: BannerQueryDto) {
     const where: Prisma.BannerWhereInput = {
+      tenantId,
       ...(query.type && { type: query.type }),
       ...(query.isActive !== undefined && { isActive: query.isActive }),
       ...(query.search && {
@@ -51,17 +52,18 @@ export class BannersService {
     return paginate(rows, total, query.page, query.limit);
   }
 
-  async findOne(id: string) {
-    const banner = await this.prisma.banner.findUnique({ where: { id } });
+  async findOne(tenantId: string, id: string) {
+    const banner = await this.prisma.banner.findFirst({ where: { id, tenantId } });
     if (!banner) throw new NotFoundException(`Banner ${id} not found`);
     return banner;
   }
 
-  async create(dto: CreateBannerDto) {
+  async create(tenantId: string, dto: CreateBannerDto) {
     assertScheduleValid(dto.startDate, dto.endDate);
 
     return this.prisma.banner.create({
       data: {
+        tenantId,
         type: dto.type,
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
@@ -71,15 +73,16 @@ export class BannersService {
         linkText: dto.linkText?.trim() || null,
         isActive: dto.isActive ?? true,
         // Appended to the end of its slot unless the caller places it.
-        displayOrder: dto.displayOrder ?? (await this.nextDisplayOrder(dto.type)),
+        displayOrder:
+          dto.displayOrder ?? (await this.nextDisplayOrder(tenantId, dto.type)),
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         endDate: dto.endDate ? new Date(dto.endDate) : null,
       },
     });
   }
 
-  async update(id: string, dto: UpdateBannerDto) {
-    const existing = await this.findOne(id);
+  async update(tenantId: string, id: string, dto: UpdateBannerDto) {
+    const existing = await this.findOne(tenantId, id);
 
     // Validate against the merged result: a PATCH that sets only `endDate`
     // still has to be checked against the stored `startDate`.
@@ -117,8 +120,8 @@ export class BannersService {
   }
 
   /** Flips `isActive` — the usual way to pull a banner without deleting it. */
-  async setActive(id: string, isActive: boolean) {
-    await this.findOne(id);
+  async setActive(tenantId: string, id: string, isActive: boolean) {
+    await this.findOne(tenantId, id);
     return this.prisma.banner.update({ where: { id }, data: { isActive } });
   }
 
@@ -128,9 +131,9 @@ export class BannersService {
    * One transaction so a half-applied reorder can't leave two banners fighting
    * for first place.
    */
-  async reorder(dto: ReorderBannersDto) {
+  async reorder(tenantId: string, dto: ReorderBannersDto) {
     const found = await this.prisma.banner.findMany({
-      where: { id: { in: dto.ids } },
+      where: { tenantId, id: { in: dto.ids } },
       select: { id: true },
     });
 
@@ -152,16 +155,19 @@ export class BannersService {
     return { message: 'Banner order updated' };
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(tenantId: string, id: string) {
+    await this.findOne(tenantId, id);
     await this.prisma.banner.delete({ where: { id } });
     return { message: 'Banner deleted' };
   }
 
   /** Places a new banner after the last one in its slot. */
-  private async nextDisplayOrder(type: CreateBannerDto['type']): Promise<number> {
+  private async nextDisplayOrder(
+    tenantId: string,
+    type: CreateBannerDto['type'],
+  ): Promise<number> {
     const last = await this.prisma.banner.findFirst({
-      where: { type },
+      where: { tenantId, type },
       orderBy: { displayOrder: 'desc' },
       select: { displayOrder: true },
     });

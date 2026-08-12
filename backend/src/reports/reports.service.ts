@@ -19,8 +19,9 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Builds the view (metrics + columns + rows) for the requested tab. */
-  async build(query: ReportQueryDto) {
+  async build(tenantId: string, query: ReportQueryDto) {
     const window: Prisma.OrderWhereInput = {
+      tenantId,
       ...((query.from || query.to) && {
         placedAt: {
           ...(query.from && { gte: new Date(query.from) }),
@@ -48,10 +49,12 @@ export class ReportsService {
       include: {
         customer: { select: { fullName: true } },
         items: {
+          // The classification snapshot taken at checkout, not a live join:
+          // re-filing a product must not restate last quarter's figures.
           select: {
             quantity: true,
             unitPrice: true,
-            product: { select: { category: { select: { name: true } } } },
+            categoryName: true,
           },
         },
       },
@@ -61,7 +64,7 @@ export class ReportsService {
       const amount = total(o.items, o.shippingCost, o.discount);
       const name = o.customer?.fullName ?? 'Guest';
       // An order's "category" is that of its first line item.
-      const detail = o.items[0]?.product?.category?.name ?? 'Uncategorised';
+      const detail = o.items[0]?.categoryName ?? 'Uncategorised';
       return {
         id: o.orderNumber,
         initials: initialsOf(name),
@@ -169,9 +172,7 @@ export class ReportsService {
         quantity: true,
         unitPrice: true,
         order: { select: { status: true } },
-        product: {
-          select: { id: true, category: { select: { name: true } } },
-        },
+        categoryName: true,
       },
     });
 
@@ -187,7 +188,7 @@ export class ReportsService {
           name: i.name,
           units: 0,
           revenue: 0,
-          category: i.product?.category?.name ?? 'Uncategorised',
+          category: i.categoryName ?? 'Uncategorised',
           returned: false,
         };
       const isReturn =

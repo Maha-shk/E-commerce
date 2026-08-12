@@ -37,8 +37,12 @@ const CART_INCLUDE = {
       product: {
         include: {
           images: true,
-          category: true,
           variants: true,
+          model: {
+            include: {
+              productType: { include: { company: { include: { category: true } } } },
+            },
+          },
         },
       },
     },
@@ -52,47 +56,41 @@ export class CartService {
   /**
    * Get or create cart for user or guest session (internal method)
    */
-  private async getCartForUser(userId?: string, sessionId?: string) {
-    if (userId) {
-      // Authenticated user cart
-      let cart = await this.prisma.cart.findFirst({
-        where: { userId },
-        include: CART_INCLUDE,
-      });
-
-      if (!cart) {
-        cart = await this.prisma.cart.create({
-          data: { userId },
-          include: CART_INCLUDE,
-        });
-      }
-
-      return cart;
-    } else if (sessionId) {
-      // Guest cart
-      let cart = await this.prisma.cart.findFirst({
-        where: { sessionId },
-        include: CART_INCLUDE,
-      });
-
-      if (!cart) {
-        cart = await this.prisma.cart.create({
-          data: { sessionId },
-          include: CART_INCLUDE,
-        });
-      }
-
-      return cart;
+  private async getCartForUser(
+    tenantId: string,
+    userId?: string,
+    sessionId?: string,
+  ) {
+    if (!userId && !sessionId) {
+      throw new BadRequestException('Either userId or sessionId is required');
     }
 
-    throw new BadRequestException('Either userId or sessionId is required');
+    // A guest session id is client-supplied, so it is matched together with the
+    // tenant: the same cookie replayed against another store must not reach
+    // the cart it created here.
+    const where = userId ? { tenantId, userId } : { tenantId, sessionId };
+
+    const existing = await this.prisma.cart.findFirst({
+      where,
+      include: CART_INCLUDE,
+    });
+    if (existing) return existing;
+
+    return this.prisma.cart.create({
+      data: { tenantId, ...(userId ? { userId } : { sessionId })  },
+      include: CART_INCLUDE,
+    });
   }
 
   /**
    * Get user's cart or guest cart
    */
-  async getCart(userId?: string, sessionId?: string): Promise<CartResponseDto> {
-    const cart = await this.getCartForUser(userId, sessionId);
+  async getCart(
+    tenantId: string,
+    userId?: string,
+    sessionId?: string,
+  ): Promise<CartResponseDto> {
+    const cart = await this.getCartForUser(tenantId, userId, sessionId);
     return this.toCartResponse(cart);
   }
 
@@ -140,13 +138,14 @@ export class CartService {
   }
 
   async addItem(
+    tenantId: string,
     dto: CreateCartItemDto,
     userId?: string,
     sessionId?: string,
   ): Promise<CartResponseDto> {
-    // Verify product exists and is in stock
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
+    // Verify product exists in *this* store and is in stock
+    const product = await this.prisma.product.findFirst({
+      where: { id: dto.productId, tenantId },
       include: { variants: true },
     });
 
@@ -168,7 +167,7 @@ export class CartService {
 
     const variantId = this.resolveVariantId(product, dto.variantId);
 
-    const cart = await this.getCartForUser(userId, sessionId);
+    const cart = await this.getCartForUser(tenantId, userId, sessionId);
 
     // Two different variants of the same product are two different lines, so
     // the variant is part of the identity — not just the product id.
@@ -222,12 +221,13 @@ export class CartService {
    * Update cart item quantity
    */
   async updateItem(
+    tenantId: string,
     itemId: string,
     dto: UpdateCartItemDto,
     userId?: string,
     sessionId?: string,
   ): Promise<CartResponseDto> {
-    const cart = await this.getCartForUser(userId, sessionId);
+    const cart = await this.getCartForUser(tenantId, userId, sessionId);
 
     // Verify item belongs to user's cart
     const cartItem = await this.prisma.cartItem.findUnique({
@@ -269,11 +269,12 @@ export class CartService {
    * Remove item from cart
    */
   async removeItem(
+    tenantId: string,
     itemId: string,
     userId?: string,
     sessionId?: string,
   ): Promise<CartResponseDto> {
-    const cart = await this.getCartForUser(userId, sessionId);
+    const cart = await this.getCartForUser(tenantId, userId, sessionId);
 
     // Verify item belongs to user's cart
     const cartItem = await this.prisma.cartItem.findUnique({
@@ -305,8 +306,12 @@ export class CartService {
   /**
    * Clear entire cart
    */
-  async clearCart(userId?: string, sessionId?: string): Promise<void> {
-    const cart = await this.getCartForUser(userId, sessionId);
+  async clearCart(
+    tenantId: string,
+    userId?: string,
+    sessionId?: string,
+  ): Promise<void> {
+    const cart = await this.getCartForUser(tenantId, userId, sessionId);
 
     await this.prisma.cartItem.deleteMany({
       where: { cartId: cart.id },
@@ -316,9 +321,13 @@ export class CartService {
   /**
    * Get cart item count
    */
-  async getCartCount(userId?: string, sessionId?: string): Promise<CartCountResponseDto> {
+  async getCartCount(
+    tenantId: string,
+    userId?: string,
+    sessionId?: string,
+  ): Promise<CartCountResponseDto> {
     try {
-      const cart = await this.getCartForUser(userId, sessionId);
+      const cart = await this.getCartForUser(tenantId, userId, sessionId);
       const count = cart.items.reduce((sum, item) => sum + item.quantity, 0);
       return { count };
     } catch {
@@ -330,13 +339,14 @@ export class CartService {
    * Merge guest cart into user cart after login
    */
   async mergeGuestCart(
+    tenantId: string,
     userId: string,
     sessionId: string,
   ): Promise<CartResponseDto> {
     // Get both carts
-    const userCart = await this.getCartForUser(userId);
+    const userCart = await this.getCartForUser(tenantId, userId);
     const guestCart = await this.prisma.cart.findFirst({
-      where: { sessionId },
+      where: { tenantId, sessionId },
       include: CART_INCLUDE,
     });
 
@@ -355,8 +365,8 @@ export class CartService {
 
       if (existingItem) {
         // Update quantity if item exists
-        const product = await this.prisma.product.findUnique({
-          where: { id: guestItem.productId },
+        const product = await this.prisma.product.findFirst({
+          where: { id: guestItem.productId, tenantId },
         });
 
         if (product) {

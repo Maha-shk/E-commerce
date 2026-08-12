@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { use } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { PackageX } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ProductForm } from "@/components/admin/ProductForm";
-import { useProduct } from "@/lib/hooks/use-admin";
 import { ErrorState } from "@/components/admin/QueryState";
+import { useProduct } from "@/lib/hooks/use-admin";
+import { getApiErrorStatus } from "@/lib/api/client";
 
 export default function EditProductPage({
   params,
@@ -13,23 +16,13 @@ export default function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const router = useRouter();
-  const [id, setId] = useState<string | null>(null);
+  // `use` unwraps the params promise directly — the previous version resolved
+  // it in an effect, which cost an extra render and a spinner on every visit.
+  const { id } = use(params);
 
-  useEffect(() => {
-    params.then(({ id: productId }) => setId(productId));
-  }, [params]);
+  const { data: product, isPending, isError, error } = useProduct(id);
 
-  const { data: product, isLoading, isError, error } = useProduct(id ?? "");
-
-  if (!id) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className="space-y-6">
         <div className="h-8 w-64 animate-pulse rounded bg-muted" />
@@ -38,17 +31,30 @@ export default function EditProductPage({
     );
   }
 
-  if (isError) {
+  /*
+   * A product from another store answers 404, exactly as a deleted one does —
+   * the API never returns 403 here, so ids cannot be probed across stores.
+   * Either way there is nothing to retry.
+   */
+  if (isError && getApiErrorStatus(error) !== 404) {
     return <ErrorState error={error} onRetry={() => router.refresh()} />;
   }
 
-  if (!product) {
+  if (isError || !product) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-lg font-semibold text-foreground">Product not found</p>
-        <p className="text-sm text-muted-foreground">
-          The product you&apos;re looking for doesn&apos;t exist or has been deleted.
-        </p>
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <PackageX className="size-6" aria-hidden />
+        </span>
+        <div>
+          <p className="text-base font-semibold text-foreground">Product not found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            It has been deleted, or it belongs to a different store.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/admin/products">Back to products</Link>
+        </Button>
       </div>
     );
   }

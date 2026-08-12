@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ADMIN_ROLES, WRITE_ROLES } from '../common/constants/roles.constants';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { BannersService } from './banners.service';
 import {
   BannerQueryDto,
@@ -34,8 +35,11 @@ export class BannersController {
 
   @Get()
   @ApiOperation({ summary: 'List banners (paginated, filterable by type/status)' })
-  findAll(@Query() query: BannerQueryDto) {
-    return this.banners.findAll(query);
+  findAll(
+    @CurrentTenant('id') tenantId: string,
+    @Query() query: BannerQueryDto,
+  ) {
+    return this.banners.findAll(tenantId, query);
   }
 
   /**
@@ -46,41 +50,55 @@ export class BannersController {
   @Patch('reorder')
   @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Set banner display order from an ordered id list' })
-  reorder(@Body() dto: ReorderBannersDto) {
-    return this.banners.reorder(dto);
+  reorder(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: ReorderBannersDto,
+  ) {
+    return this.banners.reorder(tenantId, dto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single banner' })
-  findOne(@Param('id') id: string) {
-    return this.banners.findOne(id);
+  findOne(@CurrentTenant('id') tenantId: string, @Param('id') id: string) {
+    return this.banners.findOne(tenantId, id);
   }
 
   @Post()
   @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Create a banner' })
-  create(@Body() dto: CreateBannerDto) {
-    return this.banners.create(dto);
+  create(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: CreateBannerDto,
+  ) {
+    return this.banners.create(tenantId, dto);
   }
 
   @Patch(':id')
   @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Update a banner' })
-  update(@Param('id') id: string, @Body() dto: UpdateBannerDto) {
-    return this.banners.update(id, dto);
+  update(
+    @CurrentTenant('id') tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateBannerDto,
+  ) {
+    return this.banners.update(tenantId, id, dto);
   }
 
   @Patch(':id/active')
   @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Publish or unpublish a banner' })
-  setActive(@Param('id') id: string, @Body() body: { isActive: boolean }) {
-    return this.banners.setActive(id, body.isActive !== false);
+  setActive(
+    @CurrentTenant('id') tenantId: string,
+    @Param('id') id: string,
+    @Body() body: { isActive: boolean },
+  ) {
+    return this.banners.setActive(tenantId, id, body.isActive !== false);
   }
 
   @Delete(':id')
   @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Delete a banner' })
-  remove(@Param('id') id: string) {
-    return this.banners.remove(id);
+  remove(@CurrentTenant('id') tenantId: string, @Param('id') id: string) {
+    return this.banners.remove(tenantId, id);
   }
 }

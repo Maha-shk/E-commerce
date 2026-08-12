@@ -352,11 +352,11 @@ function ProductInventory() {
                           <span className="block truncate font-medium text-foreground">
                             {product.name}
                           </span>
-                          {product.brand ? (
-                            <span className="block truncate text-xs text-subtle">
-                              {product.brand}
-                            </span>
-                          ) : null}
+                          {/* The Company is the brand — `brand` was a free-text
+                              field on the product and no longer exists. */}
+                          <span className="block truncate text-xs text-subtle">
+                            {product.company.name}
+                          </span>
                         </span>
                       </div>
                     </td>
@@ -364,7 +364,7 @@ function ProductInventory() {
                       {product.sku}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
-                      {product.category?.name ?? "—"}
+                      {product.category.name}
                     </td>
                     <td className="px-3 py-3">
                       <Badge variant={stockStatusVariant[product.status]} className="h-6 px-2.5">

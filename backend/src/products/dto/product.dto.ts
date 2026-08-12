@@ -17,22 +17,21 @@ import {
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export class CreateProductDto {
-  @ApiProperty({ example: 'AeroScan Precision Drone' })
+  @ApiProperty({ example: 'LCD Display Assembly' })
   @IsString()
   @MinLength(2)
   @MaxLength(200)
   name!: string;
 
-  @ApiPropertyOptional({ example: 'Cento Aerial' })
+  @ApiProperty({
+    description:
+      'The Model this product belongs to. Required — a product cannot exist ' +
+      'outside the Category → Company → Product Type → Model hierarchy. The ' +
+      'model must belong to the calling store.',
+  })
   @IsString()
-  @IsOptional()
-  @MaxLength(120)
-  brand?: string;
-
-  @ApiPropertyOptional({ description: 'Category id this product belongs to' })
-  @IsString()
-  @IsOptional()
-  categoryId?: string;
+  @MinLength(1)
+  modelId!: string;
 
   @ApiPropertyOptional()
   @IsString()
@@ -40,7 +39,7 @@ export class CreateProductDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiProperty({ example: 'AS-900-PR', description: 'Unique stock keeping unit' })
+  @ApiProperty({ example: 'SM-S25-LCD-BLK', description: 'Unique within the store' })
   @IsString()
   @MinLength(1)
   @MaxLength(60)
@@ -53,7 +52,7 @@ export class CreateProductDto {
   @IsOptional()
   stock?: number;
 
-  @ApiProperty({ example: 12499.0 })
+  @ApiProperty({ example: 129.99 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -89,7 +88,7 @@ export class CreateProductDto {
   @IsOptional()
   images?: string[];
 
-  @ApiPropertyOptional({ type: [String], example: ['Standard', 'Extended Battery'] })
+  @ApiPropertyOptional({ type: [String], example: ['Standard', 'With Frame'] })
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
@@ -103,10 +102,29 @@ export class CreateProductDto {
   unitValue?: number;
 }
 
+/**
+ * `modelId` is optional here: sending it moves the product to a different
+ * Model, omitting it leaves the classification alone.
+ */
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
 export class ProductQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by category id' })
+  @ApiPropertyOptional({ description: 'Products of one model (the direct parent)' })
+  @IsString()
+  @IsOptional()
+  modelId?: string;
+
+  @ApiPropertyOptional({ description: 'Every product under a product type' })
+  @IsString()
+  @IsOptional()
+  productTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'Every product under a company' })
+  @IsString()
+  @IsOptional()
+  companyId?: string;
+
+  @ApiPropertyOptional({ description: 'Every product under a category' })
   @IsString()
   @IsOptional()
   categoryId?: string;

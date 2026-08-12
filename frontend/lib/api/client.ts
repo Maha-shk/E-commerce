@@ -9,6 +9,20 @@ import type { ApiErrorBody, AuthUser } from "@/lib/api/types";
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
+/**
+ * Which store this build talks to, when it can't be inferred from the hostname.
+ *
+ * The server resolves the tenant itself — signed JWT, then this header, then
+ * hostname, then `TENANT_FALLBACK_SLUG`. So today, with one store, leaving
+ * this unset is correct and everything resolves to the default tenant. Setting
+ * it is what makes a second store reachable from localhost, where the hostname
+ * says nothing about which store is meant.
+ *
+ * There is deliberately no tenant field on any payload: a store id that
+ * travelled in a request body would be a store id a client could change.
+ */
+const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG?.trim();
+
 /** Endpoints that must never trigger the refresh-and-retry flow. */
 const AUTH_FREE_PATHS = [
   "/auth/login",
@@ -33,6 +47,9 @@ api.interceptors.request.use((config) => {
   const token = authStorage.getAccessToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (TENANT_SLUG && config.headers) {
+    config.headers["X-Tenant-Slug"] = TENANT_SLUG;
   }
   return config;
 });
@@ -121,6 +138,19 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+/**
+ * HTTP status behind a thrown error, or undefined when the request never
+ * reached the server.
+ *
+ * Needed wherever the status changes what the UI offers rather than just what
+ * it says: a 409 on a delete names the blocker and has an unblocking action, a
+ * 404 means the record is gone (or belongs to another store) and retrying is
+ * pointless.
+ */
+export function getApiErrorStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined;
+}
 
 /**
  * Normalises any thrown error into a human-readable message, flattening the

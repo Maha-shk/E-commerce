@@ -5,7 +5,22 @@ import { IsEnum, IsInt, IsOptional, IsString, MaxLength } from 'class-validator'
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export class InventoryQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by category id' })
+  @ApiPropertyOptional({ description: 'Only stock for this model' })
+  @IsString()
+  @IsOptional()
+  modelId?: string;
+
+  @ApiPropertyOptional({ description: 'Everything under this product type' })
+  @IsString()
+  @IsOptional()
+  productTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'Everything under this company' })
+  @IsString()
+  @IsOptional()
+  companyId?: string;
+
+  @ApiPropertyOptional({ description: 'Everything under this category' })
   @IsString()
   @IsOptional()
   categoryId?: string;

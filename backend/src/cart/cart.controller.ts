@@ -13,6 +13,7 @@ import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { CartService } from './cart.service';
 import {
   CreateCartItemDto,
@@ -48,10 +49,11 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Get user cart or guest cart' })
   async getCart(
+    @CurrentTenant('id') tenantId: string,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.getCart(userId, sessionId);
+    return this.cartService.getCart(tenantId, userId, sessionId);
   }
 
   /**
@@ -64,10 +66,11 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Get cart item count' })
   async getCartCount(
+    @CurrentTenant('id') tenantId: string,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartCountResponseDto> {
-    return this.cartService.getCartCount(userId, sessionId);
+    return this.cartService.getCartCount(tenantId, userId, sessionId);
   }
 
   /**
@@ -77,11 +80,12 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Add item to cart' })
   async addItem(
+    @CurrentTenant('id') tenantId: string,
     @Body() dto: CreateCartItemDto,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.addItem(dto, userId, sessionId);
+    return this.cartService.addItem(tenantId, dto, userId, sessionId);
   }
 
   /**
@@ -91,12 +95,13 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Update cart item quantity' })
   async updateItem(
+    @CurrentTenant('id') tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateCartItemDto,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.updateItem(id, dto, userId, sessionId);
+    return this.cartService.updateItem(tenantId, id, dto, userId, sessionId);
   }
 
   /**
@@ -106,11 +111,12 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Remove item from cart' })
   async removeItem(
+    @CurrentTenant('id') tenantId: string,
     @Param('id') id: string,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.removeItem(id, userId, sessionId);
+    return this.cartService.removeItem(tenantId, id, userId, sessionId);
   }
 
   /**
@@ -120,10 +126,11 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Clear cart' })
   async clearCart(
+    @CurrentTenant('id') tenantId: string,
     @CurrentUser('id') userId?: string,
     @Headers('x-session-id') sessionId?: string,
   ): Promise<{ message: string }> {
-    await this.cartService.clearCart(userId, sessionId);
+    await this.cartService.clearCart(tenantId, userId, sessionId);
     return { message: 'Cart cleared successfully' };
   }
 
@@ -138,9 +145,10 @@ export class CartController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Merge guest cart into user cart' })
   async mergeGuestCart(
+    @CurrentTenant('id') tenantId: string,
     @Body() dto: MergeCartDto,
     @CurrentUser('id') userId: string,
   ): Promise<CartResponseDto> {
-    return this.cartService.mergeGuestCart(userId, dto.sessionId);
+    return this.cartService.mergeGuestCart(tenantId, userId, dto.sessionId);
   }
 }

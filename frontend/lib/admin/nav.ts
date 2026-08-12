@@ -1,7 +1,11 @@
 export type AdminNavIconKey =
   | "dashboard"
-  | "product"
+  | "catalog"
   | "category"
+  | "company"
+  | "productType"
+  | "model"
+  | "product"
   | "banners"
   | "inventory"
   | "customers"
@@ -29,10 +33,14 @@ export type AdminNavGroup = {
 /**
  * Primary navigation for the admin console.
  *
- * Grouped rather than one flat list of ten: at that length everything reads as
+ * Grouped rather than one flat list: at that length everything reads as
  * equally important and there's no way to scan for "the orders area" without
- * reading every label. Names are also consistently plural now — it was
- * "Product"/"Category" next to "Customers"/"Orders".
+ * reading every label.
+ *
+ * The Catalogue group mirrors the hierarchy in order — Category → Company →
+ * Product Type → Model — so the sidebar itself teaches the shape of the tree.
+ * Products sit in their own group because a product is not a level: it hangs
+ * off a Model, and it is managed on a different screen.
  */
 export const adminNavGroups: AdminNavGroup[] = [
   {
@@ -44,8 +52,19 @@ export const adminNavGroups: AdminNavGroup[] = [
   {
     label: "Catalogue",
     items: [
+      // Exact: every level below lives under /admin/catalog, so a prefix match
+      // would light this up on all of them.
+      { name: "Overview", href: "/admin/catalog", icon: "catalog", exact: true },
+      { name: "Categories", href: "/admin/catalog/categories", icon: "category" },
+      { name: "Companies", href: "/admin/catalog/companies", icon: "company" },
+      { name: "Product Types", href: "/admin/catalog/product-types", icon: "productType" },
+      { name: "Models", href: "/admin/catalog/models", icon: "model" },
+    ],
+  },
+  {
+    label: "Products",
+    items: [
       { name: "Products", href: "/admin/products", icon: "product" },
-      { name: "Categories", href: "/admin/categories", icon: "category" },
       { name: "Inventory", href: "/admin/inventory", icon: "inventory" },
       { name: "Banners", href: "/admin/banners", icon: "banners" },
     ],

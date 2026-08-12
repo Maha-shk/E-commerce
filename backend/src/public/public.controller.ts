@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Query, Param, Body } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { PublicService } from './public.service';
 import { ContactFormDto } from './dto/contact.dto';
 
@@ -24,11 +25,12 @@ export class PublicController {
 
   @Get('banners')
   async getBanners(
+    @CurrentTenant('id') tenantId: string,
     @Query('type') type?: string,
     @Query('isActive') isActive?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.publicService.getBanners({
+    return this.publicService.getBanners(tenantId, {
       type,
       isActive: parseBooleanParam(isActive),
       limit,
@@ -37,15 +39,19 @@ export class PublicController {
 
   @Get('categories')
   async getCategories(
-    @Query('parentId') parentId?: string,
+    @CurrentTenant('id') tenantId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.publicService.getCategories({ parentId, limit });
+    return this.publicService.getCategories(tenantId, { limit });
   }
 
   @Get('products')
   async getProducts(
+    @CurrentTenant('id') tenantId: string,
     @Query('categoryId') categoryId?: string,
+    @Query('companyId') companyId?: string,
+    @Query('productTypeId') productTypeId?: string,
+    @Query('modelId') modelId?: string,
     @Query('search') search?: string,
     // Taken as strings and coerced explicitly rather than relying on the
     // ValidationPipe's implicit primitive conversion. It happens to do the
@@ -57,8 +63,11 @@ export class PublicController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.publicService.getProducts({
+    return this.publicService.getProducts(tenantId, {
       categoryId,
+      companyId,
+      productTypeId,
+      modelId,
       search,
       bestsellers: parseBooleanParam(bestsellers),
       newArrivals: parseBooleanParam(newArrivals),
@@ -70,18 +79,20 @@ export class PublicController {
 
   @Get('products/detail')
   async getProduct(
+    @CurrentTenant('id') tenantId: string,
     @Query('id') id?: string,
     @Query('slug') slug?: string,
   ) {
-    return this.publicService.getProduct({ id, slug });
+    return this.publicService.getProduct(tenantId, { id, slug });
   }
 
   @Get('featured-products')
   async getFeaturedProducts(
+    @CurrentTenant('id') tenantId: string,
     @Query('section') section: string,
     @Query('limit') limit?: number,
   ) {
-    return this.publicService.getFeaturedProducts({ section, limit });
+    return this.publicService.getFeaturedProducts(tenantId, { section, limit });
   }
 
   /**
@@ -94,8 +105,11 @@ export class PublicController {
    * code is usable and what it is worth.
    */
   @Get('discounts/validate/:code')
-  async validateDiscount(@Param('code') code: string) {
-    return this.publicService.validateDiscountCode(code);
+  async validateDiscount(
+    @CurrentTenant('id') tenantId: string,
+    @Param('code') code: string,
+  ) {
+    return this.publicService.validateDiscountCode(tenantId, code);
   }
 
   /**
@@ -111,13 +125,19 @@ export class PublicController {
   }
 
   @Get('brands')
-  async getBrands() {
-    return this.publicService.getBrands();
+  async getBrands(
+    @CurrentTenant('id') tenantId: string,
+    @Query('categoryId') categoryId?: string,
+  ) {
+    return this.publicService.getBrands(tenantId, { categoryId });
   }
 
   @Post('contact')
   @ApiOperation({ summary: 'Submit contact form (public endpoint - no auth required)' })
-  async submitContactForm(@Body() contactFormDto: ContactFormDto) {
-    return this.publicService.submitContactForm(contactFormDto);
+  async submitContactForm(
+    @CurrentTenant('id') tenantId: string,
+    @Body() contactFormDto: ContactFormDto,
+  ) {
+    return this.publicService.submitContactForm(tenantId, contactFormDto);
   }
 }

@@ -8,13 +8,12 @@
  */
 
 import type { Role, UserStatus } from "@/lib/api/types";
+import type { BreadcrumbEntry } from "@/lib/api/catalog";
 
 /* ---- Enums ---- */
 
 export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
 export type ProductVisibility = "PUBLIC" | "PRIVATE" | "SCHEDULED";
-export type CategoryStatus = "ACTIVE" | "ARCHIVED";
-export type CategoryVisibility = "VISIBLE" | "HIDDEN";
 export type OrderStatus =
   | "PENDING"
   | "PROCESSING"
@@ -41,16 +40,6 @@ export const stockStatusLabel: Record<StockStatus, string> = {
   IN_STOCK: "In Stock",
   LOW_STOCK: "Low Stock",
   OUT_OF_STOCK: "Out of Stock",
-};
-
-export const categoryStatusLabel: Record<CategoryStatus, string> = {
-  ACTIVE: "Active",
-  ARCHIVED: "Archived",
-};
-
-export const categoryVisibilityLabel: Record<CategoryVisibility, string> = {
-  VISIBLE: "Visible",
-  HIDDEN: "Hidden",
 };
 
 export const orderStatusLabel: Record<OrderStatus, string> = {
@@ -80,32 +69,27 @@ export const discountTypeLabel: Record<DiscountType, string> = {
   FIXED_AMOUNT: "Fixed Amount",
 };
 
-/* ---- Catalog ---- */
+/* ---- Catalog ----
+ *
+ * The four levels (Category → Company → Product Type → Model) live in
+ * `lib/api/catalog.ts`, since they share one shape and one set of endpoints.
+ */
 
-export type Category = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  icon: string;
-  status: CategoryStatus;
-  visibility: CategoryVisibility;
-  thumbnailName: string | null;
-  thumbnailSize: string | null;
-  parentId: string | null;
-  /** Flattened counts from Prisma's `_count`. */
-  products: number;
-  subcategories: number;
-  createdAt: string;
-  updatedAt: string;
+/** A product's place in the hierarchy, denormalised onto every response. */
+export type ProductClassification = {
+  modelId: string;
+  model: { id: string; name: string; slug: string };
+  productType: { id: string; name: string; slug: string };
+  /** The Company *is* the brand now — there is no `brand` string any more. */
+  company: { id: string; name: string; slug: string; imageUrl: string | null };
+  category: { id: string; name: string; slug: string };
+  /** Four entries, root first: Category › Company › Product Type › Model. */
+  breadcrumb: BreadcrumbEntry[];
 };
 
-export type Product = {
+export type Product = ProductClassification & {
   id: string;
   name: string;
-  brand: string;
-  categoryId: string | null;
-  category: { id: string; name: string; slug: string } | null;
   description: string;
   sku: string;
   stock: number;
@@ -129,8 +113,11 @@ export type InventoryItem = {
   id: string;
   name: string;
   sku: string;
-  category: string | null;
-  categoryId: string | null;
+  /** The full classification, so a row can show where a part sits. */
+  model: { id: string; name: string };
+  productType: { id: string; name: string };
+  company: { id: string; name: string };
+  category: { id: string; name: string };
   stock: number;
   status: StockStatus;
   lastUpdated: string;

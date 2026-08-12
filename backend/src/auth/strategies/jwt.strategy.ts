@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { UserStatus } from '@prisma/client';
+import { TenantStatus, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser, JwtPayload } from '../types/jwt-payload.interface';
 
@@ -26,7 +26,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true, status: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        tenantId: true,
+        tenant: { select: { status: true } },
+      },
     });
 
     if (!user) {
@@ -35,7 +42,20 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException(`Account is ${user.status.toLowerCase()}`);
     }
+    // Suspending a store must lock its staff and customers out immediately,
+    // not whenever their current access token happens to expire.
+    if (user.tenant && user.tenant.status !== TenantStatus.ACTIVE) {
+      throw new UnauthorizedException('This store is suspended');
+    }
 
-    return { id: user.id, email: user.email, role: user.role };
+    // Read from the database, not from the token: moving a user to another
+    // tenant then has to take effect on the next request rather than lingering
+    // until an old token expires.
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+    };
   }
 }

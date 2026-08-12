@@ -23,6 +23,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentTenant } from '../tenancy/decorators/current-tenant.decorator';
 import { AuthService, type UploadedImage } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -48,8 +49,8 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiOperation({ summary: 'Create an account and send a verification code' })
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
+  register(@CurrentTenant('id') tenantId: string, @Body() dto: RegisterDto) {
+    return this.auth.register(tenantId, dto);
   }
 
   @Public()
@@ -58,8 +59,12 @@ export class AuthController {
   // Tighter limit than the global one: 10 attempts per minute.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Sign in and receive an access + refresh token pair' })
-  login(@Body() dto: LoginDto, @Req() req: Request) {
-    return this.auth.login(dto, requestMeta(req));
+  login(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.login(tenantId, dto, requestMeta(req));
   }
 
   @Public()
@@ -67,8 +72,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Confirm the 6-digit email verification code' })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.auth.verifyOtp(dto);
+  verifyOtp(@CurrentTenant('id') tenantId: string, @Body() dto: VerifyOtpDto) {
+    return this.auth.verifyOtp(tenantId, dto);
   }
 
   @Public()
@@ -76,8 +81,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @ApiOperation({ summary: 'Send a fresh verification code' })
-  resendOtp(@Body() dto: ResendOtpDto) {
-    return this.auth.resendOtp(dto);
+  resendOtp(@CurrentTenant('id') tenantId: string, @Body() dto: ResendOtpDto) {
+    return this.auth.resendOtp(tenantId, dto);
   }
 
   @Public()
@@ -93,8 +98,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @ApiOperation({ summary: 'Email a password reset code' })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.auth.forgotPassword(dto);
+  forgotPassword(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: ForgotPasswordDto,
+  ) {
+    return this.auth.forgotPassword(tenantId, dto);
   }
 
   @Public()
@@ -102,8 +110,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Set a new password using the emailed code' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.auth.resetPassword(dto);
+  resetPassword(
+    @CurrentTenant('id') tenantId: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    return this.auth.resetPassword(tenantId, dto);
   }
 
   @Public()
@@ -181,7 +192,11 @@ export class AuthController {
   @ApiBearerAuth()
   @Get('orders')
   @ApiOperation({ summary: 'Get the authenticated customer\'s orders (paginated)' })
-  getCustomerOrders(@CurrentUser('id') userId: string, @Query() query: any) {
-    return this.auth.getCustomerOrders(userId, query);
+  getCustomerOrders(
+    @CurrentTenant('id') tenantId: string,
+    @CurrentUser('id') userId: string,
+    @Query() query: any,
+  ) {
+    return this.auth.getCustomerOrders(tenantId, userId, query);
   }
 }

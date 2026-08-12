@@ -14,9 +14,17 @@ export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Inventory is a view over products, keyed by SKU. */
-  async findAll(query: InventoryQueryDto) {
+  async findAll(tenantId: string, query: InventoryQueryDto) {
     const where: Prisma.ProductWhereInput = {
-      ...(query.categoryId && { categoryId: query.categoryId }),
+      tenantId,
+      ...(query.modelId && { modelId: query.modelId }),
+      ...(query.productTypeId && { model: { productTypeId: query.productTypeId } }),
+      ...(query.companyId && {
+        model: { productType: { companyId: query.companyId } },
+      }),
+      ...(query.categoryId && {
+        model: { productType: { company: { categoryId: query.categoryId } } },
+      }),
       ...(query.status && { status: query.status }),
       ...(query.search && {
         OR: [
@@ -41,7 +49,25 @@ export class InventoryService {
           updatedAt: true,
           price: true,
           unitValue: true,
-          category: { select: { id: true, name: true } },
+          model: {
+            select: {
+              id: true,
+              name: true,
+              productType: {
+                select: {
+                  id: true,
+                  name: true,
+                  company: {
+                    select: {
+                      id: true,
+                      name: true,
+                      category: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       }),
       this.prisma.product.count({ where }),
@@ -51,8 +77,21 @@ export class InventoryService {
       id: p.id,
       name: p.name,
       sku: p.sku,
-      category: p.category?.name ?? null,
-      categoryId: p.category?.id ?? null,
+      // The whole classification, so the inventory table can show where a
+      // part sits without a second lookup per row.
+      model: { id: p.model.id, name: p.model.name },
+      productType: {
+        id: p.model.productType.id,
+        name: p.model.productType.name,
+      },
+      company: {
+        id: p.model.productType.company.id,
+        name: p.model.productType.company.name,
+      },
+      category: {
+        id: p.model.productType.company.category.id,
+        name: p.model.productType.company.category.name,
+      },
       stock: p.stock,
       status: p.status,
       lastUpdated: p.updatedAt,
@@ -64,12 +103,21 @@ export class InventoryService {
   }
 
   /** Headline figures for the inventory screen's stat cards. */
-  async stats() {
+  async stats(tenantId: string) {
     const [totals, lowStock, outOfStock, products] = await this.prisma.$transaction([
-      this.prisma.product.aggregate({ _count: true, _sum: { stock: true } }),
-      this.prisma.product.count({ where: { status: StockStatus.LOW_STOCK } }),
-      this.prisma.product.count({ where: { status: StockStatus.OUT_OF_STOCK } }),
+      this.prisma.product.aggregate({
+        where: { tenantId },
+        _count: true,
+        _sum: { stock: true },
+      }),
+      this.prisma.product.count({
+        where: { tenantId, status: StockStatus.LOW_STOCK },
+      }),
+      this.prisma.product.count({
+        where: { tenantId, status: StockStatus.OUT_OF_STOCK },
+      }),
       this.prisma.product.findMany({
+        where: { tenantId },
         select: { stock: true, price: true, unitValue: true },
       }),
     ]);
@@ -93,13 +141,18 @@ export class InventoryService {
    * Adjusts stock either relatively (`delta`) or absolutely (`setTo`), writing
    * an audit row. Runs in a transaction so the log can never drift from stock.
    */
-  async adjust(productId: string, dto: AdjustStockDto, byUserId: string) {
+  async adjust(
+    tenantId: string,
+    productId: string,
+    dto: AdjustStockDto,
+    byUserId: string,
+  ) {
     if ((dto.delta === undefined) === (dto.setTo === undefined)) {
       throw new BadRequestException('Provide exactly one of `delta` or `setTo`');
     }
 
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
       select: { id: true, stock: true },
     });
     if (!product) throw new NotFoundException(`Product ${productId} not found`);
@@ -120,7 +173,7 @@ export class InventoryService {
         select: { id: true, name: true, sku: true, stock: true, status: true },
       }),
       this.prisma.inventoryAdjustment.create({
-        data: { productId, delta, reason: dto.reason, byUserId },
+        data: { tenantId, productId, delta, reason: dto.reason, byUserId },
       }),
     ]);
 
@@ -128,11 +181,13 @@ export class InventoryService {
   }
 
   /** Audit trail for a single product. */
-  async history(productId: string, query: InventoryQueryDto) {
-    const exists = await this.prisma.product.count({ where: { id: productId } });
+  async history(tenantId: string, productId: string, query: InventoryQueryDto) {
+    const exists = await this.prisma.product.count({
+      where: { id: productId, tenantId },
+    });
     if (!exists) throw new NotFoundException(`Product ${productId} not found`);
 
-    const where: Prisma.InventoryAdjustmentWhereInput = { productId };
+    const where: Prisma.InventoryAdjustmentWhereInput = { tenantId, productId };
 
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.inventoryAdjustment.findMany({

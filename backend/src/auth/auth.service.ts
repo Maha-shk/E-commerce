@@ -81,10 +81,12 @@ export class AuthService {
   // Registration & email verification
   // -------------------------------------------------------------------------
 
-  async register(dto: RegisterDto) {
+  async register(tenantId: string, dto: RegisterDto) {
     const email = dto.email.toLowerCase().trim();
 
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    // Scoped to the tenant: the same address may hold an account on two
+    // different storefronts, exactly as it would with two separate shops.
+    const existing = await this.prisma.user.findFirst({ where: { tenantId, email } });
 
     // A placeholder row (created when a stranger used the contact form) must
     // not lock the real owner out of the address — claim it instead. Ownership
@@ -110,7 +112,7 @@ export class AuthService {
           select: USER_PUBLIC_SELECT,
         })
       : await this.prisma.user.create({
-          data: { ...data, email },
+          data: { ...data, email, tenantId },
           select: USER_PUBLIC_SELECT,
         });
 
@@ -122,8 +124,8 @@ export class AuthService {
     };
   }
 
-  async verifyOtp(dto: VerifyOtpDto) {
-    const user = await this.requireUserByEmail(dto.email);
+  async verifyOtp(tenantId: string, dto: VerifyOtpDto) {
+    const user = await this.requireUserByEmail(tenantId, dto.email);
 
     if (user.emailVerified) {
       // If already verified, still return login tokens
@@ -143,8 +145,8 @@ export class AuthService {
     return { message: 'Email verified successfully. You are now logged in.', ...tokens, user: this.toPublicUser(user) };
   }
 
-  async resendOtp(dto: ResendOtpDto) {
-    const user = await this.requireUserByEmail(dto.email);
+  async resendOtp(tenantId: string, dto: ResendOtpDto) {
+    const user = await this.requireUserByEmail(tenantId, dto.email);
     if (user.emailVerified) {
       return { message: 'Email is already verified.' };
     }
@@ -161,9 +163,22 @@ export class AuthService {
   // Login / tokens
   // -------------------------------------------------------------------------
 
-  async login(dto: LoginDto, meta: { userAgent?: string; ip?: string }) {
+  async login(
+    tenantId: string,
+    dto: LoginDto,
+    meta: { userAgent?: string; ip?: string },
+  ) {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    const user =
+      (await this.prisma.user.findFirst({ where: { tenantId, email } })) ??
+      // Platform operators belong to no store, so the tenant-scoped lookup
+      // above can never find them — without this they could create tenants but
+      // never sign in to do it. Restricted to SUPER_ADMIN so an ordinary
+      // account can't be resolved outside its own tenant.
+      (await this.prisma.user.findFirst({
+        where: { tenantId: null, email, role: Role.SUPER_ADMIN },
+      }));
 
     // Same generic message whether the email or the password was wrong.
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
@@ -252,9 +267,9 @@ export class AuthService {
   // Password reset / change
   // -------------------------------------------------------------------------
 
-  async forgotPassword(dto: ForgotPasswordDto) {
+  async forgotPassword(tenantId: string, dto: ForgotPasswordDto) {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findFirst({ where: { tenantId, email } });
 
     // Always the same response so the endpoint can't be used to enumerate accounts.
     if (user) {
@@ -274,8 +289,8 @@ export class AuthService {
     };
   }
 
-  async resetPassword(dto: ResetPasswordDto) {
-    const user = await this.requireUserByEmail(dto.email);
+  async resetPassword(tenantId: string, dto: ResetPasswordDto) {
+    const user = await this.requireUserByEmail(tenantId, dto.email);
 
     await this.consumeOtp(user.id, dto.code, VerificationTokenType.PASSWORD_RESET);
 
@@ -394,7 +409,7 @@ export class AuthService {
   }
 
   /** Get orders for the authenticated customer */
-  async getCustomerOrders(userId: string, query: any) {
+  async getCustomerOrders(tenantId: string, userId: string, query: any) {
     // Create a proper query object with customerId
     const orderQuery = {
       page: parseInt(query.page) || 1,
@@ -406,12 +421,17 @@ export class AuthService {
       customerId: userId,
     };
 
-    return this.orders.findAll(orderQuery);
+    return this.orders.findAll(tenantId, orderQuery);
   }
 
   private async issueTokens(user: User, meta: { userAgent?: string; ip?: string }) {
     const tokenId = randomUUID();
-    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+    };
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('jwt.accessSecret'),
@@ -494,9 +514,9 @@ export class AuthService {
     });
   }
 
-  private async requireUserByEmail(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+  private async requireUserByEmail(tenantId: string, email: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { tenantId, email: email.toLowerCase().trim() },
     });
     if (!user) throw new BadRequestException('The code is invalid or has expired');
     return user;

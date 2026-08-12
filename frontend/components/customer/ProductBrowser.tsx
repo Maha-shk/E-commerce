@@ -49,9 +49,17 @@ export function ProductBrowser({
 }: {
   title: string;
   description?: string;
-  /** Extra params merged into the products query, e.g. `{ sale: true }`. */
+  /**
+   * Extra params merged into the products query, e.g. `{ sale: true }`.
+   *
+   * Any level of the hierarchy scopes the list — `companyId` is a brand page,
+   * `modelId` is "parts that fit this model".
+   */
   query?: {
     categoryId?: string;
+    companyId?: string;
+    productTypeId?: string;
+    modelId?: string;
     search?: string;
     bestsellers?: boolean;
     newArrivals?: boolean;
@@ -96,10 +104,41 @@ export function ProductBrowser({
       .map((c) => ({ id: c.id, name: c.name, productCount: c.productCount }));
   }, [products, allCategories]);
 
+  /*
+   * Brands are derived from the products on screen rather than fetched.
+   *
+   * `/public/brands` lists every company with a public product anywhere in the
+   * store, which on a page like /sales would offer brands that have nothing on
+   * sale. Reading them off the result set keeps the facet honest, and the
+   * counts with it.
+   */
+  const brands = useMemo(() => {
+    const counts = new Map<string, { id: string; name: string; productCount: number }>();
+    for (const product of products) {
+      if (!product.company) continue;
+      const existing = counts.get(product.company.id);
+      if (existing) {
+        existing.productCount += 1;
+      } else {
+        counts.set(product.company.id, {
+          id: product.company.id,
+          name: product.company.name,
+          productCount: 1,
+        });
+      }
+    }
+    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
   const visible = useMemo(() => {
     const list = products.filter((product) => {
       if (filters.categoryIds.length > 0) {
         if (!product.categoryId || !filters.categoryIds.includes(product.categoryId)) {
+          return false;
+        }
+      }
+      if (filters.companyIds.length > 0) {
+        if (!product.company || !filters.companyIds.includes(product.company.id)) {
           return false;
         }
       }
@@ -128,6 +167,7 @@ export function ProductBrowser({
 
   const activeFilterCount =
     filters.categoryIds.length +
+    filters.companyIds.length +
     (filters.inStockOnly ? 1 : 0) +
     (filters.price.min !== PRICE_FLOOR || filters.price.max !== PRICE_CEILING ? 1 : 0);
 
@@ -137,6 +177,7 @@ export function ProductBrowser({
   const panel = (
     <ProductFilters
       categories={categories}
+      brands={brands}
       value={filters}
       onChange={setFilters}
       onReset={() => setFilters(DEFAULT_FILTERS)}

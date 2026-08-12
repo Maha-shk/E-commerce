@@ -126,8 +126,9 @@ export class UsersService {
 
   // --- Staff management ----------------------------------------------------
 
-  async findStaff(query: StaffQueryDto) {
+  async findStaff(tenantId: string, query: StaffQueryDto) {
     const where: Prisma.UserWhereInput = {
+      tenantId,
       role: query.role ? { equals: query.role } : { in: ADMIN_ROLES },
       ...(query.status && { status: query.status }),
       ...(query.search && {
@@ -158,7 +159,7 @@ export class UsersService {
     return paginate(items, total, query.page, query.limit);
   }
 
-  async createStaff(dto: CreateStaffDto) {
+  async createStaff(tenantId: string, dto: CreateStaffDto) {
     if (dto.role === Role.CUSTOMER) {
       throw new BadRequestException(
         'Use customer registration to create customer accounts',
@@ -166,11 +167,12 @@ export class UsersService {
     }
 
     const email = dto.email.toLowerCase().trim();
-    const clash = await this.prisma.user.findUnique({ where: { email } });
+    const clash = await this.prisma.user.findFirst({ where: { tenantId, email } });
     if (clash) throw new BadRequestException('That email is already in use');
 
     const user = await this.prisma.user.create({
       data: {
+        tenantId,
         email,
         fullName: dto.fullName.trim(),
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
@@ -185,8 +187,13 @@ export class UsersService {
     return { ...user, initials: initialsOf(user.fullName) };
   }
 
-  async updateStaff(id: string, dto: UpdateStaffDto, actingUserId: string) {
-    const target = await this.prisma.user.findUnique({ where: { id } });
+  async updateStaff(
+    tenantId: string,
+    id: string,
+    dto: UpdateStaffDto,
+    actingUserId: string,
+  ) {
+    const target = await this.prisma.user.findFirst({ where: { id, tenantId } });
     if (!target || !ADMIN_ROLES.includes(target.role)) {
       throw new NotFoundException(`Staff member ${id} not found`);
     }
@@ -202,7 +209,12 @@ export class UsersService {
 
     if (target.role === Role.SUPER_ADMIN && dto.role && dto.role !== Role.SUPER_ADMIN) {
       const remaining = await this.prisma.user.count({
-        where: { role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE, NOT: { id } },
+        where: {
+          tenantId,
+          role: Role.SUPER_ADMIN,
+          status: UserStatus.ACTIVE,
+          NOT: { id },
+        },
       });
       if (remaining === 0) {
         throw new BadRequestException(
@@ -232,19 +244,24 @@ export class UsersService {
     return { ...user, initials: initialsOf(user.fullName) };
   }
 
-  async removeStaff(id: string, actingUserId: string) {
+  async removeStaff(tenantId: string, id: string, actingUserId: string) {
     if (id === actingUserId) {
       throw new ForbiddenException('You cannot delete your own account');
     }
 
-    const target = await this.prisma.user.findUnique({ where: { id } });
+    const target = await this.prisma.user.findFirst({ where: { id, tenantId } });
     if (!target || !ADMIN_ROLES.includes(target.role)) {
       throw new NotFoundException(`Staff member ${id} not found`);
     }
 
     if (target.role === Role.SUPER_ADMIN) {
       const remaining = await this.prisma.user.count({
-        where: { role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE, NOT: { id } },
+        where: {
+          tenantId,
+          role: Role.SUPER_ADMIN,
+          status: UserStatus.ACTIVE,
+          NOT: { id },
+        },
       });
       if (remaining === 0) {
         throw new BadRequestException(
