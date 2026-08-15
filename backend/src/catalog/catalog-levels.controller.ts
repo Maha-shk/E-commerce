@@ -23,6 +23,7 @@ import type { CatalogLevelSpec } from './catalog.constants';
 import {
   CatalogNodeQueryDto,
   CreateCatalogNodeDto,
+  MoveCatalogNodeDto,
   ReorderCatalogNodesDto,
   UpdateCatalogNodeDto,
 } from './dto/catalog.dto';
@@ -136,6 +137,24 @@ export class CatalogLevelsController {
       ...query,
       parentId: id,
     });
+  }
+
+  @Patch(':level/:id/move')
+  @Roles(...WRITE_ROLES)
+  @ApiOperation({
+    summary: 'Move one node among its siblings',
+    description:
+      'Give exactly one of `position`, `beforeId` or `afterId`. Unlike ' +
+      '`reorder`, this needs no complete sibling list, so it works from a ' +
+      'single page of a parent with any number of children.',
+  })
+  move(
+    @CurrentTenant('id') tenantId: string,
+    @Param('level', CatalogLevelPipe) spec: CatalogLevelSpec,
+    @Param('id') id: string,
+    @Body() dto: MoveCatalogNodeDto,
+  ) {
+    return this.catalog.move(tenantId, spec, id, dto);
   }
 
   @Patch(':level/:id')

@@ -21,6 +21,7 @@ import {
   CatalogNodeQueryDto,
   CatalogTreeQueryDto,
   CreateCatalogNodeDto,
+  MoveCatalogNodeDto,
   ReorderCatalogNodesDto,
   UpdateCatalogNodeDto,
 } from './dto/catalog.dto';
@@ -446,11 +447,11 @@ export class CatalogService {
       scope[spec.parent.foreignKey] = dto.parentId;
     }
 
-    const siblings = await this.delegate(spec).findMany({
+    const siblings = (await this.delegate(spec).findMany({
       where: scope,
-      select: { id: true },
-    });
-    const validIds = new Set(siblings.map((s) => s.id as string));
+      select: { id: true, position: true },
+    })) as { id: string; position: number }[];
+    const validIds = new Set(siblings.map((s) => s.id));
 
     const unknownIds = dto.orderedIds.filter((id) => !validIds.has(id));
     if (unknownIds.length > 0) {
@@ -459,8 +460,116 @@ export class CatalogService {
       );
     }
 
+    // Position is the array index, so a partial list would hand the omitted
+    // siblings' positions to the listed ones and leave two rows fighting for
+    // the same slot. Reject it rather than silently corrupting the order —
+    // /:id/move exists for the "I only have one page of them" case.
+    const given = new Set(dto.orderedIds);
+    if (given.size !== siblings.length) {
+      const missing = siblings.length - given.size;
+      throw new BadRequestException(
+        `reorder needs the complete set of siblings: ${siblings.length} exist, ` +
+          `${given.size} were listed (${Math.abs(missing)} ${missing > 0 ? 'missing' : 'duplicated'}). ` +
+          `Use PATCH /${spec.segment}/:id/move to move one node without listing them all.`,
+      );
+    }
+
+    const changed = await this.writeOrder(spec, dto.orderedIds, siblings);
+    return { message: 'Order updated', count: dto.orderedIds.length, changed };
+  }
+
+  /**
+   * Moves one node among its siblings.
+   *
+   * The counterpart to `reorder`: it names a single node and an anchor, so the
+   * caller never has to hold every sibling id at once. That matters because the
+   * list endpoint pages at 100 — past that, a full ordering simply cannot be
+   * expressed in one request, and the renumbering has to happen here instead.
+   */
+  async move(
+    tenantId: string,
+    spec: CatalogLevelSpec,
+    id: string,
+    dto: MoveCatalogNodeDto,
+  ) {
+    const anchors = [dto.position, dto.beforeId, dto.afterId].filter(
+      (v) => v !== undefined,
+    );
+    if (anchors.length !== 1) {
+      throw new BadRequestException(
+        'Give exactly one of position, beforeId or afterId',
+      );
+    }
+
+    const node = await this.requireRow(tenantId, spec, id);
+
+    const scope: Record<string, unknown> = { tenantId };
+    if (spec.parent) {
+      scope[spec.parent.foreignKey] = node[spec.parent.foreignKey];
+    }
+
+    // Read in the same order the list endpoint serves, so an index the caller
+    // computed from what it saw means the same thing here.
+    const siblings = (await this.delegate(spec).findMany({
+      where: scope,
+      orderBy: [{ position: 'asc' }, { name: 'asc' }],
+      select: { id: true, position: true },
+    })) as { id: string; position: number }[];
+
+    const others = siblings.filter((s) => s.id !== id);
+
+    let targetIndex: number;
+    if (dto.position !== undefined) {
+      targetIndex = Math.min(dto.position, others.length);
+    } else {
+      const anchorId = (dto.beforeId ?? dto.afterId) as string;
+      if (anchorId === id) {
+        throw new BadRequestException('A node cannot be moved relative to itself');
+      }
+      const anchorIndex = others.findIndex((s) => s.id === anchorId);
+      if (anchorIndex === -1) {
+        throw new BadRequestException(
+          `${anchorId} is not a sibling of ${node.name as string}`,
+        );
+      }
+      targetIndex = dto.beforeId ? anchorIndex : anchorIndex + 1;
+    }
+
+    const ordered = others.map((s) => s.id);
+    ordered.splice(targetIndex, 0, id);
+
+    const changed = await this.writeOrder(spec, ordered, siblings);
+
+    return {
+      message: `${node.name as string} moved`,
+      position: targetIndex,
+      siblings: ordered.length,
+      changed,
+    };
+  }
+
+  /**
+   * Persists an ordering, writing only the rows whose position actually moves.
+   *
+   * Reordering two adjacent rows out of four hundred should be two updates, not
+   * four hundred — and skipping the no-ops keeps `updatedAt` honest about which
+   * rows a person actually touched.
+   */
+  private async writeOrder(
+    spec: CatalogLevelSpec,
+    orderedIds: string[],
+    current: { id: string; position: number }[],
+  ): Promise<number> {
+    const positionById = new Map(current.map((s) => [s.id, s.position]));
+
+    const writes = orderedIds
+      .map((id, index) => ({ id, index }))
+      .filter(({ id, index }) => positionById.get(id) !== index);
+
+    if (writes.length === 0) return 0;
+
     await this.prisma.$transaction(async (tx) => {
-      for (const [index, id] of dto.orderedIds.entries()) {
+      for (const { id, index } of writes) {
         await this.delegate(spec, tx).update({
           where: { id },
           data: { position: index },
@@ -468,7 +577,7 @@ export class CatalogService {
       }
     });
 
-    return { message: 'Order updated', count: dto.orderedIds.length };
+    return writes.length;
   }
 
   // ===========================================================================
@@ -783,18 +892,23 @@ export class CatalogService {
    * be told every category has no products, which is indistinguishable from
    * the truth about a genuinely empty one.
    *
-   * A MODEL is the exception — its count rides along in the same query as the
-   * row itself, so it costs nothing and is always accurate.
+   * `withCounts=false` nulls this at **every** level, including MODEL, whose
+   * number happens to be free. An exception that only one level makes is a
+   * contract people get wrong, and the free-ness is an artefact of today's
+   * schema rather than a promise worth encoding. Nothing is lost: a Model's
+   * products are its children, so the same figure is still on `childCount`,
+   * which no flag ever suppresses.
    */
   private productCountOf(
     spec: CatalogLevelSpec,
     row: Row,
     rollup: ProductRollup | null,
   ): number | null {
+    if (!rollup) return null;
+
     if (spec.key === 'MODEL') {
       return (row._count as Record<string, number>)?.products ?? 0;
     }
-    if (!rollup) return null;
 
     switch (spec.key) {
       case 'CATEGORY':

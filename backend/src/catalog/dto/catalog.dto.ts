@@ -2,6 +2,7 @@ import { ApiPropertyOptional, ApiProperty, PartialType } from '@nestjs/swagger';
 import { CatalogStatus, CatalogVisibility } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -198,6 +199,9 @@ export class CatalogNodeQueryDto extends PaginationQueryDto {
   withCounts?: boolean = true;
 }
 
+/** Bounds the transaction. Well past any realistic sibling count. */
+export const REORDER_MAX_SIBLINGS = 1000;
+
 export class ReorderCatalogNodesDto {
   @ApiPropertyOptional({
     description: 'Parent whose children are being reordered. Omit when reordering categories.',
@@ -208,12 +212,48 @@ export class ReorderCatalogNodesDto {
 
   @ApiProperty({
     type: [String],
-    description: 'Sibling ids in their new order. Position becomes the array index.',
+    maxItems: REORDER_MAX_SIBLINGS,
+    description:
+      'The COMPLETE set of sibling ids in their new order; position becomes the ' +
+      'array index. Omitting siblings is rejected rather than silently colliding ' +
+      'positions. To move one node without listing them all, use /:id/move.',
   })
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(REORDER_MAX_SIBLINGS)
   @IsString({ each: true })
   orderedIds!: string[];
+}
+
+/**
+ * Moves a single node among its siblings.
+ *
+ * The counterpart to `reorder`, which needs every sibling id and so cannot be
+ * expressed in one call once a parent has more children than a page holds.
+ * This names one node and one anchor; the server does the renumbering, so it
+ * works at any sibling count and from any page of a paginated list.
+ *
+ * Give exactly one of `position`, `beforeId` or `afterId`.
+ */
+export class MoveCatalogNodeDto {
+  @ApiPropertyOptional({
+    description: 'Absolute index among siblings, 0-based. Clamped to the ends.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  position?: number;
+
+  @ApiPropertyOptional({ description: 'Place immediately before this sibling.' })
+  @IsString()
+  @IsOptional()
+  beforeId?: string;
+
+  @ApiPropertyOptional({ description: 'Place immediately after this sibling.' })
+  @IsString()
+  @IsOptional()
+  afterId?: string;
 }
 
 export class CatalogTreeQueryDto {

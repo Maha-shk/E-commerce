@@ -62,17 +62,42 @@ export const catalogApi = {
   /**
    * `orderedIds` become positions 0..n among their siblings.
    *
-   * Send the complete sibling set: positions are assigned by array index, so
-   * omitting a row leaves it on an old position that now collides.
+   * The complete sibling set is required and enforced — a partial list 400s
+   * rather than handing the omitted rows' positions to the listed ones. Use
+   * {@link move} to reposition a single node without listing them all.
    */
   reorder: (
     segment: CatalogSegment,
     body: { parentId?: string; orderedIds: string[] },
   ) =>
-    patch<{ message: string; count: number }>(
+    patch<{ message: string; count: number; changed: number }>(
       `/admin/catalog/${segment}/reorder`,
       body,
     ),
+
+  /**
+   * Repositions one node against a single anchor.
+   *
+   * The server holds the sibling list and renumbers, so this works from one
+   * page at any sibling count — where `reorder` needs every id in hand.
+   * Exactly one of `position`, `beforeId` or `afterId`; anything else is a 400,
+   * as is an anchor that isn't a sibling or is the node itself. `position` is
+   * clamped rather than rejected.
+   *
+   * Prefer the id anchors: you always have the id of the row you moved past,
+   * and rarely its absolute index once the list is paginated.
+   */
+  move: (
+    segment: CatalogSegment,
+    id: string,
+    anchor: { position: number } | { beforeId: string } | { afterId: string },
+  ) =>
+    patch<{
+      message: string;
+      position: number;
+      siblings: number;
+      changed: number;
+    }>(`/admin/catalog/${segment}/${id}/move`, anchor),
 
   /**
    * 409 while children exist — `cascade` removes the descendant levels too.

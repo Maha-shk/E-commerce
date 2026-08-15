@@ -93,15 +93,18 @@ export type CatalogNode = {
   childLevel: CatalogLevelKey | null;
   /** "Companies", "Product Types", … and "Products" for a Model. */
   childLevelLabel: string;
-  /** Direct children only. Always counted. */
+  /**
+   * Direct children only. Never suppressed by any flag.
+   *
+   * On a Model this *is* the product count — its children are its products —
+   * so read this when you need a Model's figure from a `withCounts=false`
+   * list, where `productCount` is null like everywhere else.
+   */
   childCount: number;
   /**
    * Products anywhere beneath, or `null` when the list was fetched with
-   * `withCounts=false` and the roll-up was skipped.
-   *
-   * A Model is the exception: its products are a direct relation rather than a
-   * roll-up, so it reports a real number either way. Don't rely on that —
-   * treat null as "not asked for" at every level.
+   * `withCounts=false` and the roll-up was skipped. Null at every level
+   * without exception, so null always means "not asked for", never zero.
    */
   productCount: number | null;
 

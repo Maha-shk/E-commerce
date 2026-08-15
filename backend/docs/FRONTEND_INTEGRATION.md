@@ -157,7 +157,8 @@ nodes — `{ id, name, slug, level, levelLabel, segment }` from both producers.
 | GET | `/api/admin/catalog/:level/:id/children` | Children, already at the right level. 404 on a Model. |
 | GET | `/api/admin/catalog/:level/:id/breadcrumb` | Just the trail (usually unnecessary). |
 | PATCH | `/api/admin/catalog/:level/:id` | Partial update. A new `parentId` re-files the subtree. |
-| PATCH | `/api/admin/catalog/:level/reorder` | `{ parentId?, orderedIds: string[] }` |
+| PATCH | `/api/admin/catalog/:level/reorder` | `{ parentId?, orderedIds }` — the **complete** sibling set, max 1000. Rejects a partial list |
+| PATCH | `/api/admin/catalog/:level/:id/move` | Move one node: `{ position }` \| `{ beforeId }` \| `{ afterId }`. No sibling list needed |
 | DELETE | `/api/admin/catalog/:level/:id` | 409 while children exist. `?cascade=true`. Never deletes products. |
 
 ### List filters
@@ -283,9 +284,12 @@ GET /api/admin/catalog/models?parentId={productTypeId}&withCounts=false
 
 Use `withCounts=false` on pickers — it skips the four-query roll-up, and
 `productCount` then comes back as **`null`** ("not counted") rather than `0`, so
-an uncounted node is never mistaken for an empty one. A **Model is the
-exception**: its count rides along in the same query as the row, so it is always
-a real number. Type the field as `number | null`.
+an uncounted node is never mistaken for an empty one. This is **uniform across
+all four levels**, Models included. Type the field as `number | null`.
+
+`childCount` is never suppressed by the flag. For a Model, whose children *are*
+its products, `childCount` is the same figure `productCount` would have carried —
+so nothing is lost by turning counting off.
 
 When editing, seed all four selects from the product's `breadcrumb`.
 
@@ -357,6 +361,41 @@ which includes genuine ones an admin created but hasn't stocked yet.
 
 Filters: `modelId`, `productTypeId`, `companyId`, `categoryId`, `status`,
 `search`, plus pagination.
+
+---
+
+## 7d. Ordering
+
+Two endpoints, because they answer different questions.
+
+### `PATCH /:level/reorder` — set the whole order
+
+```jsonc
+{ "parentId": "cm…", "orderedIds": ["cm…a", "cm…b", "cm…c"] }
+→ { "message": "Order updated", "count": 3, "changed": 2 }
+```
+
+`position` becomes the array index, so the list must be **complete**. A partial
+list is rejected (`400`) rather than silently colliding positions with the
+siblings it omitted. `parentId` is required for every level except categories.
+Max 1000 ids. `changed` reports how many rows actually moved — reordering
+nothing writes nothing.
+
+### `PATCH /:level/:id/move` — move one node
+
+```jsonc
+{ "afterId": "cm…b" }        // or { "beforeId": … } or { "position": 2 }
+→ { "message": "Samsung moved", "position": 2, "siblings": 18, "changed": 3 }
+```
+
+Give **exactly one** anchor. The server holds the sibling list and does the
+renumbering, so this works from a single page of a parent with any number of
+children — `reorder` cannot, because `limit` caps at 100 and a full ordering
+past that will not fit in one request.
+
+`position` is clamped to the ends. `beforeId`/`afterId` must name a sibling
+(`400` otherwise), which also makes this the natural fit for drag-and-drop: you
+always have the id of the row you dropped onto, and rarely its absolute index.
 
 ---
 

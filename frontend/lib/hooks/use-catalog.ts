@@ -153,6 +153,34 @@ export function useReorderCatalogNodes(segment: CatalogSegment) {
 }
 
 /**
+ * Repositions one node against an anchor.
+ *
+ * Errors are left to the caller: this backs an optimistic move, and the useful
+ * response to a failure is putting the row back where it was, not a toast on
+ * top of a list that now lies. Success is silent for the same reason — the row
+ * visibly moved.
+ */
+export function useMoveCatalogNode(segment: CatalogSegment) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...anchor
+    }: { id: string } & (
+      | { position: number }
+      | { beforeId: string }
+      | { afterId: string }
+    )) => catalogApi.move(segment, id, anchor),
+    onSuccess: () => {
+      CATALOG_WRITE_INVALIDATIONS.forEach((queryKey) =>
+        queryClient.invalidateQueries({ queryKey }),
+      );
+    },
+  });
+}
+
+/**
  * Delete, with the 409 left for the caller to handle.
  *
  * A refusal here is not a failure to report and forget — the message names

@@ -324,6 +324,23 @@ client existed to hit them:
 A cap of 200 ids per call was added at the same time — the array was previously
 unbounded, and so was the `IN (…)` list it became.
 
+### Second integration pass
+
+Two further design flaws surfaced, both raised as questions rather than bugs,
+and both worth fixing rather than documenting around:
+
+| Finding | Resolution |
+|---|---|
+| A Model returned a real `productCount` under `withCounts=false` while the three upper levels returned `null` | Nulled at **every** level. An exception one level makes is a contract people get wrong, and the free-ness was an artefact of today's schema, not a promise. `childCount` still carries the same figure for a Model, so nothing is lost |
+| `reorder` assigns `position` by array index and so needs every sibling id — but `limit` caps at 100, making the order of a parent with more children inexpressible | Added `PATCH /:level/:id/move`, which names one node and one anchor and renumbers server-side. Works at any sibling count and from any page |
+
+`reorder` also **now rejects an incomplete sibling set** (`400`) instead of
+accepting it and colliding positions with the rows it omitted — it only ever
+validated that the ids given *were* siblings, never that all siblings were
+given. And both paths now write only the rows whose position actually changes,
+so reordering two adjacent rows out of four hundred is two updates rather than
+four hundred, and `updatedAt` stays honest about what a person touched.
+
 ### A bug in the fix itself, worth recording
 
 `withCounts=false` initially still returned counts after the change. The cause
