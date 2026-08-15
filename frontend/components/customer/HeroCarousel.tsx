@@ -21,6 +21,47 @@ const FALLBACK: Banner = {
 };
 
 /**
+ * One slide's artwork, falling back to the bundled hero when it won't load.
+ *
+ * Worth having rather than trusting the URL: the banners published today point
+ * at Unsplash *page* URLs rather than image files, so they 404 through the
+ * optimiser and left the hero as a bare scrim over an empty box. A banner is
+ * the first thing on the page — it should never be the broken thing on the
+ * page.
+ */
+function SlideImage({
+  src,
+  priority,
+  sizes,
+  className,
+}: {
+  src: string;
+  priority: boolean;
+  sizes: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const resolved = failed ? FALLBACK.imageUrl : src;
+
+  return (
+    <Image
+      // Remounts on the swap, so the error state doesn't stick to the new src.
+      key={resolved}
+      src={resolved}
+      alt=""
+      fill
+      priority={priority}
+      sizes={sizes}
+      onError={() => setFailed(true)}
+      className={cn("object-cover", className)}
+      // Remote banner URLs can't be optimised without a configured loader
+      // domain; the bundled fallback still goes through it.
+      unoptimized={!resolved.startsWith("/")}
+    />
+  );
+}
+
+/**
  * Hero banner carousel.
  *
  * The homepage previously rendered `heroBanners?.[0]` and nothing else — so no
@@ -91,27 +132,19 @@ export function HeroCarousel({ banners }: { banners?: Banner[] }) {
             aria-hidden={i !== index}
           >
             {hasMobileCrop ? (
-              <Image
+              <SlideImage
                 src={mobileSrc}
-                alt=""
-                fill
                 priority={i === 0}
                 sizes="100vw"
-                className="object-cover md:hidden"
-                unoptimized={!mobileSrc.startsWith("/")}
+                className="md:hidden"
               />
             ) : null}
 
-            <Image
+            <SlideImage
               src={desktopSrc}
-              alt=""
-              fill
               priority={i === 0}
               sizes="(max-width: 1280px) 100vw, 1280px"
-              className={cn("object-cover", hasMobileCrop && "hidden md:block")}
-              // Remote banner URLs can't be optimised without a configured
-              // loader domain; the bundled fallback still goes through it.
-              unoptimized={!desktopSrc.startsWith("/")}
+              className={cn(hasMobileCrop && "hidden md:block")}
             />
           </div>
         );

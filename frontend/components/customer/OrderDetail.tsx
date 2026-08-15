@@ -21,6 +21,7 @@ import {
   stageIndex,
   type PublicOrder,
 } from "@/lib/api/order-types";
+import { productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
 const STAGE_LABELS: Record<string, { title: string; detail: string }> = {
@@ -205,7 +206,11 @@ export function OrderDetail({ order }: { order: PublicOrder }) {
               {order.items.map((item) => (
                 <li key={item.id} className="flex items-center gap-4 px-5 py-4">
                   <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-                    <ProductImage src={item.image} sizes="64px" />
+                    <ProductImage
+                      src={item.image}
+                      fallbackSrc={productFallback(item.productId)}
+                      sizes="64px"
+                    />
                   </div>
 
                   <div className="min-w-0 flex-1">

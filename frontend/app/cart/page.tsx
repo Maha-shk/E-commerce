@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatMoney } from "@/lib/format";
+import { productFallback } from "@/lib/placeholder-images";
 import type { CartItem } from "@/lib/stores/cart-store";
 
 /** Stock line under the product name. */
@@ -187,7 +188,11 @@ export default function CartPage() {
                     <div className="flex gap-4 p-4 sm:gap-5 sm:p-5">
                       {/* Image */}
                       <div className="relative size-24 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-28">
-                        <ProductImage src={item.image} sizes="112px" />
+                        <ProductImage
+                          src={item.image}
+                          fallbackSrc={productFallback(item.productId)}
+                          sizes="112px"
+                        />
                       </div>
 
                       {/* Details */}

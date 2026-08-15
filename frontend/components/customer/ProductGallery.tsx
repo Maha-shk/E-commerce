@@ -3,13 +3,11 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductImage } from "@/components/customer/ProductImage";
+import { productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
-type GalleryImage = {
-  id: string;
-  url: string;
-  position: number;
-};
+/** Image URLs in display order — the shape the storefront API actually sends. */
+type GalleryImages = string[];
 
 /**
  * Product image viewer: one large frame plus a thumbnail rail.
@@ -17,13 +15,30 @@ type GalleryImage = {
  * Rewritten to use `next/image` (via ProductImage) — it previously used raw
  * `<img>` tags, so full-size originals were shipped for every thumbnail.
  */
-export function ProductGallery({ images = [] }: { images: GalleryImage[] }) {
+export function ProductGallery({
+  images = [],
+  fallbackSeed,
+}: {
+  images: GalleryImages;
+  /**
+   * The product id, so a product with no photos shows the same bundled
+   * artwork here as on the card the shopper clicked to get here. Without it
+   * the two disagree and the page looks like it loaded the wrong product.
+   */
+  fallbackSeed?: string;
+}) {
   const [index, setIndex] = useState(0);
+  const fallback = fallbackSeed ? productFallback(fallbackSeed) : undefined;
 
   if (images.length === 0) {
     return (
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted">
-        <ProductImage src={null} sizes="(max-width: 1024px) 100vw, 560px" />
+        <ProductImage
+          src={null}
+          fallbackSrc={fallback}
+          sizes="(max-width: 1024px) 100vw, 560px"
+          priority
+        />
       </div>
     );
   }
@@ -37,8 +52,9 @@ export function ProductGallery({ images = [] }: { images: GalleryImage[] }) {
       {/* Main frame */}
       <div className="group relative aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/10">
         <ProductImage
-          key={current.id}
-          src={current.url}
+          key={current}
+          src={current}
+          fallbackSrc={fallback}
           sizes="(max-width: 1024px) 100vw, 560px"
           priority
         />
@@ -75,7 +91,7 @@ export function ProductGallery({ images = [] }: { images: GalleryImage[] }) {
         <div className="scrollbar-hide flex gap-2 overflow-x-auto" role="tablist">
           {images.map((image, i) => (
             <button
-              key={image.id}
+              key={image}
               type="button"
               role="tab"
               aria-selected={i === index}
@@ -89,7 +105,7 @@ export function ProductGallery({ images = [] }: { images: GalleryImage[] }) {
                   : "opacity-70 ring-1 ring-foreground/10 hover:opacity-100",
               )}
             >
-              <ProductImage src={image.url} sizes="64px" />
+              <ProductImage src={image} fallbackSrc={fallback} sizes="64px" />
             </button>
           ))}
         </div>

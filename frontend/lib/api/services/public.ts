@@ -92,11 +92,16 @@ export interface Product {
   productType: CatalogNodeRef | null;
   model: CatalogNodeRef | null;
   breadcrumb: StorefrontCrumb[];
-  images: Array<{
-    id: string;
-    url: string;
-    position: number;
-  }>;
+  /**
+   * Image URLs in display order.
+   *
+   * Flat strings, not objects — the storefront serialiser maps the rows down
+   * to `image.url` before sending. The type used to declare
+   * `{ id, url, position }[]`, so every call site read `.url` off a string and
+   * got `undefined`: products that *did* have photos still rendered the empty
+   * placeholder, which is most of why the homepage looked broken.
+   */
+  images: string[];
   /**
    * Admin-configured options for this product (Prisma `ProductVariant`).
    * The API has always returned these — the type just never declared them, so
@@ -104,7 +109,6 @@ export interface Product {
    */
   variants?: Array<{
     id: string;
-    productId: string;
     name: string;
   }>;
   variantCount: number;

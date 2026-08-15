@@ -21,6 +21,7 @@ import { CarouselItem, ProductCarousel } from "@/components/customer/ProductCaro
 import { HeroCarousel } from "@/components/customer/HeroCarousel";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/format";
+import { categoryFallback, productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
 /** Consistent vertical rhythm for every homepage band. */
@@ -100,7 +101,7 @@ export default function HomePage() {
             {categoriesPending ? (
               <SectionSpinner />
             ) : categories && categories.length > 0 ? (
-              categories.map((category) => (
+              categories.map((category, i) => (
                 <Link
                   key={category.id}
                   href={`/categories/${category.slug}`}
@@ -108,6 +109,9 @@ export default function HomePage() {
                 >
                   <ProductImage
                     src={category.imageUrl}
+                    // Seeded by position, so the six tiles in this row are six
+                    // different pictures rather than the same one twice.
+                    fallbackSrc={categoryFallback(i)}
                     sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 200px"
                     className="transition-transform duration-300 group-hover:scale-105"
                   />
@@ -245,7 +249,8 @@ function NewArrivalTile({
       )}
     >
       <ProductImage
-        src={product.images?.[0]?.url}
+        src={product.images?.[0]}
+        fallbackSrc={productFallback(product.id)}
         sizes={featured ? "(max-width: 1024px) 100vw, 840px" : "(max-width: 1024px) 100vw, 420px"}
         className="transition-transform duration-300 group-hover:scale-105"
       />

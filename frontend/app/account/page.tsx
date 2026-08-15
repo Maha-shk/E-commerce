@@ -88,7 +88,7 @@ export default function AccountPage() {
     .map((item) => ({
       id: item.productId,
       name: item.name,
-      images: item.image ? [{ url: item.image }] : [],
+      images: item.image ? [item.image] : [],
       discountPercent: item.discount,
       inStock: item.inStock,
       lowStock: item.lowStock,

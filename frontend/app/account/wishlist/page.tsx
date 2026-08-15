@@ -47,7 +47,7 @@ export default function WishlistPage() {
                 inStock: item.inStock,
                 stock: item.stock,
                 lowStock: item.lowStock,
-                images: item.image ? [{ url: item.image }] : [],
+                images: item.image ? [item.image] : [],
                 category: item.category,
               }}
             />

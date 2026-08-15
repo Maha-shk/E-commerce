@@ -78,7 +78,7 @@ export default function ProductDetailPage() {
           <Breadcrumbs category={product.category} name={product.name} />
 
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
-            <ProductGallery images={product.images ?? []} />
+            <ProductGallery images={product.images ?? []} fallbackSeed={product.id} />
             <ProductInfo product={product} />
           </div>
 

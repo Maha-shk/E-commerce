@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCategories } from "@/lib/hooks/use-homepage";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { categoryFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
 export default function CategoriesPage() {
@@ -85,7 +86,7 @@ export default function CategoriesPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((category) => (
+          {visible.map((category, i) => (
             <Link
               key={category.id}
               href={`/categories/${category.slug}`}
@@ -94,6 +95,8 @@ export default function CategoriesPage() {
               <div className="relative aspect-16/10 overflow-hidden bg-muted">
                 <ProductImage
                   src={category.imageUrl}
+                  // Position-seeded so adjacent cards differ.
+                  fallbackSrc={categoryFallback(i)}
                   sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 400px"
                   className="transition-transform duration-300 group-hover:scale-105"
                 />

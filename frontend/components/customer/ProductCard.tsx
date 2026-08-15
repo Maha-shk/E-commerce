@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoginRequiredDialog } from "@/components/ui/login-required-dialog";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/format";
+import { productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
 interface ProductCardProps {
@@ -23,7 +24,8 @@ interface ProductCardProps {
     inStock: boolean;
     stock: number;
     lowStock?: boolean;
-    images?: { url: string }[];
+    /** Image URLs in display order, as the storefront API sends them. */
+    images?: string[];
     category?: { name: string } | null;
   };
 }
@@ -85,7 +87,11 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Image */}
         <div className="relative aspect-square overflow-hidden bg-muted">
           <ProductImage
-            src={product.images?.[0]?.url}
+            src={product.images?.[0]}
+            // Seeded by id, not position: the same product appears in several
+            // carousels and on its own page, and it should look the same in
+            // all of them.
+            fallbackSrc={productFallback(product.id)}
             // Without this Next serves a full-viewport-width source for a
             // ~270px card, which is most of the homepage's image weight.
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 280px"

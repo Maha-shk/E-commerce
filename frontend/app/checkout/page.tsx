@@ -19,6 +19,7 @@ import { useSession } from "@/lib/hooks/use-auth";
 import { useAddresses } from "@/lib/hooks/use-account";
 import { addressLinesToFields, formatAddressLine } from "@/lib/address";
 import { formatMoney } from "@/lib/format";
+import { productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
 /**
@@ -627,7 +628,11 @@ export default function CheckoutPage() {
                     {items.map((item) => (
                       <li key={item.id} className="flex items-start gap-3">
                         <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-                          <ProductImage src={item.image} sizes="64px" />
+                          <ProductImage
+                            src={item.image}
+                            fallbackSrc={productFallback(item.productId)}
+                            sizes="64px"
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="line-clamp-2 text-sm font-medium">{item.name}</p>
