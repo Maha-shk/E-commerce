@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Heart, Menu, Search, ShoppingCart, User, X } from "lucide-react";
+import { Heart, Menu, Search, ShoppingCart, User } from "lucide-react";
+import { CatalogDrawer } from "@/components/customer/CatalogDrawer";
 import { useSession } from "@/lib/hooks/use-auth";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
 import { cn } from "@/lib/utils";
@@ -31,19 +32,17 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
-export function HomePageHeader({
-  mobileMenuOpen,
-  setMobileMenuOpen,
-  cartCount = 0,
-}: {
-  mobileMenuOpen: boolean;
-  setMobileMenuOpen: (open: boolean) => void;
-  cartCount?: number;
-}) {
+export function HomePageHeader({ cartCount = 0 }: { cartCount?: number }) {
   const router = useRouter();
   const { isAuthenticated, isAdmin, hydrated } = useSession();
   const { wishlistItemIds } = useWishlist();
   const [searchTerm, setSearchTerm] = useState("");
+  /*
+   * Owned here rather than passed in. Both shells held this state purely to
+   * hand it straight back, and nothing else read it — so it was a prop that
+   * only ever travelled in a circle.
+   */
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const profileHref =
     hydrated && isAuthenticated ? (isAdmin ? "/admin/dashboard" : "/account") : "/login";
@@ -60,13 +59,13 @@ export function HomePageHeader({
     if (!term) return;
 
     router.push(`/products?search=${encodeURIComponent(term)}`);
-    setMobileMenuOpen(false);
+    setMenuOpen(false);
   };
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
-        <div className="flex h-18 items-center justify-between gap-4">
+        <div className="flex h-19 items-center justify-between gap-4 sm:h-21">
           {/* Logo */}
           <Link
             href="/"
@@ -76,10 +75,12 @@ export function HomePageHeader({
             <Image
               src="/logos/cento-logo.png"
               alt="Cento"
-              width={120}
-              height={40}
+              width={180}
+              height={60}
               priority
-              className="h-10 w-auto"
+              // Larger than it was, and it grows with the viewport. The header
+              // row grew to match so the mark isn't clipped.
+              className="h-11 w-auto sm:h-13"
             />
           </Link>
 
@@ -148,69 +149,50 @@ export function HomePageHeader({
               <CountBadge count={cartCount} />
             </Link>
 
+            {/* Opens the catalogue drawer, at every breakpoint. It used to be
+                a phone-only dropdown of four static links, so the four-level
+                catalogue was unreachable from the header on any screen. */}
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={cn(ICON_ACTION, "md:hidden")}
-              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={mobileMenuOpen}
+              onClick={() => setMenuOpen(true)}
+              className={ICON_ACTION}
+              aria-label="Browse catalogue"
+              aria-expanded={menuOpen}
             >
-              {mobileMenuOpen ? (
-                <X className="size-5" aria-hidden />
-              ) : (
-                <Menu className="size-5" aria-hidden />
-              )}
+              <Menu className="size-5" aria-hidden />
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen ? (
-          <nav
-            className="border-t border-border py-3 md:hidden"
-            aria-label="Main"
-          >
-            {/* The desktop search is lg-only, so small screens had no way to
-                search at all. */}
-            <form
-              role="search"
-              onSubmit={submitSearch}
-              className="mb-3 flex items-center gap-2 rounded-full bg-muted px-4 focus-within:ring-2 focus-within:ring-ring/40 lg:hidden"
+        {/* The desktop search bar is lg-only, so without this small screens
+            have no way to search at all. */}
+        <form
+          role="search"
+          onSubmit={submitSearch}
+          className="flex items-center gap-2 border-t border-border py-2 lg:hidden"
+        >
+          <div className="flex flex-1 items-center gap-2 rounded-full bg-muted px-4 focus-within:ring-2 focus-within:ring-ring/40">
+            <button
+              type="submit"
+              aria-label="Search"
+              className="flex shrink-0 items-center text-muted-foreground"
             >
-              <button
-                type="submit"
-                aria-label="Search"
-                className="flex shrink-0 items-center text-muted-foreground"
-              >
-                <Search className="size-4" aria-hidden />
-              </button>
-              <input
-                type="search"
-                name="search"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search products…"
-                aria-label="Search products"
-                className="h-10 w-full border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
-              />
-            </form>
-
-            <ul className="flex flex-col">
-              {NAV_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex h-11 items-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ) : null}
+              <Search className="size-4" aria-hidden />
+            </button>
+            <input
+              type="search"
+              name="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search products…"
+              aria-label="Search products"
+              className="h-10 w-full border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+            />
+          </div>
+        </form>
       </div>
+
+      <CatalogDrawer open={menuOpen} onOpenChange={setMenuOpen} />
     </header>
   );
 }

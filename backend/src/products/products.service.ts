@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { paginate } from '../common/dto/paginated-response';
 import { deriveStockStatus } from '../common/utils/stock.util';
 import { CatalogService } from '../catalog/catalog.service';
+import { StockNotificationsService } from '../stock-notifications/stock-notifications.service';
 import {
   CATEGORY_SPEC,
   COMPANY_SPEC,
@@ -58,6 +59,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
+    private readonly stockNotifications: StockNotificationsService,
   ) {}
 
   async findAll(tenantId: string, query: ProductQueryDto) {
@@ -176,6 +178,15 @@ export class ProductsService {
       },
       include: PRODUCT_INCLUDE,
     });
+
+    // The product form is the other way stock goes up, so it discharges the
+    // waiting list too. No-ops unless this edit took the product from zero.
+    await this.stockNotifications.onStockReplenished(
+      tenantId,
+      id,
+      existing.stock,
+      stock,
+    );
 
     return toProductView(product);
   }

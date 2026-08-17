@@ -19,6 +19,7 @@ import { useSession } from "@/lib/hooks/use-auth";
 import { useAddresses } from "@/lib/hooks/use-account";
 import { addressLinesToFields, formatAddressLine } from "@/lib/address";
 import { formatMoney } from "@/lib/format";
+import { useShippingMethods } from "@/lib/hooks/use-shipping";
 import { productFallback } from "@/lib/placeholder-images";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +44,14 @@ const POSTCODE_RULES: Record<string, { pattern: RegExp; hint: string }> = {
 };
 
 /**
- * Express is a flat surcharge that replaces standard shipping. Standard uses
- * whatever the cart already computed, so the number the shopper saw on /cart
- * is the number they see here.
+ * The method selected before the server's rates arrive.
+ *
+ * Rates themselves are no longer defined here. This page used to hard-code
+ * express at 14.99 while the server charged 25, so the shopper agreed to one
+ * price and was billed another — every figure now comes from
+ * `GET /public/shipping-methods`.
  */
-const EXPRESS_SHIPPING = 14.99;
-
-type DeliveryMethod = "standard" | "express";
+const DEFAULT_METHOD = "standard";
 
 type ContactInfo = { email: string; phone: string };
 type ShippingForm = {
@@ -130,7 +132,7 @@ export default function CheckoutPage() {
   const { data: addresses = [] } = useAddresses();
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("standard");
+  const [deliveryMethod, setDeliveryMethod] = useState<string>(DEFAULT_METHOD);
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Set<FieldName>>(new Set());
 
@@ -150,6 +152,10 @@ export default function CheckoutPage() {
   const [addressChoice, setAddressChoice] = useState<string | null>(null);
 
   const items = useMemo(() => cart?.items ?? [], [cart]);
+
+  // Priced against the goods total, so the free-shipping threshold and the
+  // "spend X more" nudge are both the server's arithmetic, not ours.
+  const { data: shippingMethods } = useShippingMethods(subtotal);
 
   const profileName = useMemo(() => {
     if (!isAuthenticated || !user) return { firstName: "", lastName: "" };
@@ -230,12 +236,12 @@ export default function CheckoutPage() {
   /**
    * Totals.
    *
-   * The old page recomputed shipping as `subtotal > 100 ? 0 : 9.99` and left
-   * tax out entirely, so /cart and /checkout showed different totals for the
-   * same basket. Standard shipping now comes from the cart (which mirrors the
-   * server's pricing) and tax is included.
+   * Every component is the server's number. Shipping comes from the priced
+   * method list; before the list arrives we fall back to the cart's standard
+   * figure so the summary isn't blank on first paint.
    */
-  const shippingCost = deliveryMethod === "express" ? EXPRESS_SHIPPING : shipping;
+  const selectedMethod = shippingMethods?.find((m) => m.code === deliveryMethod);
+  const shippingCost = selectedMethod ? selectedMethod.cost : shipping;
 
   /*
    * Coupon reduction shown here is a PREVIEW. The order posts only the code and
@@ -251,22 +257,17 @@ export default function CheckoutPage() {
 
   const total = subtotal + shippingCost + tax - discount;
 
-  const deliveryOptions = [
-    {
-      value: "standard" as const,
-      icon: Package,
-      title: "Standard Delivery",
-      detail: "5–7 business days",
-      cost: shipping,
-    },
-    {
-      value: "express" as const,
-      icon: Truck,
-      title: "Express Delivery",
-      detail: "2–3 business days",
-      cost: EXPRESS_SHIPPING,
-    },
-  ];
+  const deliveryOptions = (shippingMethods ?? []).map((method) => ({
+    value: method.code,
+    // Express is the only non-standard option today; anything the server adds
+    // later gets the generic parcel icon rather than being left out.
+    icon: method.code === "express" ? Truck : Package,
+    title: method.label,
+    detail: `${method.estimatedDays} business day${method.estimatedDays === 1 ? "" : "s"}`,
+    cost: method.cost,
+    isFree: method.isFree,
+    amountToFreeShipping: method.amountToFreeShipping,
+  }));
 
   const handleConfirmOrder = async () => {
     const nextErrors: FormErrors = {};
@@ -559,9 +560,16 @@ export default function CheckoutPage() {
               </div>
 
               <div className="px-5 py-5">
+                {deliveryOptions.length === 0 ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    Loading delivery options…
+                  </div>
+                ) : null}
+
                 <RadioGroup
                   value={deliveryMethod}
-                  onValueChange={(value) => setDeliveryMethod(value as DeliveryMethod)}
+                  onValueChange={setDeliveryMethod}
                   className="gap-3"
                 >
                   {deliveryOptions.map((option) => {
@@ -590,14 +598,23 @@ export default function CheckoutPage() {
                             <p className="mt-0.5 text-xs font-normal text-muted-foreground">
                               {option.detail}
                             </p>
+                            {/* The server pre-calculates the gap to free
+                                delivery — a figure the browser must not
+                                invent, since it decides what gets charged. */}
+                            {option.amountToFreeShipping ? (
+                              <p className="mt-1 text-xs font-medium text-success">
+                                Add {formatMoney(option.amountToFreeShipping)} for free
+                                delivery
+                              </p>
+                            ) : null}
                           </div>
                           <span
                             className={cn(
                               "text-sm font-semibold tabular-nums",
-                              option.cost === 0 && "text-success",
+                              option.isFree && "text-success",
                             )}
                           >
-                            {option.cost === 0 ? "Free" : formatMoney(option.cost)}
+                            {option.isFree ? "Free" : formatMoney(option.cost)}
                           </span>
                         </div>
                       </Label>

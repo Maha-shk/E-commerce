@@ -9,6 +9,7 @@ import { QuantityStepper } from "@/components/customer/QuantityStepper";
 import { VariantPicker } from "@/components/customer/VariantPicker";
 import { LoginRequiredDialog } from "@/components/ui/login-required-dialog";
 import { useCart } from "@/lib/hooks/use-cart";
+import { BackInStockNotify } from "@/components/customer/BackInStockNotify";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
 import { useSession } from "@/lib/hooks/use-auth";
 import type { Product } from "@/lib/api/services/public";
@@ -189,6 +190,10 @@ export function ProductInfo({ product }: { product: Product }) {
           />
         </div>
       ) : null}
+
+      {/* Only offered when there is genuinely nothing to buy — the endpoint
+          rejects a subscription to an in-stock product. */}
+      {isOutOfStock ? <BackInStockNotify productId={product.id} /> : null}
 
       {/* Actions */}
       <div className="flex flex-col gap-3 sm:flex-row">

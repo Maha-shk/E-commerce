@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select-native";
 import { UpdateStockModal } from "@/components/admin/UpdateStockModal";
 import { AdminStatCard, StatChip } from "@/components/admin/AdminStatCard";
+import { StockDemandCard } from "@/components/admin/StockDemandCard";
 import { TablePagination } from "@/components/admin/TablePagination";
 import { TableEmptyState } from "@/components/admin/TableEmptyState";
 import { ErrorState, TableSkeleton } from "@/components/admin/QueryState";
@@ -268,6 +269,10 @@ export default function InventoryPage() {
           }
         />
       </div>
+
+      {/* Above the stock table on purpose: this is the prioritised subset of
+          it. Renders nothing when nobody is waiting. */}
+      <StockDemandCard />
 
       <Card className="gap-0 py-0">
         {/* Toolbar */}

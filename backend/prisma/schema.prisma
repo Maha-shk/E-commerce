@@ -197,6 +197,7 @@ model Tenant {
   conversations        Conversation[]
   notifications        Notification[]
   inventoryAdjustments InventoryAdjustment[]
+  stockNotifications   StockNotification[]
 
   @@index([status])
 }
@@ -240,6 +241,7 @@ model User {
   conversations      Conversation[]
   notifications      Notification[]
   inventoryLogs      InventoryAdjustment[]
+  stockNotifications StockNotification[]
 
   /// Scoped to the tenant, not global: the same person may hold an account on
   /// two different storefronts, exactly as they would with two separate shops.
@@ -503,6 +505,7 @@ model Product {
   wishlistItems    WishlistItem[]
   inventoryLogs    InventoryAdjustment[]
   featuredProducts FeaturedProduct[]
+  stockNotifications StockNotification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -552,6 +555,41 @@ model InventoryAdjustment {
 
   @@index([productId])
   @@index([tenantId])
+}
+
+/// A shopper waiting for an out-of-stock product to come back.
+///
+/// Created from the storefront's "Notify me" button and discharged the moment
+/// stock rises above zero, which is the only event that can satisfy it. Rows
+/// are kept after notifying rather than deleted, so the same person asking
+/// again later reuses the row and the admin can still see who asked.
+model StockNotification {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Where to write. Captured even for signed-in shoppers, so a later change of
+  /// account email cannot silently redirect a promise already made.
+  email  String
+  /// Set when the request came from a signed-in shopper; null for a guest.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Null while still waiting. Set when the back-in-stock mail goes out, which
+  /// is also what stops one restock mailing the same person twice.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per person per product; asking twice re-arms the existing row.
+  @@unique([productId, email])
+  @@index([tenantId])
+  /// The restock query: everyone still waiting on one product.
+  @@index([productId, notifiedAt])
 }
 
 // ---------------------------------------------------------------------------

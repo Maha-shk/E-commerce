@@ -29,7 +29,6 @@ export function AccountShell({
 }) {
   const router = useRouter();
   const { user, isAuthenticated, isAdmin, hydrated } = useSession();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     // Auth decisions have to wait for the persisted store to hydrate,
@@ -57,11 +56,7 @@ export function AccountShell({
 
   return (
     <div className="min-h-screen bg-background">
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={0}
-      />
+      <HomePageHeader cartCount={0} />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">

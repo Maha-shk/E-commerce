@@ -190,8 +190,29 @@ function OrderDetails({
 
           <Section icon={Truck} title="Shipping">
             <div className="space-y-3">
+              {/* Method and what was charged for it, together. The cost was
+                  only in the summary, several sections away, so answering
+                  "did they pay for express?" meant reading two places. */}
               <Field label="Method">
-                {order.shippingMethod || <span className="text-muted-foreground">—</span>}
+                {order.shippingMethod ? (
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span>{order.shippingMethod}</span>
+                    <span
+                      className={cn(
+                        "text-xs font-medium tabular-nums",
+                        order.shippingCost === 0
+                          ? "text-success"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {order.shippingCost === 0
+                        ? "Free"
+                        : formatEuro(order.shippingCost)}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </Field>
               <Field label="Tracking number">
                 {order.shippingTracking ? (

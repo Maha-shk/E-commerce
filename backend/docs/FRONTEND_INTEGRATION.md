@@ -399,6 +399,84 @@ always have the id of the row you dropped onto, and rarely its absolute index.
 
 ---
 
+## 7e. Back-in-stock notifications
+
+When a product is out of stock the storefront shows a **Notify me** button; the
+backend emails everyone waiting the moment stock rises above zero.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/api/public/products/:productId/notify-me` | public | `{ email }`. Optional when signed in — the account address is used |
+| GET | `/api/public/products/:productId/notify-me?email=` | public | `{ waiting, since }` — render the button state on load |
+| DELETE | `/api/public/products/:productId/notify-me?email=` | public | Stop waiting |
+| GET | `/api/admin/stock-notifications/demand` | admin | Products with people waiting, most-wanted first |
+| GET | `/api/admin/stock-notifications` | admin | Individual requests. `?productId=` `?waitingOnly=false` `?search=` |
+
+```jsonc
+POST /api/public/products/{id}/notify-me   { "email": "shopper@example.com" }
+→ { "subscribed": true, "alreadyWaiting": false, "productId": "cm…",
+    "message": "We'll email shopper@example.com when \"LCD Display\" is back in stock." }
+```
+
+Rules worth knowing:
+
+- **`400` if the product is already in stock** — there would be nothing to wait
+  for. Only show the button when `inStock` is false.
+- **Idempotent.** Asking twice re-arms the one row; `alreadyWaiting` tells you
+  whether anything changed, so you can say "you're already on the list" instead
+  of showing a success toast for a no-op.
+- **`400` if no email and not signed in.** Signed-in shoppers can post `{}`.
+- Each request is discharged **once**. A second restock does not re-mail
+  someone from the first; they must ask again.
+
+The admin `demand` list is the restock priority view:
+
+```jsonc
+[{ "productId": "cm…", "waiting": 12, "name": "LCD Display Assembly",
+   "sku": "SAM-S25-LCD", "stock": 0, "status": "OUT_OF_STOCK",
+   "model": "Galaxy S25", "productType": "Mobile Phones", "company": "Samsung" }]
+```
+
+---
+
+## 7f. Shipping methods
+
+The rates live in the backend. **Do not hard-code them** — checkout sends a
+choice, never a price.
+
+```
+GET /api/public/shipping-methods?subtotal=40
+```
+
+```jsonc
+[
+  { "code": "standard", "label": "Standard Delivery (BRT)", "cost": 10,
+    "isFree": false, "estimatedDays": 7, "freeOver": 100,
+    "description": "Free on orders over €100", "amountToFreeShipping": 60 },
+  { "code": "express", "label": "Express Delivery (DHL)", "cost": 25,
+    "isFree": false, "estimatedDays": 3, "freeOver": null,
+    "description": "Fastest option, always charged", "amountToFreeShipping": null }
+]
+```
+
+Pass the goods subtotal so the free-shipping line is accurate — at `subtotal=150`
+standard comes back `cost: 0, isFree: true`. `amountToFreeShipping` is how much
+more to spend to unlock it, or `null` when it does not apply.
+
+Send the chosen `code` as `deliveryMethod` on the existing checkout payload:
+
+```jsonc
+POST /api/public/orders
+{ "deliveryMethod": "express", "contactInfo": {…}, "shippingAddress": {…}, "items": […] }
+```
+
+The order stores the human label (`Order.shippingMethod`, e.g.
+`"Express Delivery (DHL)"`) and the charged `shippingCost`. Both come back on
+`GET /api/admin/orders/:id`, so the admin order view can show the courier to
+ship with — no new admin endpoint needed.
+
+---
+
 ## 8. Search & filtering
 
 | Goal | Request |
@@ -409,6 +487,7 @@ always have the id of the row you dropped onto, and rarely its absolute index.
 | Archived only | `/catalog/companies?status=ARCHIVED` |
 | Products under a company | `/admin/products?companyId={id}` |
 | Low stock in a category | `/admin/products?categoryId={id}&status=LOW_STOCK` |
+| Who is waiting on restocks | `/admin/stock-notifications/demand` |
 | Filtered tree | `/catalog/tree?search=iphone&depth=3` |
 
 Catalog search matches name/slug/description. Product search matches name, SKU,

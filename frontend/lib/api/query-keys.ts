@@ -57,6 +57,9 @@ export const queryKeys = {
     stats: () => [...queryKeys.inventory.all, "stats"] as const,
     history: (productId: string) =>
       [...queryKeys.inventory.all, "history", productId] as const,
+    /* Under `inventory` so a restock invalidates it — filling stock is exactly
+       what clears the waiting list. */
+    demand: () => [...queryKeys.inventory.all, "demand"] as const,
   },
 
   orders: {

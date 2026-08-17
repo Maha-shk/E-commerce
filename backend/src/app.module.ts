@@ -18,6 +18,7 @@ import { BannersModule } from './banners/banners.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ProductsModule } from './products/products.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { StockNotificationsModule } from './stock-notifications/stock-notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { CustomersModule } from './customers/customers.module';
 import { DiscountsModule } from './discounts/discounts.module';
@@ -70,6 +71,7 @@ import { AddressesModule } from './addresses/addresses.module';
     UploadsModule,
     ProductsModule,
     InventoryModule,
+    StockNotificationsModule,
     OrdersModule,
     CustomersModule,
     DiscountsModule,

@@ -15,6 +15,7 @@ import {
   dashboardApi,
   discountsApi,
   inventoryApi,
+  stockNotificationsApi,
   messagesApi,
   notificationsApi,
   ordersApi,
@@ -164,6 +165,20 @@ export function useInventoryStats() {
   return useQuery({
     queryKey: queryKeys.inventory.stats(),
     queryFn: inventoryApi.stats,
+  });
+}
+
+/**
+ * Products with shoppers waiting, most-wanted first.
+ *
+ * Keyed under `inventory`, so adjusting stock refetches it — a restock
+ * discharges the waiting list server-side, and the card would otherwise keep
+ * showing demand that has already been emailed.
+ */
+export function useStockDemand() {
+  return useQuery({
+    queryKey: queryKeys.inventory.demand(),
+    queryFn: stockNotificationsApi.demand,
   });
 }
 

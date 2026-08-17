@@ -25,6 +25,11 @@ import {
   Prisma,
 } from '@prisma/client';
 import { ContactFormDto } from './dto/contact.dto';
+import {
+  shippingCostFor,
+  shippingLabelFor,
+  shippingQuotesFor,
+} from '../common/shipping/shipping';
 import { UNCLAIMED_PASSWORD_HASH } from '../common/constants/account.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -49,27 +54,12 @@ const LOW_STOCK_THRESHOLD = 10;
 /** How many of the newest products the "New Arrivals" browse surfaces. */
 const NEW_ARRIVALS_WINDOW = 24;
 
-/**
- * Shipping rules, mirroring `CartService` so the price quoted in the cart is
- * the price charged at checkout.
- */
-const FREE_SHIPPING_THRESHOLD = 100;
-const STANDARD_SHIPPING_RATE = 10;
-const EXPRESS_SHIPPING_RATE = 25;
 
 /** Money is stored as Decimal(12,2); keep intermediate maths to the same scale. */
 function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * Express is always charged — the free-shipping threshold is a standard-
- * delivery perk, not a free upgrade.
- */
-function resolveShippingCost(subtotal: number, deliveryMethod?: string): number {
-  if (deliveryMethod === 'express') return EXPRESS_SHIPPING_RATE;
-  return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_RATE;
-}
 
 /**
  * Validates a checkout line's variant choice against the product.
@@ -683,6 +673,18 @@ export class PublicService {
     return { success: true, data: companies };
   }
 
+  /**
+   * Delivery options priced against the current basket.
+   *
+   * Exists so the checkout renders real options instead of hard-coding rates
+   * that live here — the same rule the rest of checkout follows: the browser
+   * sends a choice, never a price.
+   */
+  getShippingMethods(subtotal?: number) {
+    const goodsTotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0;
+    return { success: true, data: shippingQuotesFor(round2(goodsTotal)) };
+  }
+
   async submitContactForm(tenantId: string, data: ContactFormDto) {
     // `Conversation.customerId` is required, so a contact submission from a
     // stranger has to be attached to a User row. That placeholder is NOT a
@@ -897,7 +899,7 @@ export class PublicService {
     });
 
     const subtotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
-    const shippingCost = resolveShippingCost(subtotal, deliveryMethod);
+    const shippingCost = shippingCostFor(subtotal, deliveryMethod);
     // Re-validated and re-priced here; the client only ever sends the code.
     const discount = await this.resolveDiscount(tenantId, dto.couponCode, subtotal);
     const total = round2(subtotal + shippingCost - discount.amount);
@@ -931,10 +933,7 @@ export class PublicService {
           customerId: customer.id,
           status: OrderStatus.PENDING,
           shippingAddress: addressLines,
-          shippingMethod:
-            deliveryMethod === 'express'
-              ? 'Express Delivery (DHL)'
-              : 'Standard Delivery (BRT)',
+          shippingMethod: shippingLabelFor(deliveryMethod),
           shippingCost: new Prisma.Decimal(shippingCost),
           discount: new Prisma.Decimal(discount.amount),
           items: {

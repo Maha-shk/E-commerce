@@ -108,6 +108,36 @@ export class MailService implements OnModuleInit {
     );
   }
 
+  /**
+   * Sent when a product someone asked about comes back into stock.
+   *
+   * Deliberately urgent about quantity when it is low: the whole reason this
+   * mail exists is that the item ran out once already, and "3 left" is the
+   * difference between a useful alert and an annoying one.
+   */
+  async sendBackInStock(to: string, productName: string, stock: number) {
+    const subject = `Back in stock: ${productName}`;
+    const scarcity =
+      stock > 0 && stock <= 10
+        ? ` Only ${stock} left, so it may not last long.`
+        : '';
+
+    const text =
+      `Good news — "${productName}" is available again.${scarcity}\n\n` +
+      `You asked to be told when it returned, so this is that email. ` +
+      `We will not write again about this item unless you ask us to.`;
+
+    await this.send(
+      to,
+      subject,
+      text,
+      `<p>Good news — <strong>${escapeHtml(productName)}</strong> is available again.${escapeHtml(scarcity)}</p>
+       <p>You asked to be told when it returned, so this is that email.
+          We won't write again about this item unless you ask us to.</p>
+       <p>— The CENTO team</p>`,
+    );
+  }
+
   /** 6-digit code emailed for a password reset request. */
   async sendPasswordResetCode(to: string, name: string, code: string) {
     const subject = 'Reset your CENTO password';

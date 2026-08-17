@@ -124,7 +124,98 @@ export interface FeaturedProductResponse {
 }
 
 // Service methods
+/**
+ * A delivery option, priced by the server for a given basket.
+ *
+ * Every money field here is calculated server-side on purpose. Checkout used
+ * to hard-code the express rate at 14.99 while the server charged 25, so the
+ * shopper agreed to one price and was billed another.
+ */
+export type ShippingMethod = {
+  /** Send this back as `deliveryMethod` when placing the order. */
+  code: string;
+  label: string;
+  /** Already reduced to 0 when the basket clears `freeOver`. */
+  cost: number;
+  isFree: boolean;
+  estimatedDays: number;
+  /** Null when the method is never free — express, by design. */
+  freeOver: number | null;
+  description: string;
+  /** Spend needed to reach free delivery, or null when it doesn't apply. */
+  amountToFreeShipping: number | null;
+};
+
+/** Whether a shopper is waiting for a product to come back. */
+export type NotifyMeState = {
+  waiting: boolean;
+  since: string | null;
+};
+
+export type NotifyMeResult = {
+  subscribed: boolean;
+  /** False means this click actually added them; true means it was a no-op. */
+  alreadyWaiting: boolean;
+  productId: string;
+  message: string;
+};
+
 export const publicService = {
+  /**
+   * Delivery options priced for this basket.
+   *
+   * `subtotal` is the goods total — the free-shipping threshold is applied
+   * against it, and `amountToFreeShipping` comes back pre-calculated so the
+   * "spend €60 more" nudge isn't invented by the browser.
+   */
+  async getShippingMethods(subtotal: number): Promise<ApiResponse<ShippingMethod[]>> {
+    const { data } = await api.get<ApiResponse<ShippingMethod[]>>(
+      '/public/shipping-methods',
+      { params: { subtotal } },
+    );
+    return data;
+  },
+
+  /**
+   * Ask to be emailed when a product returns.
+   *
+   * `email` is required for guests and optional when signed in. Subscribing to
+   * something already in stock is a 400 — only offer this when `inStock` is
+   * false.
+   */
+  async subscribeBackInStock(
+    productId: string,
+    email?: string,
+  ): Promise<ApiResponse<NotifyMeResult>> {
+    const { data } = await api.post<ApiResponse<NotifyMeResult>>(
+      `/public/products/${productId}/notify-me`,
+      email ? { email } : {},
+    );
+    return data;
+  },
+
+  async getBackInStockState(
+    productId: string,
+    email?: string,
+  ): Promise<ApiResponse<NotifyMeState>> {
+    const { data } = await api.get<ApiResponse<NotifyMeState>>(
+      `/public/products/${productId}/notify-me`,
+      { params: email ? { email } : undefined },
+    );
+    return data;
+  },
+
+  async unsubscribeBackInStock(
+    productId: string,
+    email?: string,
+  ): Promise<ApiResponse<{ removed: boolean }>> {
+    const { data } = await api.delete<ApiResponse<{ removed: boolean }>>(
+      `/public/products/${productId}/notify-me`,
+      { params: email ? { email } : undefined },
+    );
+    return data;
+  },
+
   /**
    * Get banners for homepage
    */

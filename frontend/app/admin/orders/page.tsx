@@ -44,6 +44,30 @@ const statusOptions: OrderStatus[] = [
   "RETURNED",
 ];
 
+/**
+ * How an order ships, compressed for a table row.
+ *
+ * The stored value is the full courier label ("Standard Delivery (BRT)"),
+ * which is too wide for a column that sits between Items and Status. The
+ * courier is the part an admin scans for, so it leads, with the tier beneath.
+ */
+function ShippingCell({ method, cost }: { method: string; cost: number }) {
+  const courier = method.match(/\(([^)]+)\)/)?.[1];
+  const tier = method.replace(/\s*\([^)]*\)\s*/, "").replace(/\s*Delivery$/, "");
+
+  return (
+    <div className="min-w-0 whitespace-nowrap">
+      <p className="font-medium text-foreground">{courier ?? tier}</p>
+      <p className="text-xs text-subtle">
+        {courier ? `${tier} · ` : ""}
+        <span className={cn("tabular-nums", cost === 0 && "text-success")}>
+          {cost === 0 ? "Free" : formatEuro(cost)}
+        </span>
+      </p>
+    </div>
+  );
+}
+
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | OrderStatus>("All");
@@ -86,13 +110,25 @@ export default function OrdersPage() {
   function handleExport() {
     downloadCsv(
       "orders.csv",
-      ["Order ID", "Date", "Customer", "Email", "Items", "Total", "Status"],
+      [
+        "Order ID",
+        "Date",
+        "Customer",
+        "Email",
+        "Items",
+        "Shipping method",
+        "Shipping cost",
+        "Total",
+        "Status",
+      ],
       orders.map((o) => [
         o.orderNumber,
         formatDate(o.placedAt),
         o.customer?.fullName ?? "",
         o.customer?.email ?? "",
         String(o.items.length),
+        o.shippingMethod ?? "",
+        o.shippingCost.toFixed(2),
         o.totals.total.toFixed(2),
         orderStatusLabel[o.status],
       ]),
@@ -270,6 +306,7 @@ export default function OrdersPage() {
                   <th className="px-3 py-3 text-left">Order</th>
                   <th className="px-3 py-3 text-left">Date</th>
                   <th className="px-3 py-3 text-right">Items</th>
+                  <th className="px-3 py-3 text-left">Shipping</th>
                   <th className="px-3 py-3 text-left">Status</th>
                   <th className="px-3 py-3 text-right">Total</th>
                   <th className="px-5 py-3 text-right">Actions</th>
@@ -277,10 +314,10 @@ export default function OrdersPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {isPending ? (
-                  <TableSkeleton rows={PAGE_SIZE} columns={7} />
+                  <TableSkeleton rows={PAGE_SIZE} columns={8} />
                 ) : orders.length === 0 ? (
                   <TableEmptyState
-                    colSpan={7}
+                    colSpan={8}
                     icon={Inbox}
                     title="No orders found"
                     description={
@@ -330,6 +367,20 @@ export default function OrdersPage() {
                       </td>
                       <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums text-muted-foreground">
                         {order.items.length}
+                      </td>
+                      {/* How it ships, on the row rather than only behind the
+                          details dialog — an admin working through the queue
+                          needs to see which orders are express without opening
+                          each one. */}
+                      <td className="px-3 py-3">
+                        {order.shippingMethod ? (
+                          <ShippingCell
+                            method={order.shippingMethod}
+                            cost={order.shippingCost}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <button

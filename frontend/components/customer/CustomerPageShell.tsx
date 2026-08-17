@@ -27,17 +27,12 @@ export function CustomerPageShell({
   className?: string;
   bleed?: boolean;
 }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Read once, here — the badge is now correct on every page by construction.
   const { totalItems } = useCart();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <HomePageHeader
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        cartCount={totalItems}
-      />
+      <HomePageHeader cartCount={totalItems} />
 
       {bleed ? (
         <main className={cn("grow", className)}>{children}</main>

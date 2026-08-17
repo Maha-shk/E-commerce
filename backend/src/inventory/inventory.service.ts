@@ -8,10 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { paginate } from '../common/dto/paginated-response';
 import { deriveStockStatus, LOW_STOCK_THRESHOLD } from '../common/utils/stock.util';
 import { AdjustStockDto, InventoryQueryDto } from './dto/inventory.dto';
+import { StockNotificationsService } from '../stock-notifications/stock-notifications.service';
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stockNotifications: StockNotificationsService,
+  ) {}
 
   /** Inventory is a view over products, keyed by SKU. */
   async findAll(tenantId: string, query: InventoryQueryDto) {
@@ -176,6 +180,16 @@ export class InventoryService {
         data: { tenantId, productId, delta, reason: dto.reason, byUserId },
       }),
     ]);
+
+    // Restocking is the event the back-in-stock waiting list exists for. Fired
+    // after the write commits and swallows its own failures, so a dead mail
+    // server cannot roll back stock the warehouse has already counted.
+    await this.stockNotifications.onStockReplenished(
+      tenantId,
+      productId,
+      product.stock,
+      newStock,
+    );
 
     return { ...updated, delta };
   }

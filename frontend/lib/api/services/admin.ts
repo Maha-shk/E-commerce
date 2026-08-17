@@ -226,6 +226,31 @@ export type BannerQuery = PaginationQuery & {
   isActive?: boolean;
 };
 
+/** One product with shoppers waiting on it, with its catalog path. */
+export type StockDemandRow = {
+  productId: string;
+  waiting: number;
+  name: string;
+  sku: string | null;
+  stock: number;
+  status: string;
+  model: string | null;
+  productType: string | null;
+  company: string | null;
+};
+
+export const stockNotificationsApi = {
+  /**
+   * Products with people waiting, most-wanted first.
+   *
+   * This is the restock-priority question — "what do I reorder" — rather than
+   * a log of individual requests, which is what `/admin/stock-notifications`
+   * is for. Rows carry the catalog path so a name like "LCD Display Assembly"
+   * is identifiable without opening the product.
+   */
+  demand: () => get<StockDemandRow[]>("/admin/stock-notifications/demand"),
+};
+
 export const bannersApi = {
   list: (params?: BannerQuery) => getPaginated<Banner>("/admin/banners", params),
   detail: (id: string) => get<Banner>(`/admin/banners/${id}`),

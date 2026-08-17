@@ -124,6 +124,18 @@ export class PublicController {
     return this.publicService.getLegalDocument(id);
   }
 
+  @Get('shipping-methods')
+  @ApiOperation({
+    summary: 'Delivery options, priced against the basket',
+    description:
+      'Pass the goods subtotal so the free-shipping line is accurate before ' +
+      'the shopper commits. Checkout should render these rather than ' +
+      'hard-coding rates.',
+  })
+  async getShippingMethods(@Query('subtotal') subtotal?: string) {
+    return this.publicService.getShippingMethods(Number(subtotal));
+  }
+
   @Get('brands')
   async getBrands(
     @CurrentTenant('id') tenantId: string,
